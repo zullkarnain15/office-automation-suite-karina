@@ -1,0 +1,527 @@
+2026-07-04 12:56:53 | INFO     | __main__ | Starting Office Automation Suite - Karina
+2026-07-04 12:56:54 | INFO     | __main__ | OAS-K Version 1.0.0
+2026-07-04 12:56:54 | INFO     | __main__ | Application initialized successfully.
+2026-07-04 12:57:37 | INFO     | __main__ | Starting Office Automation Suite - Karina
+2026-07-04 12:57:37 | INFO     | __main__ | OAS-K Version 1.0.0
+2026-07-04 12:57:37 | INFO     | __main__ | Application initialized successfully.
+2026-07-04 12:58:16 | INFO     | __main__ | Starting Office Automation Suite - Karina
+2026-07-04 12:58:17 | INFO     | __main__ | OAS-K Version 1.0.0
+2026-07-04 12:58:17 | INFO     | __main__ | Application initialized successfully.
+2026-07-04 13:08:41 | INFO     | __main__ | Starting Office Automation Suite - Karina
+2026-07-04 13:08:41 | INFO     | __main__ | OAS-K Version 1.0.0
+2026-07-04 13:08:41 | INFO     | __main__ | Application initialized successfully.
+2026-07-04 13:09:58 | INFO     | __main__ | Starting OAS-K
+2026-07-04 13:09:58 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-04 13:10:32 | INFO     | __main__ | Starting OAS-K
+2026-07-04 13:10:32 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-04 13:13:54 | INFO     | attendance.gui | Application Ready.
+2026-07-04 13:13:54 | INFO     | attendance.gui | Waiting for user input...
+2026-07-04 13:14:26 | INFO     | attendance.gui | Application Ready.
+2026-07-04 13:14:26 | INFO     | attendance.gui | Waiting for user input...
+2026-07-04 13:15:29 | INFO     | attendance.gui | Application Ready.
+2026-07-04 13:15:29 | INFO     | attendance.gui | Waiting for user input...
+2026-07-04 13:15:30 | INFO     | shared.dialogs | Attendance Engine will be implemented in Sprint 5.
+2026-07-04 13:16:09 | INFO     | attendance.gui | Application Ready.
+2026-07-04 13:16:09 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 16:22:47 | INFO     | attendance.gui | Application Ready.
+2026-07-05 16:22:47 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 16:22:57 | INFO     | attendance.gui | Selected Workflow : Branch
+2026-07-05 16:22:59 | INFO     | attendance.gui | Selected Workflow : Head Office (HO)
+2026-07-05 16:33:42 | INFO     | attendance.gui | Application Ready.
+2026-07-05 16:33:42 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 16:34:34 | INFO     | attendance.gui | Application Ready.
+2026-07-05 16:34:34 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 16:34:36 | INFO     | attendance.gui | Generate button clicked.
+2026-07-05 16:34:36 | INFO     | attendance.gui | Validation failed: Attendance Configuration is required.
+2026-07-05 16:34:36 | WARNING  | shared.dialogs | Attendance Configuration is required.
+2026-07-05 16:35:57 | INFO     | attendance.gui | Generate button clicked.
+2026-07-05 16:35:57 | INFO     | attendance.gui | Validation failed: Attendance Configuration is required.
+2026-07-05 16:35:57 | WARNING  | shared.dialogs | Attendance Configuration is required.
+2026-07-05 16:36:56 | INFO     | attendance.gui | Application Ready.
+2026-07-05 16:36:56 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 16:37:16 | INFO     | attendance.gui | Attendance Configuration selected.
+2026-07-05 16:37:23 | INFO     | attendance.gui | Output folder selected.
+2026-07-05 16:37:49 | INFO     | attendance.gui | Generate button clicked.
+2026-07-05 16:37:49 | INFO     | attendance.gui | Input validation success.
+2026-07-05 16:37:49 | INFO     | attendance.gui | Configuration file : D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 16:37:49 | INFO     | attendance.gui | Output folder      : D:\Python Project\Attendance Configuration\output
+2026-07-05 16:37:49 | INFO     | attendance.gui | Date From          : 07/01/2026
+2026-07-05 16:37:49 | INFO     | attendance.gui | Date To            : 07/31/2026
+2026-07-05 16:37:49 | INFO     | attendance.gui | Workflow           : HO
+2026-07-05 16:37:49 | INFO     | attendance.gui | Generate HRIS TXT  : True
+2026-07-05 16:37:49 | INFO     | attendance.gui | Generate Report    : True
+2026-07-05 16:37:49 | INFO     | attendance.gui | Preparing Attendance Engine...
+2026-07-05 16:37:49 | INFO     | attendance.gui | Attendance Engine placeholder started.
+2026-07-05 16:37:49 | INFO     | attendance.gui | No MDB processing is executed in Sprint 4.3.
+2026-07-05 16:37:49 | INFO     | attendance.gui | Attendance Engine placeholder finished.
+2026-07-05 16:37:49 | INFO     | attendance.gui | Sprint 5 will implement real processing.
+2026-07-05 16:37:49 | INFO     | shared.dialogs | Attendance GUI is ready for Engine integration.
+
+Real Attendance Engine will be implemented in Sprint 5.
+2026-07-05 16:40:29 | INFO     | attendance.gui | Application Ready.
+2026-07-05 16:40:29 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 16:42:50 | INFO     | attendance.gui | Application Ready.
+2026-07-05 16:42:50 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 16:48:12 | INFO     | attendance.gui | Application Ready.
+2026-07-05 16:48:12 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 16:48:21 | INFO     | attendance.gui | Date From selected: 07/01/2026
+2026-07-05 16:48:27 | INFO     | attendance.gui | Date To selected: 07/31/2026
+2026-07-05 16:48:34 | INFO     | attendance.gui | Output folder selected.
+2026-07-05 16:48:41 | INFO     | attendance.gui | Attendance Configuration selected.
+2026-07-05 16:48:45 | INFO     | attendance.gui | Generate button clicked.
+2026-07-05 16:48:45 | INFO     | attendance.gui | Input validation success.
+2026-07-05 16:48:45 | INFO     | attendance.gui | Configuration file : D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 16:48:45 | INFO     | attendance.gui | Output folder      : D:\Python Project\Attendance Configuration\output
+2026-07-05 16:48:45 | INFO     | attendance.gui | Date From          : 07/01/2026
+2026-07-05 16:48:45 | INFO     | attendance.gui | Date To            : 07/31/2026
+2026-07-05 16:48:45 | INFO     | attendance.gui | Workflow           : HO
+2026-07-05 16:48:45 | INFO     | attendance.gui | Generate HRIS TXT  : True
+2026-07-05 16:48:45 | INFO     | attendance.gui | Generate Report    : True
+2026-07-05 16:48:45 | INFO     | attendance.gui | Preparing Attendance Engine...
+2026-07-05 16:48:45 | INFO     | attendance.gui | Attendance Engine placeholder started.
+2026-07-05 16:48:45 | INFO     | attendance.gui | No MDB processing is executed in Sprint 4.3.
+2026-07-05 16:48:45 | INFO     | attendance.gui | Attendance Engine placeholder finished.
+2026-07-05 16:48:45 | INFO     | attendance.gui | Sprint 5 will implement real processing.
+2026-07-05 16:48:45 | INFO     | shared.dialogs | Attendance GUI is ready for Engine integration.
+
+Real Attendance Engine will be implemented in Sprint 5.
+2026-07-05 16:49:59 | INFO     | attendance.gui | Application Ready.
+2026-07-05 16:49:59 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 16:59:09 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 16:59:10 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 40 table(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 5 column(s) in table ACGroup.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table ACGroup returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 16 column(s) in table ACTimeZones.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table ACTimeZones returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 7 column(s) in table ACUnlockComb.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table ACUnlockComb returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 3 column(s) in table ATTPARAM.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table ATTPARAM returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 3 column(s) in table AUTHDEVICE.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table AUTHDEVICE returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 6 column(s) in table AlarmLog.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table AlarmLog returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 7 column(s) in table AuditedExc.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table AuditedExc returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 12 column(s) in table CHECKEXACT.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table CHECKEXACT returned 2 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 8 column(s) in table CHECKINOUT.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table CHECKINOUT returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 16 column(s) in table DEPARTMENTS.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table DEPARTMENTS returned 1 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 2 column(s) in table DeptUsedSchs.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table DeptUsedSchs returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 3 column(s) in table EXCNOTES.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table EXCNOTES returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 9 column(s) in table EmOpLog.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table EmOpLog returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 10 column(s) in table FaceTemp.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table FaceTemp returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 11 column(s) in table HOLIDAYS.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table HOLIDAYS returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 10 column(s) in table LEAVECLASS.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table LEAVECLASS returned 3 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 12 column(s) in table LEAVECLASS1.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table LEAVECLASS1 returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 28 column(s) in table Machines.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table Machines returned 1 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 7 column(s) in table NUM_RUN.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table NUM_RUN returned 1 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 7 column(s) in table NUM_RUN_DEIL.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table NUM_RUN_DEIL returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 39 column(s) in table Paste Errors.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table Paste Errors returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 10 column(s) in table ReportItem.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table ReportItem returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 17 column(s) in table SCHCLASS.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table SCHCLASS returned 2 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 10 column(s) in table SECURITYDETAILS.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table SECURITYDETAILS returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 20 column(s) in table SHIFT.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table SHIFT returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 8 column(s) in table ServerLog.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table ServerLog returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 6 column(s) in table SystemLog.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table SystemLog returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 2 column(s) in table TBKEY.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table TBKEY returned 3 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 4 column(s) in table TBSMSALLOT.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table TBSMSALLOT returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 8 column(s) in table TBSMSINFO.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table TBSMSINFO returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 16 column(s) in table TEMPLATE.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table TEMPLATE returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 40 column(s) in table USERINFO.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table USERINFO returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 6 column(s) in table USER_OF_RUN.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table USER_OF_RUN returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 6 column(s) in table USER_SPEDAY.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table USER_SPEDAY returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 7 column(s) in table USER_TEMP_SCH.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table USER_TEMP_SCH returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 2 column(s) in table UserACMachines.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table UserACMachines returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 6 column(s) in table UserACPrivilege.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table UserACPrivilege returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 2 column(s) in table UserUpdates.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table UserUpdates returned 0 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 2 column(s) in table UserUsedSClasses.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table UserUsedSClasses returned 5 record(s).
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Found 3 column(s) in table UsersMachines.
+2026-07-05 16:59:10 | INFO     | attendance.extractor | Preview table UsersMachines returned 0 record(s).
+2026-07-05 16:59:11 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 17:00:21 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 17:00:22 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 40 table(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 5 column(s) in table ACGroup.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table ACGroup returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 16 column(s) in table ACTimeZones.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table ACTimeZones returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 7 column(s) in table ACUnlockComb.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table ACUnlockComb returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 3 column(s) in table ATTPARAM.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table ATTPARAM returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 3 column(s) in table AUTHDEVICE.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table AUTHDEVICE returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 6 column(s) in table AlarmLog.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table AlarmLog returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 7 column(s) in table AuditedExc.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table AuditedExc returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 12 column(s) in table CHECKEXACT.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table CHECKEXACT returned 2 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 8 column(s) in table CHECKINOUT.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table CHECKINOUT returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 16 column(s) in table DEPARTMENTS.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table DEPARTMENTS returned 1 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 2 column(s) in table DeptUsedSchs.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table DeptUsedSchs returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 3 column(s) in table EXCNOTES.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table EXCNOTES returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 9 column(s) in table EmOpLog.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table EmOpLog returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 10 column(s) in table FaceTemp.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table FaceTemp returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 11 column(s) in table HOLIDAYS.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table HOLIDAYS returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 10 column(s) in table LEAVECLASS.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table LEAVECLASS returned 3 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 12 column(s) in table LEAVECLASS1.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table LEAVECLASS1 returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 28 column(s) in table Machines.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table Machines returned 1 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 7 column(s) in table NUM_RUN.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table NUM_RUN returned 1 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 7 column(s) in table NUM_RUN_DEIL.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table NUM_RUN_DEIL returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 39 column(s) in table Paste Errors.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table Paste Errors returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 10 column(s) in table ReportItem.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table ReportItem returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 17 column(s) in table SCHCLASS.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table SCHCLASS returned 2 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 10 column(s) in table SECURITYDETAILS.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table SECURITYDETAILS returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 20 column(s) in table SHIFT.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table SHIFT returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 8 column(s) in table ServerLog.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table ServerLog returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 6 column(s) in table SystemLog.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table SystemLog returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 2 column(s) in table TBKEY.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table TBKEY returned 3 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 4 column(s) in table TBSMSALLOT.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table TBSMSALLOT returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 8 column(s) in table TBSMSINFO.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table TBSMSINFO returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 16 column(s) in table TEMPLATE.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table TEMPLATE returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 40 column(s) in table USERINFO.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table USERINFO returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 6 column(s) in table USER_OF_RUN.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table USER_OF_RUN returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 6 column(s) in table USER_SPEDAY.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table USER_SPEDAY returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 7 column(s) in table USER_TEMP_SCH.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table USER_TEMP_SCH returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 2 column(s) in table UserACMachines.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table UserACMachines returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 6 column(s) in table UserACPrivilege.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table UserACPrivilege returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 2 column(s) in table UserUpdates.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table UserUpdates returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 2 column(s) in table UserUsedSClasses.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table UserUsedSClasses returned 5 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Found 3 column(s) in table UsersMachines.
+2026-07-05 17:00:22 | INFO     | attendance.extractor | Preview table UsersMachines returned 0 record(s).
+2026-07-05 17:00:22 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 17:05:55 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 17:05:56 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 17:05:56 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 17:11:33 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 17:11:34 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 17:11:34 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-05 17:11:34 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-05 17:11:34 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 17:24:50 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 17:24:51 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 17:24:51 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-05 17:24:51 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-05 17:24:51 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 17:24:51 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-05 17:24:51 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-05 17:32:53 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 17:32:54 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 17:32:54 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-05 17:32:54 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-05 17:32:55 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 17:32:55 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-05 17:32:55 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-05 17:32:55 | INFO     | attendance.engine | Starting attendance validation for 50 paired record(s).
+2026-07-05 17:32:55 | INFO     | attendance.engine | Attendance validation finished. Total: 50, Valid for TXT: 10, Anomaly: 40
+2026-07-05 17:36:07 | INFO     | attendance.gui | Application Ready.
+2026-07-05 17:36:07 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 17:36:27 | INFO     | attendance.gui | Application Ready.
+2026-07-05 17:36:27 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 17:36:50 | INFO     | attendance.gui | Application Ready.
+2026-07-05 17:36:50 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 17:37:23 | INFO     | __main__ | Starting OAS-K
+2026-07-05 17:37:24 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-05 17:40:26 | INFO     | main | Starting OAS-K
+2026-07-05 17:40:27 | INFO     | main | Launcher loaded successfully.
+2026-07-05 17:40:49 | INFO     | main | Starting OAS-K
+2026-07-05 17:40:49 | INFO     | main | Launcher loaded successfully.
+2026-07-05 17:41:18 | INFO     | __main__ | Starting OAS-K
+2026-07-05 17:41:18 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-05 17:42:34 | INFO     | __main__ | Starting OAS-K
+2026-07-05 17:42:35 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-05 17:42:37 | INFO     | __main__ | Attendance module clicked.
+2026-07-05 17:44:27 | INFO     | main | Starting OAS-K
+2026-07-05 17:44:28 | INFO     | main | Launcher loaded successfully.
+2026-07-05 17:44:40 | INFO     | main | Starting OAS-K
+2026-07-05 17:44:40 | INFO     | main | Launcher loaded successfully.
+2026-07-05 17:44:51 | INFO     | __main__ | Starting OAS-K
+2026-07-05 17:44:51 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-05 17:47:09 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 17:47:10 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 17:47:10 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-05 17:47:10 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-05 17:47:11 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 17:47:11 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-05 17:47:11 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-05 17:47:11 | INFO     | attendance.engine | Starting attendance validation for 50 paired record(s).
+2026-07-05 17:47:11 | INFO     | attendance.engine | Attendance validation finished. Total: 50, Valid for TXT: 10, Anomaly: 40
+2026-07-05 17:47:11 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260705_174711\Attendance_HO_001.txt (10 record(s))
+2026-07-05 17:48:33 | INFO     | attendance.gui | Application Ready.
+2026-07-05 17:48:33 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 17:48:43 | INFO     | attendance.gui | Attendance Configuration selected.
+2026-07-05 17:48:49 | INFO     | attendance.gui | Output folder selected.
+2026-07-05 17:48:54 | INFO     | attendance.gui | Date From selected: 07/01/2026
+2026-07-05 17:48:57 | INFO     | attendance.gui | Date To selected: 07/01/2026
+2026-07-05 17:49:02 | INFO     | attendance.gui | Generate button clicked.
+2026-07-05 17:49:02 | INFO     | attendance.gui | Input validation success.
+2026-07-05 17:49:02 | INFO     | attendance.gui | Configuration file : D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 17:49:02 | INFO     | attendance.gui | Output folder      : D:\Python Project\Attendance Configuration\output
+2026-07-05 17:49:02 | INFO     | attendance.gui | Date From          : 07/01/2026
+2026-07-05 17:49:02 | INFO     | attendance.gui | Date To            : 07/01/2026
+2026-07-05 17:49:02 | INFO     | attendance.gui | Workflow           : HO
+2026-07-05 17:49:02 | INFO     | attendance.gui | Generate HRIS TXT  : True
+2026-07-05 17:49:02 | INFO     | attendance.gui | Generate Report    : True
+2026-07-05 17:49:02 | INFO     | attendance.gui | Preparing Attendance Engine...
+2026-07-05 17:49:02 | INFO     | attendance.gui | Attendance Engine placeholder started.
+2026-07-05 17:49:02 | INFO     | attendance.gui | No MDB processing is executed in Sprint 4.3.
+2026-07-05 17:49:02 | INFO     | attendance.gui | Attendance Engine placeholder finished.
+2026-07-05 17:49:02 | INFO     | attendance.gui | Sprint 5 will implement real processing.
+2026-07-05 17:49:02 | INFO     | shared.dialogs | Attendance GUI is ready for Engine integration.
+
+Real Attendance Engine will be implemented in Sprint 5.
+2026-07-05 17:54:38 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 17:54:38 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 17:54:38 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-05 17:54:38 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-05 17:54:38 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 17:54:38 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-05 17:54:38 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-05 17:54:38 | INFO     | attendance.engine | Starting attendance validation for 50 paired record(s).
+2026-07-05 17:54:38 | INFO     | attendance.engine | Attendance validation finished. Total: 50, Valid for TXT: 10, Anomaly: 40
+2026-07-05 17:54:38 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260705_175438\Attendance_HO_001.txt (10 record(s))
+2026-07-05 17:54:41 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260705_175438\Report_HO.xlsx
+2026-07-05 18:04:07 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 18:04:07 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-05 18:05:11 | INFO     | __main__ | Starting OAS-K
+2026-07-05 18:05:11 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-05 18:08:09 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 18:08:10 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-05 18:08:10 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 18:08:10 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 18:08:10 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-05 18:08:10 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-05 18:08:11 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 18:08:11 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-05 18:08:11 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-05 18:08:11 | INFO     | attendance.engine | Starting attendance validation for 50 paired record(s).
+2026-07-05 18:08:11 | INFO     | attendance.engine | Attendance validation finished. Total: 50, Valid for TXT: 10, Anomaly: 40
+2026-07-05 18:08:11 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260705_180810\Attendance_HO_001.txt (10 record(s))
+2026-07-05 18:08:11 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260705_180810\Report_HO.xlsx
+2026-07-05 18:15:43 | INFO     | attendance.gui | Application Ready.
+2026-07-05 18:15:43 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 18:19:28 | INFO     | attendance.gui | Application Ready.
+2026-07-05 18:19:28 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 18:19:40 | INFO     | attendance.gui | Attendance Configuration selected.
+2026-07-05 18:19:49 | INFO     | attendance.gui | Output folder selected.
+2026-07-05 18:19:53 | INFO     | attendance.gui | Date From selected: 07/02/2026
+2026-07-05 18:19:58 | INFO     | attendance.gui | Date To selected: 07/02/2026
+2026-07-05 18:20:02 | INFO     | attendance.gui | Generate button clicked.
+2026-07-05 18:20:02 | INFO     | attendance.gui | Input validation success.
+2026-07-05 18:20:02 | INFO     | attendance.gui | Configuration file : D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 18:20:02 | INFO     | attendance.gui | Output folder      : D:\Python Project\Attendance Configuration\output
+2026-07-05 18:20:02 | INFO     | attendance.gui | Date From          : 07/02/2026
+2026-07-05 18:20:02 | INFO     | attendance.gui | Date To            : 07/02/2026
+2026-07-05 18:20:02 | INFO     | attendance.gui | Workflow           : HO
+2026-07-05 18:20:02 | INFO     | attendance.gui | Generate HRIS TXT  : True
+2026-07-05 18:20:02 | INFO     | attendance.gui | Generate Report    : True
+2026-07-05 18:20:02 | INFO     | attendance.gui | Reading Attendance Configuration...
+2026-07-05 18:20:02 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 18:20:02 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-05 18:20:02 | INFO     | attendance.gui | Attendance Configuration loaded.
+2026-07-05 18:20:02 | INFO     | attendance.gui | Running Attendance Process Engine...
+2026-07-05 18:20:02 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 18:20:03 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 18:20:03 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-07-02 00:00:00 to 2026-07-03 00:00:00.
+2026-07-05 18:20:03 | INFO     | attendance.extractor | Fetched 100 raw attendance log(s).
+2026-07-05 18:20:03 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 18:20:03 | INFO     | attendance.engine | Starting attendance pairing for 100 raw log(s).
+2026-07-05 18:20:03 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 47, Paired: 43, Single tap: 4
+2026-07-05 18:20:03 | INFO     | attendance.engine | Starting attendance validation for 47 paired record(s).
+2026-07-05 18:20:03 | INFO     | attendance.engine | Attendance validation finished. Total: 47, Valid for TXT: 43, Anomaly: 4
+2026-07-05 18:20:03 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260705_182002\Attendance_HO_001.txt (43 record(s))
+2026-07-05 18:20:04 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260705_182002\Report_HO.xlsx
+2026-07-05 18:20:04 | INFO     | attendance.gui | Attendance process finished.
+2026-07-05 18:20:04 | INFO     | attendance.gui | Job ID              : 20260705_182002
+2026-07-05 18:20:04 | INFO     | attendance.gui | Workflow            : HO
+2026-07-05 18:20:04 | INFO     | attendance.gui | Raw log count       : 100
+2026-07-05 18:20:04 | INFO     | attendance.gui | Paired record count : 47
+2026-07-05 18:20:04 | INFO     | attendance.gui | Valid record count  : 43
+2026-07-05 18:20:04 | INFO     | attendance.gui | Anomaly count       : 4
+2026-07-05 18:20:04 | INFO     | attendance.gui | MDB Summary:
+2026-07-05 18:20:04 | INFO     | attendance.gui | - HO01 | SUCCESS | Raw Logs: 100 | D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 18:20:04 | INFO     | attendance.gui | TXT output folder   : D:\Python Project\Attendance Configuration\output\HO\TXT\20260705_182002
+2026-07-05 18:20:04 | INFO     | attendance.gui | TXT files generated : 1
+2026-07-05 18:20:04 | INFO     | attendance.gui | - TXT: D:\Python Project\Attendance Configuration\output\HO\TXT\20260705_182002\Attendance_HO_001.txt (43 rows)
+2026-07-05 18:20:04 | INFO     | attendance.gui | Report file         : D:\Python Project\Attendance Configuration\output\HO\Report\20260705_182002\Report_HO.xlsx
+2026-07-05 18:20:04 | INFO     | shared.dialogs | Attendance process completed successfully.
+
+Job ID: 20260705_182002
+Workflow: HO
+Valid Records: 43
+Anomaly Records: 4
+2026-07-05 18:24:57 | INFO     | __main__ | Starting OAS-K
+2026-07-05 18:24:57 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-05 18:24:58 | INFO     | __main__ | Attendance module clicked.
+2026-07-05 18:27:16 | INFO     | attendance.gui | Application Ready.
+2026-07-05 18:27:16 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 18:27:25 | INFO     | attendance.gui | Attendance Configuration selected.
+2026-07-05 18:27:32 | INFO     | attendance.gui | Output folder selected.
+2026-07-05 18:27:39 | INFO     | attendance.gui | Date From selected: 06/16/2026
+2026-07-05 18:27:46 | INFO     | attendance.gui | Date To selected: 07/03/2026
+2026-07-05 18:27:49 | INFO     | attendance.gui | Generate button clicked.
+2026-07-05 18:27:49 | INFO     | attendance.gui | Input validation success.
+2026-07-05 18:27:49 | INFO     | attendance.gui | Configuration file : D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 18:27:49 | INFO     | attendance.gui | Output folder      : D:\Python Project\Attendance Configuration\output
+2026-07-05 18:27:49 | INFO     | attendance.gui | Date From          : 06/16/2026
+2026-07-05 18:27:49 | INFO     | attendance.gui | Date To            : 07/03/2026
+2026-07-05 18:27:49 | INFO     | attendance.gui | Workflow           : HO
+2026-07-05 18:27:49 | INFO     | attendance.gui | Generate HRIS TXT  : True
+2026-07-05 18:27:49 | INFO     | attendance.gui | Generate Report    : True
+2026-07-05 18:27:49 | INFO     | attendance.gui | Reading Attendance Configuration...
+2026-07-05 18:27:49 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 18:27:49 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-05 18:27:49 | INFO     | attendance.gui | Attendance Configuration loaded.
+2026-07-05 18:27:49 | INFO     | attendance.gui | Running Attendance Process Engine...
+2026-07-05 18:27:49 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 18:27:49 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 18:27:49 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-06-16 00:00:00 to 2026-07-04 00:00:00.
+2026-07-05 18:27:50 | INFO     | attendance.extractor | Fetched 1361 raw attendance log(s).
+2026-07-05 18:27:50 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 18:27:50 | INFO     | attendance.engine | Starting attendance pairing for 1361 raw log(s).
+2026-07-05 18:27:50 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 664, Paired: 582, Single tap: 82
+2026-07-05 18:27:50 | INFO     | attendance.engine | Starting attendance validation for 664 paired record(s).
+2026-07-05 18:27:50 | INFO     | attendance.engine | Attendance validation finished. Total: 664, Valid for TXT: 582, Anomaly: 82
+2026-07-05 18:27:50 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260705_182749\Attendance_HO_001.txt (582 record(s))
+2026-07-05 18:27:50 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260705_182749\Report_HO.xlsx
+2026-07-05 18:27:50 | INFO     | attendance.gui | Attendance process finished.
+2026-07-05 18:27:50 | INFO     | attendance.gui | Job ID              : 20260705_182749
+2026-07-05 18:27:50 | INFO     | attendance.gui | Workflow            : HO
+2026-07-05 18:27:50 | INFO     | attendance.gui | Raw log count       : 1361
+2026-07-05 18:27:50 | INFO     | attendance.gui | Paired record count : 664
+2026-07-05 18:27:50 | INFO     | attendance.gui | Valid record count  : 582
+2026-07-05 18:27:50 | INFO     | attendance.gui | Anomaly count       : 82
+2026-07-05 18:27:50 | INFO     | attendance.gui | MDB Summary:
+2026-07-05 18:27:50 | INFO     | attendance.gui | - HO01 | SUCCESS | Raw Logs: 1361 | D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 18:27:50 | INFO     | attendance.gui | TXT output folder   : D:\Python Project\Attendance Configuration\output\HO\TXT\20260705_182749
+2026-07-05 18:27:50 | INFO     | attendance.gui | TXT files generated : 1
+2026-07-05 18:27:50 | INFO     | attendance.gui | - TXT: D:\Python Project\Attendance Configuration\output\HO\TXT\20260705_182749\Attendance_HO_001.txt (582 rows)
+2026-07-05 18:27:50 | INFO     | attendance.gui | Report file         : D:\Python Project\Attendance Configuration\output\HO\Report\20260705_182749\Report_HO.xlsx
+2026-07-05 18:27:50 | INFO     | shared.dialogs | Attendance process completed successfully.
+
+Job ID: 20260705_182749
+Workflow: HO
+Valid Records: 582
+Anomaly Records: 82
+2026-07-05 18:29:21 | INFO     | attendance.gui | Selected Workflow : Branch
+2026-07-05 18:29:22 | INFO     | attendance.gui | Generate button clicked.
+2026-07-05 18:29:22 | INFO     | attendance.gui | Input validation success.
+2026-07-05 18:29:22 | INFO     | attendance.gui | Configuration file : D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 18:29:22 | INFO     | attendance.gui | Output folder      : D:\Python Project\Attendance Configuration\output
+2026-07-05 18:29:22 | INFO     | attendance.gui | Date From          : 06/16/2026
+2026-07-05 18:29:22 | INFO     | attendance.gui | Date To            : 07/03/2026
+2026-07-05 18:29:22 | INFO     | attendance.gui | Workflow           : Branch
+2026-07-05 18:29:22 | INFO     | attendance.gui | Generate HRIS TXT  : True
+2026-07-05 18:29:22 | INFO     | attendance.gui | Generate Report    : True
+2026-07-05 18:29:22 | INFO     | attendance.gui | Reading Attendance Configuration...
+2026-07-05 18:29:22 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-05 18:29:22 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-05 18:29:22 | INFO     | attendance.gui | Attendance Configuration loaded.
+2026-07-05 18:29:22 | INFO     | attendance.gui | Running Attendance Process Engine...
+2026-07-05 18:29:22 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 18:29:22 | INFO     | attendance.extractor | MDB connection established.
+2026-07-05 18:29:22 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-06-16 00:00:00 to 2026-07-04 00:00:00.
+2026-07-05 18:29:22 | INFO     | attendance.extractor | Fetched 1361 raw attendance log(s).
+2026-07-05 18:29:22 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-05 18:29:22 | INFO     | attendance.engine | Starting attendance pairing for 1361 raw log(s).
+2026-07-05 18:29:22 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 664, Paired: 582, Single tap: 82
+2026-07-05 18:29:22 | INFO     | attendance.engine | Starting attendance validation for 664 paired record(s).
+2026-07-05 18:29:22 | INFO     | attendance.engine | Attendance validation finished. Total: 664, Valid for TXT: 582, Anomaly: 82
+2026-07-05 18:29:22 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\Branch\TXT\20260705_182922\Attendance_Branch_001.txt (582 record(s))
+2026-07-05 18:29:23 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\Branch\Report\20260705_182922\Report_Branch.xlsx
+2026-07-05 18:29:23 | INFO     | attendance.gui | Attendance process finished.
+2026-07-05 18:29:23 | INFO     | attendance.gui | Job ID              : 20260705_182922
+2026-07-05 18:29:23 | INFO     | attendance.gui | Workflow            : Branch
+2026-07-05 18:29:23 | INFO     | attendance.gui | Raw log count       : 1361
+2026-07-05 18:29:23 | INFO     | attendance.gui | Paired record count : 664
+2026-07-05 18:29:23 | INFO     | attendance.gui | Valid record count  : 582
+2026-07-05 18:29:23 | INFO     | attendance.gui | Anomaly count       : 82
+2026-07-05 18:29:23 | INFO     | attendance.gui | MDB Summary:
+2026-07-05 18:29:23 | INFO     | attendance.gui | - CBG001 | SUCCESS | Raw Logs: 1361 | D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-05 18:29:23 | INFO     | attendance.gui | TXT output folder   : D:\Python Project\Attendance Configuration\output\Branch\TXT\20260705_182922
+2026-07-05 18:29:23 | INFO     | attendance.gui | TXT files generated : 1
+2026-07-05 18:29:23 | INFO     | attendance.gui | - TXT: D:\Python Project\Attendance Configuration\output\Branch\TXT\20260705_182922\Attendance_Branch_001.txt (582 rows)
+2026-07-05 18:29:23 | INFO     | attendance.gui | Report file         : D:\Python Project\Attendance Configuration\output\Branch\Report\20260705_182922\Report_Branch.xlsx
+2026-07-05 18:29:23 | INFO     | shared.dialogs | Attendance process completed successfully.
+
+Job ID: 20260705_182922
+Workflow: Branch
+Valid Records: 582
+Anomaly Records: 82
+2026-07-05 20:12:45 | INFO     | attendance.gui | Application Ready.
+2026-07-05 20:12:45 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 20:13:39 | INFO     | attendance.gui | Application Ready.
+2026-07-05 20:13:39 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 20:17:43 | INFO     | attendance.gui | Application Ready.
+2026-07-05 20:17:43 | INFO     | attendance.gui | Waiting for user input...
+2026-07-05 20:19:08 | INFO     | __main__ | Starting OAS-K
+2026-07-05 20:19:09 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-05 20:19:45 | INFO     | __main__ | Starting OAS-K
+2026-07-05 20:19:45 | INFO     | __main__ | Launcher loaded successfully.
+2026-07-05 20:19:50 | INFO     | attendance.gui | Application Ready.
+2026-07-05 20:19:50 | INFO     | attendance.gui | Waiting for user input...
