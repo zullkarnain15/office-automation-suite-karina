@@ -31,8 +31,9 @@ to be written to HRIS TXT.
 
 =========================================================
 """
-
 from __future__ import annotations
+
+import json
 from pathlib import Path
 from typing import Any
 
@@ -740,7 +741,7 @@ class AttendanceExcelReportWriter:
         )
 
         if report_name is None:
-            report_name = f"Report_{workflow_label}.xlsx"
+            report_name = f"Report_{workflow_label}_{job_id}.xlsx"
 
         report_path = output_folder / report_name
 
@@ -1269,7 +1270,7 @@ class AttendanceProcessEngine:
                 job_id=job_id,
             )
 
-        return {
+        result = {
             "job_id": job_id,
             "workflow": workflow_label,
             "date_from": date_from,
@@ -1283,6 +1284,19 @@ class AttendanceProcessEngine:
             "txt_result": txt_result,
             "report_result": report_result,
         }
+
+        artifact_writer = AttendanceRunArtifactWriter()
+
+        artifact_result = artifact_writer.write_artifacts(
+            result=result,
+            output_root=output_root,
+            workflow=workflow_label,
+            job_id=job_id,
+        )
+
+        result["artifact_result"] = artifact_result
+
+        return result
 
     @staticmethod
     def _get_mdb_list(
@@ -1328,6 +1342,272 @@ class AttendanceProcessEngine:
         Create timestamp job ID.
         """
         return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    @staticmethod
+    def _normalize_workflow(workflow: str) -> str:
+        """
+        Normalize workflow label.
+        """
+        normalized = workflow.strip().lower()
+
+        if normalized == "ho":
+            return "HO"
+
+        if normalized == "branch":
+            return "Branch"
+
+        raise ValueError(
+            "workflow must be 'HO' or 'Branch'."
+        )
+    
+class AttendanceRunArtifactWriter:
+    """
+    Attendance run artifact writer.
+
+    Sprint 5.11:
+    Write Process.log and summary.json for each Attendance run.
+
+    Output location:
+    output_root / workflow / Report / job_id
+    """
+
+    def write_artifacts(
+        self,
+        result: dict[str, Any],
+        output_root: str | Path,
+        workflow: str,
+        job_id: str,
+    ) -> dict[str, Any]:
+        """
+        Write Process.log and summary.json.
+        """
+        workflow_label = self._normalize_workflow(workflow)
+
+        artifact_folder = (
+            Path(output_root)
+            / workflow_label
+            / "Report"
+            / job_id
+        )
+
+        artifact_folder.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        process_log_path = artifact_folder / "Process.log"
+        summary_json_path = artifact_folder / "summary.json"
+
+        self._write_process_log(
+            file_path=process_log_path,
+            result=result,
+        )
+
+        self._write_summary_json(
+            file_path=summary_json_path,
+            result=result,
+        )
+
+        logger.info(
+            "Generated run artifacts: %s and %s",
+            process_log_path,
+            summary_json_path,
+        )
+
+        return {
+            "artifact_folder": str(artifact_folder),
+            "process_log": str(process_log_path),
+            "summary_json": str(summary_json_path),
+        }
+
+    def _write_process_log(
+        self,
+        file_path: Path,
+        result: dict[str, Any],
+    ) -> None:
+        """
+        Write human-readable process log.
+        """
+        lines: list[str] = []
+
+        lines.append("=" * 80)
+        lines.append("Office Automation Suite - Karina")
+        lines.append("Attendance Process Log")
+        lines.append("=" * 80)
+        lines.append(f"Job ID              : {result.get('job_id', '')}")
+        lines.append(f"Workflow            : {result.get('workflow', '')}")
+        lines.append(
+            f"Date From           : "
+            f"{self._format_datetime(result.get('date_from'))}"
+        )
+        lines.append(
+            f"Date To             : "
+            f"{self._format_datetime(result.get('date_to'))}"
+        )
+        lines.append(f"Generated At        : {datetime.now():%Y-%m-%d %H:%M:%S}")
+        lines.append("")
+        lines.append("PROCESS SUMMARY")
+        lines.append("-" * 80)
+        lines.append(f"Raw log count       : {result.get('raw_log_count', 0)}")
+        lines.append(
+            f"Paired record count : "
+            f"{result.get('paired_record_count', 0)}"
+        )
+        lines.append(
+            f"Valid record count  : "
+            f"{result.get('valid_record_count', 0)}"
+        )
+        lines.append(
+            f"Anomaly count       : "
+            f"{result.get('anomaly_record_count', 0)}"
+        )
+        lines.append("")
+        lines.append("MDB SUMMARY")
+        lines.append("-" * 80)
+
+        for item in result.get("mdb_summary", []):
+            lines.append(
+                f"{item.get('code', '')} | "
+                f"{item.get('description', '')} | "
+                f"{item.get('status', '')} | "
+                f"Raw Logs: {item.get('raw_log_count', 0)} | "
+                f"{item.get('mdb_path', '')}"
+            )
+
+            if item.get("error"):
+                lines.append(f"Error: {item.get('error')}")
+
+        lines.append("")
+        lines.append("VALIDATION SUMMARY")
+        lines.append("-" * 80)
+
+        validation_summary = result.get("validation_summary", {})
+
+        for key, value in validation_summary.items():
+            lines.append(f"{key}: {value}")
+
+        txt_result = result.get("txt_result")
+
+        lines.append("")
+        lines.append("TXT RESULT")
+        lines.append("-" * 80)
+
+        if txt_result:
+            lines.append(
+                f"Output folder       : "
+                f"{txt_result.get('output_folder', '')}"
+            )
+            lines.append(
+                f"Total TXT files     : "
+                f"{txt_result.get('total_files', 0)}"
+            )
+            lines.append(
+                f"Total TXT records   : "
+                f"{txt_result.get('total_records', 0)}"
+            )
+
+            for file_info in txt_result.get("generated_files", []):
+                lines.append(
+                    f"{file_info.get('file_path', '')} "
+                    f"({file_info.get('record_count', 0)} rows)"
+                )
+        else:
+            lines.append("TXT generation skipped.")
+
+        report_result = result.get("report_result")
+
+        lines.append("")
+        lines.append("REPORT RESULT")
+        lines.append("-" * 80)
+
+        if report_result:
+            lines.append(
+                f"Report file         : "
+                f"{report_result.get('report_file', '')}"
+            )
+        else:
+            lines.append("Report generation skipped.")
+
+        lines.append("")
+        lines.append("=" * 80)
+        lines.append("Process finished.")
+        lines.append("=" * 80)
+
+        file_path.write_text(
+            "\n".join(lines),
+            encoding="utf-8",
+        )
+
+    def _write_summary_json(
+        self,
+        file_path: Path,
+        result: dict[str, Any],
+    ) -> None:
+        """
+        Write machine-readable summary JSON.
+        """
+        json_data = self._make_json_safe(result)
+
+        file_path.write_text(
+            json.dumps(
+                json_data,
+                indent=4,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+    def _make_json_safe(
+        self,
+        value: Any,
+    ) -> Any:
+        """
+        Convert Python objects into JSON-safe values.
+        """
+        if isinstance(value, dict):
+            return {
+                str(key): self._make_json_safe(item)
+                for key, item in value.items()
+            }
+
+        if isinstance(value, list):
+            return [
+                self._make_json_safe(item)
+                for item in value
+            ]
+
+        if isinstance(value, tuple):
+            return [
+                self._make_json_safe(item)
+                for item in value
+            ]
+
+        if isinstance(value, Path):
+            return str(value)
+
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+
+        if isinstance(value, date):
+            return value.strftime("%Y-%m-%d")
+
+        return value
+
+    @staticmethod
+    def _format_datetime(value: Any) -> str:
+        """
+        Format datetime value for Process.log.
+        """
+        if isinstance(value, datetime):
+            return value.strftime("%m/%d/%Y")
+
+        if isinstance(value, date):
+            return value.strftime("%m/%d/%Y")
+
+        if value is None:
+            return ""
+
+        return str(value)
 
     @staticmethod
     def _normalize_workflow(workflow: str) -> str:

@@ -55,6 +55,59 @@ class AttendanceConfiguration:
     ho_mdb_list: list[AttendanceMDBConfig]
     branch_mdb_list: list[AttendanceMDBConfig]
 
+    def get_output_folder(self) -> Path | None:
+        """
+        Return configured Attendance output folder, if available.
+        """
+        output_value = self._get_first_value(
+            self.general,
+            (
+                "OutputFolder",
+                "Output_Folder",
+                "Output_Root",
+            ),
+        )
+
+        if output_value is None:
+            output_value = self._get_first_value(
+                self.output,
+                ("Output_Root",),
+            )
+
+        if output_value is None:
+            return None
+
+        output_path = Path(str(output_value).strip())
+
+        if not str(output_path):
+            return None
+
+        if output_path.is_absolute():
+            return output_path
+
+        return self.configuration_file.parent.parent / output_path
+
+    @staticmethod
+    def _get_first_value(
+        values: dict[str, Any],
+        keys: tuple[str, ...],
+    ) -> Any:
+        """
+        Return the first non-empty configuration value for keys.
+        """
+        for key in keys:
+            value = values.get(key)
+
+            if value is None:
+                continue
+
+            value_text = str(value).strip()
+
+            if value_text:
+                return value
+
+        return None
+
 
 class AttendanceConfigurationReader:
     """

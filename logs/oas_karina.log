@@ -525,3 +525,198 @@ Anomaly Records: 82
 2026-07-05 20:19:45 | INFO     | __main__ | Launcher loaded successfully.
 2026-07-05 20:19:50 | INFO     | attendance.gui | Application Ready.
 2026-07-05 20:19:50 | INFO     | attendance.gui | Waiting for user input...
+2026-07-06 08:55:33 | INFO     | attendance.gui | Application Ready.
+2026-07-06 08:55:33 | INFO     | attendance.gui | Waiting for user input...
+2026-07-06 09:19:49 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:19:49 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-06 09:19:49 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-06 09:19:50 | INFO     | attendance.extractor | MDB connection established.
+2026-07-06 09:19:50 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-06 09:19:50 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-06 09:19:51 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-06 09:19:51 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-06 09:19:51 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-06 09:19:51 | INFO     | attendance.engine | Starting attendance validation for 50 paired record(s).
+2026-07-06 09:19:51 | INFO     | attendance.engine | Attendance validation finished. Total: 50, Valid for TXT: 10, Anomaly: 40
+2026-07-06 09:19:51 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260706_091949\Attendance_HO_001.txt (10 record(s))
+2026-07-06 09:19:51 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_091949\Report_HO.xlsx
+2026-07-06 09:19:51 | INFO     | attendance.engine | Generated run artifacts: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_091949\Process.log and D:\Python Project\Attendance Configuration\output\HO\Report\20260706_091949\summary.json
+2026-07-06 09:20:18 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:20:18 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-06 09:20:18 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-06 09:20:18 | INFO     | attendance.extractor | MDB connection established.
+2026-07-06 09:20:18 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-06 09:20:18 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-06 09:20:18 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-06 09:20:18 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-06 09:20:18 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-06 09:20:18 | INFO     | attendance.engine | Starting attendance validation for 50 paired record(s).
+2026-07-06 09:20:18 | INFO     | attendance.engine | Attendance validation finished. Total: 50, Valid for TXT: 10, Anomaly: 40
+2026-07-06 09:20:18 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260706_092018\Attendance_HO_001.txt (10 record(s))
+2026-07-06 09:20:19 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092018\Report_HO.xlsx
+2026-07-06 09:20:19 | INFO     | attendance.engine | Generated run artifacts: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092018\Process.log and D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092018\summary.json
+2026-07-06 09:20:36 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:20:36 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-06 09:20:36 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-06 09:20:36 | INFO     | attendance.extractor | MDB connection established.
+2026-07-06 09:20:36 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-06 09:20:36 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-06 09:20:36 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-06 09:20:36 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-06 09:20:36 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-06 09:20:36 | INFO     | attendance.engine | Starting attendance validation for 50 paired record(s).
+2026-07-06 09:20:36 | INFO     | attendance.engine | Attendance validation finished. Total: 50, Valid for TXT: 10, Anomaly: 40
+2026-07-06 09:20:36 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260706_092036\Attendance_HO_001.txt (10 record(s))
+2026-07-06 09:20:37 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092036\Report_HO.xlsx
+2026-07-06 09:20:37 | INFO     | attendance.engine | Generated run artifacts: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092036\Process.log and D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092036\summary.json
+2026-07-06 09:22:14 | INFO     | attendance.gui | Application Ready.
+2026-07-06 09:22:14 | INFO     | attendance.gui | Waiting for user input...
+2026-07-06 09:22:23 | INFO     | attendance.gui | Attendance Configuration selected.
+2026-07-06 09:22:35 | INFO     | attendance.gui | Output folder selected.
+2026-07-06 09:22:39 | INFO     | attendance.gui | Date From selected: 07/01/2026
+2026-07-06 09:22:43 | INFO     | attendance.gui | Date To selected: 07/01/2026
+2026-07-06 09:22:45 | INFO     | attendance.gui | Generate button clicked.
+2026-07-06 09:22:45 | INFO     | attendance.gui | Input validation success.
+2026-07-06 09:22:45 | INFO     | attendance.gui | Configuration file : D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:22:45 | INFO     | attendance.gui | Output folder      : D:\Python Project\Attendance Configuration\output
+2026-07-06 09:22:45 | INFO     | attendance.gui | Date From          : 07/01/2026
+2026-07-06 09:22:45 | INFO     | attendance.gui | Date To            : 07/01/2026
+2026-07-06 09:22:45 | INFO     | attendance.gui | Workflow           : HO
+2026-07-06 09:22:45 | INFO     | attendance.gui | Generate HRIS TXT  : True
+2026-07-06 09:22:45 | INFO     | attendance.gui | Generate Report    : True
+2026-07-06 09:22:45 | INFO     | attendance.gui | Reading Attendance Configuration...
+2026-07-06 09:22:45 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:22:45 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-06 09:22:45 | INFO     | attendance.gui | Attendance Configuration loaded.
+2026-07-06 09:22:45 | INFO     | attendance.gui | Running Attendance Process Engine...
+2026-07-06 09:22:45 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-06 09:22:45 | INFO     | attendance.extractor | MDB connection established.
+2026-07-06 09:22:45 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-07-01 00:00:00 to 2026-07-02 00:00:00.
+2026-07-06 09:22:45 | INFO     | attendance.extractor | Fetched 102 raw attendance log(s).
+2026-07-06 09:22:45 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-06 09:22:45 | INFO     | attendance.engine | Starting attendance pairing for 102 raw log(s).
+2026-07-06 09:22:45 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 51, Paired: 47, Single tap: 4
+2026-07-06 09:22:45 | INFO     | attendance.engine | Starting attendance validation for 51 paired record(s).
+2026-07-06 09:22:45 | INFO     | attendance.engine | Attendance validation finished. Total: 51, Valid for TXT: 47, Anomaly: 4
+2026-07-06 09:22:45 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260706_092245\Attendance_HO_001.txt (47 record(s))
+2026-07-06 09:22:45 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092245\Report_HO.xlsx
+2026-07-06 09:22:45 | INFO     | attendance.engine | Generated run artifacts: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092245\Process.log and D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092245\summary.json
+2026-07-06 09:22:45 | INFO     | attendance.gui | Attendance process finished.
+2026-07-06 09:22:45 | INFO     | attendance.gui | Job ID              : 20260706_092245
+2026-07-06 09:22:45 | INFO     | attendance.gui | Workflow            : HO
+2026-07-06 09:22:45 | INFO     | attendance.gui | Raw log count       : 102
+2026-07-06 09:22:45 | INFO     | attendance.gui | Paired record count : 51
+2026-07-06 09:22:45 | INFO     | attendance.gui | Valid record count  : 47
+2026-07-06 09:22:45 | INFO     | attendance.gui | Anomaly count       : 4
+2026-07-06 09:22:45 | INFO     | attendance.gui | MDB Summary:
+2026-07-06 09:22:45 | INFO     | attendance.gui | - HO01 | SUCCESS | Raw Logs: 102 | D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-06 09:22:45 | INFO     | attendance.gui | TXT output folder   : D:\Python Project\Attendance Configuration\output\HO\TXT\20260706_092245
+2026-07-06 09:22:45 | INFO     | attendance.gui | TXT files generated : 1
+2026-07-06 09:22:45 | INFO     | attendance.gui | - TXT: D:\Python Project\Attendance Configuration\output\HO\TXT\20260706_092245\Attendance_HO_001.txt (47 rows)
+2026-07-06 09:22:45 | INFO     | attendance.gui | Report file         : D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092245\Report_HO.xlsx
+2026-07-06 09:22:45 | INFO     | attendance.gui | Process log         : D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092245\Process.log
+2026-07-06 09:22:45 | INFO     | attendance.gui | Summary JSON        : D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092245\summary.json
+2026-07-06 09:22:45 | INFO     | shared.dialogs | Attendance process completed successfully.
+
+Job ID: 20260706_092245
+Workflow: HO
+Valid Records: 47
+Anomaly Records: 4
+2026-07-06 09:26:48 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:26:48 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-06 09:26:48 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-06 09:26:49 | INFO     | attendance.extractor | MDB connection established.
+2026-07-06 09:26:49 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-06 09:26:49 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-06 09:26:49 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-06 09:26:49 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-06 09:26:49 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-06 09:26:49 | INFO     | attendance.engine | Starting attendance validation for 50 paired record(s).
+2026-07-06 09:26:49 | INFO     | attendance.engine | Attendance validation finished. Total: 50, Valid for TXT: 10, Anomaly: 40
+2026-07-06 09:26:49 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260706_092648\Attendance_HO_001.txt (10 record(s))
+2026-07-06 09:26:49 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092648\Report_HO_20260706_092648.xlsx
+2026-07-06 09:26:49 | INFO     | attendance.engine | Generated run artifacts: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092648\Process.log and D:\Python Project\Attendance Configuration\output\HO\Report\20260706_092648\summary.json
+2026-07-06 09:27:21 | INFO     | attendance.gui | Application Ready.
+2026-07-06 09:27:21 | INFO     | attendance.gui | Waiting for user input...
+2026-07-06 09:27:37 | INFO     | attendance.gui | Output folder selected.
+2026-07-06 09:27:49 | INFO     | attendance.gui | Attendance Configuration selected.
+2026-07-06 09:27:52 | INFO     | attendance.gui | Generate button clicked.
+2026-07-06 09:27:52 | INFO     | attendance.gui | Validation failed: Date From is required.
+2026-07-06 09:27:52 | WARNING  | shared.dialogs | Date From is required.
+2026-07-06 09:27:59 | INFO     | attendance.gui | Date From selected: 07/03/2026
+2026-07-06 09:28:03 | INFO     | attendance.gui | Date To selected: 07/03/2026
+2026-07-06 09:28:05 | INFO     | attendance.gui | Generate button clicked.
+2026-07-06 09:28:05 | INFO     | attendance.gui | Input validation success.
+2026-07-06 09:28:05 | INFO     | attendance.gui | Configuration file : D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:28:05 | INFO     | attendance.gui | Output folder      : D:\Python Project\Attendance Configuration\output\HO
+2026-07-06 09:28:05 | INFO     | attendance.gui | Date From          : 07/03/2026
+2026-07-06 09:28:05 | INFO     | attendance.gui | Date To            : 07/03/2026
+2026-07-06 09:28:05 | INFO     | attendance.gui | Workflow           : HO
+2026-07-06 09:28:05 | INFO     | attendance.gui | Generate HRIS TXT  : True
+2026-07-06 09:28:05 | INFO     | attendance.gui | Generate Report    : True
+2026-07-06 09:28:05 | INFO     | attendance.gui | Reading Attendance Configuration...
+2026-07-06 09:28:05 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:28:05 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-06 09:28:05 | INFO     | attendance.gui | Attendance Configuration loaded.
+2026-07-06 09:28:05 | INFO     | attendance.gui | Running Attendance Process Engine...
+2026-07-06 09:28:05 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-06 09:28:06 | INFO     | attendance.extractor | MDB connection established.
+2026-07-06 09:28:06 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-07-03 00:00:00 to 2026-07-04 00:00:00.
+2026-07-06 09:28:06 | INFO     | attendance.extractor | Fetched 47 raw attendance log(s).
+2026-07-06 09:28:07 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-06 09:28:07 | INFO     | attendance.engine | Starting attendance pairing for 47 raw log(s).
+2026-07-06 09:28:07 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 43, Paired: 4, Single tap: 39
+2026-07-06 09:28:07 | INFO     | attendance.engine | Starting attendance validation for 43 paired record(s).
+2026-07-06 09:28:07 | INFO     | attendance.engine | Attendance validation finished. Total: 43, Valid for TXT: 4, Anomaly: 39
+2026-07-06 09:28:07 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\HO\TXT\20260706_092805\Attendance_HO_001.txt (4 record(s))
+2026-07-06 09:28:07 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\HO\Report\20260706_092805\Report_HO_20260706_092805.xlsx
+2026-07-06 09:28:07 | INFO     | attendance.engine | Generated run artifacts: D:\Python Project\Attendance Configuration\output\HO\HO\Report\20260706_092805\Process.log and D:\Python Project\Attendance Configuration\output\HO\HO\Report\20260706_092805\summary.json
+2026-07-06 09:28:07 | INFO     | attendance.gui | Attendance process finished.
+2026-07-06 09:28:07 | INFO     | attendance.gui | Job ID              : 20260706_092805
+2026-07-06 09:28:07 | INFO     | attendance.gui | Workflow            : HO
+2026-07-06 09:28:07 | INFO     | attendance.gui | Raw log count       : 47
+2026-07-06 09:28:07 | INFO     | attendance.gui | Paired record count : 43
+2026-07-06 09:28:07 | INFO     | attendance.gui | Valid record count  : 4
+2026-07-06 09:28:07 | INFO     | attendance.gui | Anomaly count       : 39
+2026-07-06 09:28:07 | INFO     | attendance.gui | MDB Summary:
+2026-07-06 09:28:07 | INFO     | attendance.gui | - HO01 | SUCCESS | Raw Logs: 47 | D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-06 09:28:07 | INFO     | attendance.gui | TXT output folder   : D:\Python Project\Attendance Configuration\output\HO\HO\TXT\20260706_092805
+2026-07-06 09:28:07 | INFO     | attendance.gui | TXT files generated : 1
+2026-07-06 09:28:07 | INFO     | attendance.gui | - TXT: D:\Python Project\Attendance Configuration\output\HO\HO\TXT\20260706_092805\Attendance_HO_001.txt (4 rows)
+2026-07-06 09:28:07 | INFO     | attendance.gui | Report file         : D:\Python Project\Attendance Configuration\output\HO\HO\Report\20260706_092805\Report_HO_20260706_092805.xlsx
+2026-07-06 09:28:07 | INFO     | attendance.gui | Process log         : D:\Python Project\Attendance Configuration\output\HO\HO\Report\20260706_092805\Process.log
+2026-07-06 09:28:07 | INFO     | attendance.gui | Summary JSON        : D:\Python Project\Attendance Configuration\output\HO\HO\Report\20260706_092805\summary.json
+2026-07-06 09:28:07 | INFO     | shared.dialogs | Attendance process completed successfully.
+
+Job ID: 20260706_092805
+Workflow: HO
+Valid Records: 4
+Anomaly Records: 39
+2026-07-06 09:34:55 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:34:55 | INFO     | shared.config_manager | Reading Attendance Configuration: D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx
+2026-07-06 09:34:55 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-06 09:34:55 | INFO     | shared.config_manager | Attendance Configuration loaded. HO MDB: 1, Branch MDB: 1
+2026-07-06 09:34:55 | INFO     | attendance.extractor | Connecting to MDB: D:\Python Project\Attendance Configuration\mdb\HO\newatt2000.mdb
+2026-07-06 09:34:56 | INFO     | attendance.extractor | MDB connection established.
+2026-07-06 09:34:56 | INFO     | attendance.extractor | Fetching raw attendance logs from 2026-03-30 00:00:00 to 2026-03-31 00:00:00.
+2026-07-06 09:34:56 | INFO     | attendance.extractor | Fetched 64 raw attendance log(s).
+2026-07-06 09:34:57 | INFO     | attendance.extractor | MDB connection closed.
+2026-07-06 09:34:57 | INFO     | attendance.engine | Starting attendance pairing for 64 raw log(s).
+2026-07-06 09:34:57 | INFO     | attendance.engine | Attendance pairing finished. Total pair record(s): 50, Paired: 10, Single tap: 40
+2026-07-06 09:34:57 | INFO     | attendance.engine | Starting attendance validation for 50 paired record(s).
+2026-07-06 09:34:57 | INFO     | attendance.engine | Attendance validation finished. Total: 50, Valid for TXT: 10, Anomaly: 40
+2026-07-06 09:34:57 | INFO     | attendance.engine | Generated TXT file: D:\Python Project\Attendance Configuration\output\HO\TXT\20260706_093455\Attendance_HO_001.txt (10 record(s))
+2026-07-06 09:34:57 | INFO     | attendance.engine | Generated Attendance Excel report: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_093455\Report_HO_20260706_093455.xlsx
+2026-07-06 09:34:57 | INFO     | attendance.engine | Generated run artifacts: D:\Python Project\Attendance Configuration\output\HO\Report\20260706_093455\Process.log and D:\Python Project\Attendance Configuration\output\HO\Report\20260706_093455\summary.json
+2026-07-06 09:37:36 | INFO     | attendance.gui | Application Ready.
+2026-07-06 09:37:36 | INFO     | attendance.gui | Waiting for user input...
+2026-07-06 09:37:40 | INFO     | attendance.gui | Output folder source: Manual selection.
+2026-07-06 09:37:43 | INFO     | attendance.gui | Output folder source: Attendance Configuration.
+2026-07-06 09:37:45 | INFO     | attendance.gui | Output folder source: Manual selection.
+2026-07-06 09:37:47 | INFO     | attendance.gui | Output folder source: Attendance Configuration.
+2026-07-06 09:37:51 | INFO     | attendance.gui | Output folder source: Manual selection.
+2026-07-06 09:37:52 | INFO     | attendance.gui | Output folder source: Attendance Configuration.
+2026-07-06 09:37:54 | INFO     | attendance.gui | Output folder source: Manual selection.
+2026-07-06 09:37:54 | INFO     | attendance.gui | Output folder source: Attendance Configuration.
+2026-07-06 09:38:25 | INFO     | __main__ | Starting OAS-K
+2026-07-06 09:38:26 | INFO     | __main__ | Launcher loaded successfully.

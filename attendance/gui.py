@@ -78,6 +78,7 @@ class AttendanceGUI:
             logger.warning("Attendance icon could not be loaded.")
 
         self.workflow_var = tk.StringVar(value="HO")
+        self.use_config_output_var = tk.BooleanVar(value=True)
         self.generate_txt_var = tk.BooleanVar(value=True)
         self.generate_report_var = tk.BooleanVar(value=True)
 
@@ -172,14 +173,30 @@ class AttendanceGUI:
             sticky="we",
         )
 
-        tk.Button(
+        self.output_browse_button = tk.Button(
             frame,
             text="Browse",
             font=BUTTON_FONT,
             command=self.browse_output,
-        ).grid(
+        )
+
+        self.output_browse_button.grid(
             row=1,
             column=2,
+        )
+
+        tk.Checkbutton(
+            frame,
+            text="Same as Configuration File",
+            variable=self.use_config_output_var,
+            font=DEFAULT_FONT,
+            command=self.toggle_output_source,
+        ).grid(
+            row=2,
+            column=1,
+            sticky="w",
+            padx=10,
+            pady=(0, 5),
         )
 
         # DATE RANGE
@@ -189,7 +206,7 @@ class AttendanceGUI:
             text="Date Range",
             font=DEFAULT_FONT,
         ).grid(
-            row=2,
+            row=3,
             column=0,
             sticky="w",
             pady=5,
@@ -200,7 +217,7 @@ class AttendanceGUI:
         )
 
         date_frame.grid(
-            row=2,
+            row=3,
             column=1,
             sticky="w",
             padx=10,
@@ -266,6 +283,7 @@ class AttendanceGUI:
         ).pack(side="left")
 
         frame.columnconfigure(1, weight=1)
+        self.toggle_output_source()
 
         # =================================================
         # OPTIONS WRAPPER
@@ -501,6 +519,11 @@ class AttendanceGUI:
             self.append_log("Attendance Configuration selected.")
             self.update_status("Configuration selected")
 
+            if self.use_config_output_var.get():
+                self.load_output_folder_from_configuration(
+                    show_warning=True
+                )
+
     def browse_output(self) -> None:
         """Browse output folder."""
 
@@ -514,6 +537,83 @@ class AttendanceGUI:
 
             self.append_log("Output folder selected.")
             self.update_status("Output folder selected")
+
+    def toggle_output_source(self) -> None:
+        """Toggle output folder source between config and manual."""
+
+        if self.use_config_output_var.get():
+            self.output_browse_button.config(state="disabled")
+            self.output_entry.config(state="normal")
+            self.load_output_folder_from_configuration(
+                show_warning=False
+            )
+            self.output_entry.config(state="disabled")
+            if hasattr(self, "log_text"):
+                self.append_log(
+                    "Output folder source: Attendance Configuration."
+                )
+        else:
+            self.output_entry.config(state="normal")
+            self.output_browse_button.config(state="normal")
+            if hasattr(self, "log_text"):
+                self.append_log("Output folder source: Manual selection.")
+
+    def load_output_folder_from_configuration(
+        self,
+        show_warning: bool,
+    ) -> bool:
+        """Load output folder from selected Attendance Configuration."""
+
+        config_file = self.config_entry.get().strip()
+
+        if not config_file:
+            return False
+
+        try:
+            configuration_reader = AttendanceConfigurationReader(
+                config_file
+            )
+            configuration = configuration_reader.read()
+            output_folder = configuration.get_output_folder()
+        except Exception as exc:
+            self.append_log(
+                f"Failed to read output folder from configuration: {exc}"
+            )
+
+            if show_warning:
+                Dialog.warning(
+                    "Output Folder could not be read from "
+                    "Attendance Configuration.\n\n"
+                    f"{exc}"
+                )
+
+            return False
+
+        if output_folder is None:
+            self.append_log(
+                "OutputFolder is not set in Attendance Configuration."
+            )
+
+            if show_warning:
+                Dialog.warning(
+                    "OutputFolder is not set in Attendance Configuration."
+                )
+
+            return False
+
+        self.output_entry.config(state="normal")
+        self.output_entry.delete(0, tk.END)
+        self.output_entry.insert(0, str(output_folder))
+
+        if self.use_config_output_var.get():
+            self.output_entry.config(state="disabled")
+
+        self.append_log(
+            f"Output folder loaded from configuration: {output_folder}"
+        )
+        self.update_status("Output folder loaded from configuration")
+
+        return True
 
     def update_workflow_status(self) -> None:
         """Update selected workflow information."""
@@ -945,6 +1045,16 @@ class AttendanceGUI:
         else:
             self.append_log("Report generation skipped.")
 
+        artifact_result = result.get("artifact_result")
+
+        if artifact_result:
+            self.append_log(
+                f"Process log         : {artifact_result['process_log']}"
+            )
+            self.append_log(
+                f"Summary JSON        : {artifact_result['summary_json']}"
+            )
+
     # =====================================================
     # VALIDATION
     # =====================================================
@@ -985,11 +1095,19 @@ class AttendanceGUI:
                 "Attendance Configuration must be an Excel file (.xlsx)."
             )
 
+        if self.use_config_output_var.get():
+            self.load_output_folder_from_configuration(
+                show_warning=False
+            )
+            output_folder = self.output_entry.get().strip()
+
         result = validate_required(output_folder)
 
         if not result.valid:
             return self._validation_failed(
-                "Output Folder is required."
+                "Output Folder is required.\n\n"
+                "Set OutputFolder in Attendance Configuration or "
+                "turn off Same as Configuration File and select it manually."
             )
 
         output_path = Path(output_folder)

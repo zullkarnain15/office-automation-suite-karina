@@ -1,3 +1,10 @@
+"""
+Office Automation Suite - Karina (OAS-K)
+Attendance Standalone App Launcher
+
+Use this file as PyInstaller entry point for Attendance EXE.
+"""
+
 from __future__ import annotations
 
 import tkinter as tk

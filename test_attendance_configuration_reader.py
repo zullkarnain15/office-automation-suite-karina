@@ -2,7 +2,7 @@
 Temporary test file for Sprint 5.8 Attendance Configuration Reader.
 
 Run from project root:
-python test_attendance_configuration_reader.py
+py test_attendance_configuration_reader.py
 """
 
 from __future__ import annotations
@@ -75,6 +75,7 @@ def main() -> None:
     print("-" * 80)
     print(f"Active HO MDB count     : {len(config.ho_mdb_list)}")
     print(f"Active Branch MDB count : {len(config.branch_mdb_list)}")
+    print(f"Resolved Output Folder  : {config.get_output_folder()}")
 
     print()
     print("=" * 80)

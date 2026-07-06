@@ -2,7 +2,7 @@
 Temporary test file for Sprint 5.9 End-to-End Attendance Process.
 
 Run from project root:
-python test_attendance_process_engine.py
+py test_attendance_process_engine.py
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ CONFIG_FILE = Path(
     r"D:\Python Project\Attendance Configuration\config\OAS-K_Attendance_Configuration.xlsx"
 )
 
-OUTPUT_ROOT = Path(
+DEFAULT_OUTPUT_ROOT = Path(
     r"D:\Python Project\Attendance Configuration\output"
 )
 
@@ -43,7 +43,6 @@ def main() -> None:
     print("OAS-K End-to-End Attendance Process Test")
     print("=" * 80)
     print(f"Configuration : {CONFIG_FILE}")
-    print(f"Output Root   : {OUTPUT_ROOT}")
     print(f"Workflow      : {WORKFLOW}")
     print(f"Date From     : {DATE_FROM}")
     print(f"Date To       : {DATE_TO}")
@@ -51,12 +50,18 @@ def main() -> None:
 
     reader = AttendanceConfigurationReader(CONFIG_FILE)
     configuration = reader.read()
+    output_root = (
+        configuration.get_output_folder()
+        or DEFAULT_OUTPUT_ROOT
+    )
+
+    print(f"Output Root   : {output_root}")
 
     process_engine = AttendanceProcessEngine()
 
     result = process_engine.run(
         configuration=configuration,
-        output_root=OUTPUT_ROOT,
+        output_root=output_root,
         workflow=WORKFLOW,
         date_from=date_from,
         date_to=date_to,
