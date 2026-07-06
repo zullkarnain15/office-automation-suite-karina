@@ -33,9 +33,17 @@ from typing import Any
 from attendance.engine import AttendanceProcessEngine
 from config.app_config import ATTENDANCE_ICON
 from config.app_config import DATE_FORMAT
+from config.ui_config import BACKGROUND_COLOR
+from config.ui_config import BORDER_COLOR
 from config.ui_config import BUTTON_FONT
+from config.ui_config import CARD_COLOR
 from config.ui_config import DEFAULT_FONT
 from config.ui_config import HEADER_FONT
+from config.ui_config import PRIMARY_COLOR
+from config.ui_config import SECONDARY_COLOR
+from config.ui_config import SUCCESS_COLOR
+from config.ui_config import TEXT_PRIMARY
+from config.ui_config import TEXT_SECONDARY
 from shared.config_manager import AttendanceConfigurationReader
 from shared.dialogs import Dialog
 from shared.logger import get_logger
@@ -46,19 +54,19 @@ from shared.validators import validate_required
 
 logger = get_logger(__name__)
 
-VS_CODE_BACKGROUND = "#1E1E1E"
-VS_CODE_PANEL = "#252526"
-VS_CODE_SURFACE = "#2D2D30"
-VS_CODE_SURFACE_ACTIVE = "#3E3E42"
-VS_CODE_INPUT = "#1B1B1B"
-VS_CODE_BORDER = "#3C3C3C"
-VS_CODE_TEXT = "#D4D4D4"
-VS_CODE_MUTED_TEXT = "#9CDCFE"
-VS_CODE_ACCENT = "#007ACC"
-VS_CODE_ACCENT_HOVER = "#0E639C"
-VS_CODE_SUCCESS = "#22C55E"
-VS_CODE_SUCCESS_ACTIVE = "#16A34A"
-VS_CODE_SUCCESS_BORDER = "#15803D"
+APP_BACKGROUND = BACKGROUND_COLOR
+APP_PANEL = CARD_COLOR
+APP_SURFACE = "#FFFFFF"
+APP_SURFACE_ACTIVE = "#EAF2FB"
+APP_INPUT = "#FFFFFF"
+APP_BORDER = BORDER_COLOR
+APP_TEXT = TEXT_PRIMARY
+APP_MUTED_TEXT = TEXT_SECONDARY
+APP_ACCENT = SECONDARY_COLOR
+APP_ACCENT_HOVER = PRIMARY_COLOR
+APP_SUCCESS = SUCCESS_COLOR
+APP_SUCCESS_ACTIVE = "#257A4C"
+APP_SUCCESS_BORDER = "#1F6B42"
 
 
 class AttendanceGUI:
@@ -70,7 +78,7 @@ class AttendanceGUI:
         self.master.title("Attendance Module")
         self.master.geometry("900x650")
         self.master.minsize(850, 600)
-        self.master.configure(bg=VS_CODE_BACKGROUND)
+        self.master.configure(bg=APP_BACKGROUND)
 
         try:
             self.master.iconbitmap(ATTENDANCE_ICON)
@@ -96,7 +104,7 @@ class AttendanceGUI:
             self.master,
             text="Attendance Module",
             font=HEADER_FONT,
-            bg=VS_CODE_BACKGROUND,
+            bg=APP_BACKGROUND,
         )
 
         header.pack(pady=(8, 6))
@@ -291,7 +299,7 @@ class AttendanceGUI:
 
         option_wrapper = tk.Frame(
             self.master,
-            bg=VS_CODE_BACKGROUND,
+            bg=APP_BACKGROUND,
         )
 
         option_wrapper.pack(
@@ -406,7 +414,7 @@ class AttendanceGUI:
 
         action_frame = tk.Frame(
             self.master,
-            bg=VS_CODE_BACKGROUND,
+            bg=APP_BACKGROUND,
         )
 
         action_frame.pack(
@@ -1210,29 +1218,29 @@ class AttendanceGUI:
 
         style.configure(
             "Attendance.Horizontal.TProgressbar",
-            background=VS_CODE_SUCCESS,
-            troughcolor=VS_CODE_SURFACE,
-            bordercolor=VS_CODE_BORDER,
-            lightcolor=VS_CODE_SUCCESS,
-            darkcolor=VS_CODE_SUCCESS_ACTIVE,
+            background=APP_SUCCESS,
+            troughcolor=APP_SURFACE,
+            bordercolor=APP_BORDER,
+            lightcolor=APP_SUCCESS,
+            darkcolor=APP_SUCCESS_ACTIVE,
         )
 
     def _apply_widget_theme(self, widget: tk.Misc) -> None:
-        """Apply VS Code dark color theme to existing widgets."""
+        """Apply launcher color theme to existing widgets."""
 
         widget_class = widget.winfo_class()
 
         if widget_class in {"Toplevel", "Tk"}:
             self._safe_configure(
                 widget,
-                bg=VS_CODE_BACKGROUND,
+                bg=APP_BACKGROUND,
             )
         elif widget_class == "Frame":
             parent_class = widget.master.winfo_class()
             frame_bg = (
-                VS_CODE_PANEL
+                APP_PANEL
                 if parent_class == "Labelframe"
-                else VS_CODE_BACKGROUND
+                else APP_BACKGROUND
             )
 
             self._safe_configure(
@@ -1242,67 +1250,67 @@ class AttendanceGUI:
         elif widget_class == "Labelframe":
             self._safe_configure(
                 widget,
-                bg=VS_CODE_PANEL,
-                fg=VS_CODE_MUTED_TEXT,
-                highlightbackground=VS_CODE_BORDER,
-                highlightcolor=VS_CODE_ACCENT,
+                bg=APP_PANEL,
+                fg=APP_MUTED_TEXT,
+                highlightbackground=APP_BORDER,
+                highlightcolor=APP_ACCENT,
             )
         elif widget_class == "Label":
             parent_class = widget.master.winfo_class()
             label_bg = (
-                VS_CODE_PANEL
+                APP_PANEL
                 if parent_class in {"Labelframe", "Frame"}
-                else VS_CODE_BACKGROUND
+                else APP_BACKGROUND
             )
 
             self._safe_configure(
                 widget,
                 bg=label_bg,
-                fg=VS_CODE_TEXT,
+                fg=APP_TEXT,
             )
         elif widget_class == "Button":
             self._safe_configure(
                 widget,
-                bg=VS_CODE_SURFACE,
-                fg=VS_CODE_TEXT,
-                activebackground=VS_CODE_SURFACE_ACTIVE,
-                activeforeground=VS_CODE_TEXT,
+                bg=APP_ACCENT,
+                fg="#FFFFFF",
+                activebackground=APP_ACCENT_HOVER,
+                activeforeground="#FFFFFF",
                 relief="flat",
                 bd=0,
                 highlightthickness=1,
-                highlightbackground=VS_CODE_BORDER,
+                highlightbackground=APP_BORDER,
             )
         elif widget_class in {"Radiobutton", "Checkbutton"}:
             self._safe_configure(
                 widget,
-                bg=VS_CODE_PANEL,
-                fg=VS_CODE_TEXT,
-                activebackground=VS_CODE_PANEL,
-                activeforeground=VS_CODE_MUTED_TEXT,
-                selectcolor=VS_CODE_INPUT,
+                bg=APP_PANEL,
+                fg=APP_TEXT,
+                activebackground=APP_PANEL,
+                activeforeground=APP_MUTED_TEXT,
+                selectcolor=APP_INPUT,
             )
         elif widget_class == "Entry":
             self._safe_configure(
                 widget,
-                bg=VS_CODE_INPUT,
-                fg=VS_CODE_TEXT,
-                insertbackground=VS_CODE_TEXT,
+                bg=APP_INPUT,
+                fg=APP_TEXT,
+                insertbackground=APP_TEXT,
                 relief="solid",
                 bd=1,
                 highlightthickness=1,
-                highlightbackground=VS_CODE_BORDER,
-                highlightcolor=VS_CODE_ACCENT,
+                highlightbackground=APP_BORDER,
+                highlightcolor=APP_ACCENT,
             )
         elif widget_class == "Text":
             self._safe_configure(
                 widget,
-                bg=VS_CODE_INPUT,
-                fg=VS_CODE_TEXT,
-                insertbackground=VS_CODE_TEXT,
+                bg=APP_INPUT,
+                fg=APP_TEXT,
+                insertbackground=APP_TEXT,
                 relief="flat",
                 bd=0,
                 highlightthickness=1,
-                highlightbackground=VS_CODE_BORDER,
+                highlightbackground=APP_BORDER,
             )
 
         for child in widget.winfo_children():
@@ -1311,7 +1319,7 @@ class AttendanceGUI:
         if widget is self.status_label:
             self._safe_configure(
                 widget,
-                bg=VS_CODE_ACCENT,
+                bg=APP_ACCENT_HOVER,
                 fg="#FFFFFF",
             )
 
@@ -1320,16 +1328,16 @@ class AttendanceGUI:
 
         self._safe_configure(
             self.generate_button,
-            bg=VS_CODE_SUCCESS,
+            bg=APP_SUCCESS,
             fg="#FFFFFF",
-            activebackground=VS_CODE_SUCCESS_ACTIVE,
+            activebackground=APP_SUCCESS_ACTIVE,
             activeforeground="#FFFFFF",
             relief="raised",
             bd=4,
             overrelief="groove",
             highlightthickness=1,
-            highlightbackground=VS_CODE_SUCCESS_BORDER,
-            highlightcolor=VS_CODE_SUCCESS_BORDER,
+            highlightbackground=APP_SUCCESS_BORDER,
+            highlightcolor=APP_SUCCESS_BORDER,
         )
 
     @staticmethod

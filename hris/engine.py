@@ -23,6 +23,7 @@ Sprint 6.11:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -233,6 +234,8 @@ class HRISFullUploadEngine:
         start_date: str,
         end_date: str,
         wait_for_manual_login: bool = True,
+        manual_login_callback: Callable[[], None] | None = None,
+        close_browser_on_error: bool = True,
     ) -> None:
         self.configuration_file = Path(configuration_file)
         self.txt_folder = Path(txt_folder)
@@ -241,6 +244,8 @@ class HRISFullUploadEngine:
         self.start_date = start_date
         self.end_date = end_date
         self.wait_for_manual_login = wait_for_manual_login
+        self.manual_login_callback = manual_login_callback
+        self.close_browser_on_error = close_browser_on_error
 
         self.config_reader = HRISConfigurationReader(
             self.configuration_file,
@@ -267,6 +272,7 @@ class HRISFullUploadEngine:
         artifacts = None
         report_file = None
         job_id = None
+        close_browser = True
 
         try:
             configuration = self.config_reader.read()
@@ -324,7 +330,15 @@ class HRISFullUploadEngine:
             )
 
             if self.wait_for_manual_login:
-                browser_manager.wait_for_manual_login()
+                if self.manual_login_callback is not None:
+                    self.manual_login_callback()
+                else:
+                    browser_manager.wait_for_manual_login()
+
+                session.page.wait_for_load_state(
+                    "domcontentloaded",
+                    timeout=30_000,
+                )
 
                 self.artifact_writer.write_process_log(
                     artifacts=artifacts,
@@ -401,19 +415,29 @@ class HRISFullUploadEngine:
             )
 
         except Exception as error:
+            close_browser = self.close_browser_on_error
+
             logger.exception(
                 "HRIS full upload engine failed."
             )
 
+            error_message = str(error)
+
+            if not close_browser and browser_manager is not None:
+                error_message = (
+                    f"{error_message} "
+                    "Browser kept open for inspection."
+                )
+
             if artifacts is not None:
                 self.artifact_writer.write_process_log(
                     artifacts=artifacts,
-                    message=f"HRIS full upload engine failed: {error}",
+                    message=f"HRIS full upload engine failed: {error_message}",
                 )
 
             return HRISFullUploadEngineResult(
                 success=False,
-                message=str(error),
+                message=error_message,
                 job_id=job_id,
                 workflow=self.workflow,
                 report_folder=artifacts.job_report_folder if artifacts else None,
@@ -425,5 +449,5 @@ class HRISFullUploadEngine:
             )
 
         finally:
-            if browser_manager is not None:
+            if browser_manager is not None and close_browser:
                 browser_manager.close()

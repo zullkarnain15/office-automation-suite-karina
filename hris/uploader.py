@@ -28,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from playwright.sync_api import Locator
 from playwright.sync_api import Page
 
 from hris.job_manager import HRISUploadPlanItem
@@ -153,6 +154,7 @@ class HRISUploadPageHandler:
         end_date_field = self.page.locator("#end_date")
 
         start_date_field.wait_for(state="visible", timeout=10_000)
+        end_date_field.wait_for(state="visible", timeout=10_000)
 
         start_date_field.fill(start_date)
         end_date_field.fill(end_date)
@@ -165,31 +167,40 @@ class HRISUploadPageHandler:
         Attach TXT file.
         """
         file_input = self.page.locator("#attachment_file")
+        file_input.wait_for(state="attached", timeout=10_000)
         file_input.set_input_files(str(txt_file_path))
 
     def _click_upload(self) -> None:
         """
         Click Upload button.
         """
-        self.page.locator("#upload_button").click()
+        self._click_visible_locator(
+            self.page.locator("#upload_button"),
+        )
 
     def _confirm_upload_ok(self) -> None:
         """
         Confirm Upload OK.
         """
-        self.page.locator("#upload_ok_button").click()
+        self._click_visible_locator(
+            self.page.locator("#upload_ok_button"),
+        )
 
     def _click_run(self) -> None:
         """
         Click Run button.
         """
-        self.page.locator("#run_button").click()
+        self._click_visible_locator(
+            self.page.locator("#run_button"),
+        )
 
     def _confirm_run_ok(self) -> None:
         """
         Confirm Run OK.
         """
-        self.page.locator("#run_ok_button").click()
+        self._click_visible_locator(
+            self.page.locator("#run_ok_button"),
+        )
 
     def _verify_success(self) -> bool:
         """
@@ -205,3 +216,16 @@ class HRISUploadPageHandler:
             return True
         except Exception:
             return False
+
+    @staticmethod
+    def _click_visible_locator(
+        locator: Locator,
+    ) -> None:
+        """
+        Wait for a clickable element before clicking it.
+        """
+        locator.wait_for(
+            state="visible",
+            timeout=10_000,
+        )
+        locator.click()

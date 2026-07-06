@@ -1230,6 +1230,22 @@ class AttendanceProcessEngine:
                     }
                 )
 
+        successful_mdb_count = sum(
+            1
+            for item in mdb_summary
+            if item.get("status") == "SUCCESS"
+        )
+
+        if successful_mdb_count == 0:
+            failed_sources = ", ".join(
+                str(item.get("code") or item.get("mdb_path"))
+                for item in mdb_summary
+            )
+            raise RuntimeError(
+                "All MDB extraction failed. "
+                f"Failed source(s): {failed_sources}"
+            )
+
         pairing_engine = AttendancePairingEngine()
         paired_records = pairing_engine.pair_raw_logs(raw_logs)
 

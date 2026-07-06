@@ -16,9 +16,7 @@ from __future__ import annotations
 import calendar
 from datetime import date
 from datetime import datetime
-from shutil import copy2
 
-from openpyxl import load_workbook
 import os
 import threading
 import tkinter as tk
@@ -26,22 +24,30 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from config.app_config import DATE_FORMAT
+from config.ui_config import BACKGROUND_COLOR
+from config.ui_config import BORDER_COLOR
+from config.ui_config import CARD_COLOR
+from config.ui_config import DEFAULT_FONT
+from config.ui_config import HEADER_FONT
+from config.ui_config import PRIMARY_COLOR
+from config.ui_config import SECONDARY_COLOR
+from config.ui_config import TEXT_PRIMARY
+from config.ui_config import TEXT_SECONDARY
 from hris.engine import HRISFullUploadEngine
 from shared.config_manager import HRISConfigurationReader
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
 
-VS_CODE_BACKGROUND = "#1E1E1E"
-VS_CODE_PANEL = "#252526"
-VS_CODE_SURFACE = "#2D2D30"
-VS_CODE_SURFACE_ACTIVE = "#3E3E42"
-VS_CODE_INPUT = "#1B1B1B"
-VS_CODE_BORDER = "#3C3C3C"
-VS_CODE_TEXT = "#D4D4D4"
-VS_CODE_MUTED_TEXT = "#9CDCFE"
-VS_CODE_ACCENT = "#007ACC"
-VS_CODE_ACCENT_HOVER = "#0E639C"
+APP_BACKGROUND = BACKGROUND_COLOR
+APP_PANEL = CARD_COLOR
+APP_SURFACE = "#FFFFFF"
+APP_SURFACE_ACTIVE = "#EAF2FB"
+APP_INPUT = "#FFFFFF"
+APP_BORDER = BORDER_COLOR
+APP_TEXT = TEXT_PRIMARY
+APP_MUTED_TEXT = TEXT_SECONDARY
+APP_ACCENT = SECONDARY_COLOR
 
 
 class HRISUploadGUI:
@@ -58,7 +64,6 @@ class HRISUploadGUI:
         self.output_folder_var = tk.StringVar()
         self.use_config_output_var = tk.BooleanVar(value=True)
         self.workflow_var = tk.StringVar(value="HO")
-        self.local_mock_mode_var = tk.BooleanVar(value=False)
         self.start_date_var = tk.StringVar()
         self.end_date_var = tk.StringVar()
 
@@ -68,12 +73,12 @@ class HRISUploadGUI:
         self.failed_count_var = tk.StringVar(value="0")
         self.report_folder_var = tk.StringVar(value="-")
 
-        self._configure_dark_style()
+        self._configure_launcher_style()
         self._build_ui()
         self.toggle_output_source()
 
-    def _configure_dark_style(self) -> None:
-        """Configure HRIS GUI dark theme."""
+    def _configure_launcher_style(self) -> None:
+        """Configure HRIS GUI using launcher theme."""
 
         style = ttk.Style(self.root)
 
@@ -84,93 +89,94 @@ class HRISUploadGUI:
 
         style.configure(
             ".",
-            background=VS_CODE_BACKGROUND,
-            foreground=VS_CODE_TEXT,
-            fieldbackground=VS_CODE_INPUT,
-            bordercolor=VS_CODE_BORDER,
-            lightcolor=VS_CODE_BORDER,
-            darkcolor=VS_CODE_BORDER,
+            background=APP_BACKGROUND,
+            foreground=APP_TEXT,
+            fieldbackground=APP_INPUT,
+            bordercolor=APP_BORDER,
+            lightcolor=APP_BORDER,
+            darkcolor=APP_BORDER,
             font=("Segoe UI", 9),
         )
-        style.configure("TFrame", background=VS_CODE_BACKGROUND)
-        style.configure("TLabel", background=VS_CODE_BACKGROUND, foreground=VS_CODE_TEXT)
+        style.configure("TFrame", background=APP_BACKGROUND)
+        style.configure("TLabel", background=APP_BACKGROUND, foreground=APP_TEXT)
         style.configure(
             "Muted.TLabel",
-            background=VS_CODE_PANEL,
-            foreground=VS_CODE_MUTED_TEXT,
+            background=APP_PANEL,
+            foreground=APP_MUTED_TEXT,
         )
         style.configure(
             "TLabelframe",
-            background=VS_CODE_PANEL,
-            foreground=VS_CODE_MUTED_TEXT,
-            bordercolor=VS_CODE_BORDER,
+            background=APP_PANEL,
+            foreground=APP_MUTED_TEXT,
+            bordercolor=APP_BORDER,
         )
         style.configure(
             "TLabelframe.Label",
-            background=VS_CODE_PANEL,
-            foreground=VS_CODE_MUTED_TEXT,
+            background=APP_PANEL,
+            foreground=APP_MUTED_TEXT,
         )
         style.configure(
             "TEntry",
-            fieldbackground=VS_CODE_INPUT,
-            foreground=VS_CODE_TEXT,
-            insertcolor=VS_CODE_TEXT,
-            bordercolor=VS_CODE_BORDER,
+            fieldbackground=APP_INPUT,
+            foreground=APP_TEXT,
+            insertcolor=APP_TEXT,
+            bordercolor=APP_BORDER,
         )
         style.map(
             "TEntry",
             fieldbackground=[
-                ("disabled", VS_CODE_SURFACE),
-                ("readonly", VS_CODE_INPUT),
+                ("disabled", APP_SURFACE),
+                ("readonly", APP_INPUT),
             ],
             foreground=[
-                ("disabled", VS_CODE_MUTED_TEXT),
+                ("disabled", APP_MUTED_TEXT),
             ],
         )
         style.configure(
             "TButton",
-            background=VS_CODE_SURFACE,
-            foreground=VS_CODE_TEXT,
-            bordercolor=VS_CODE_BORDER,
+            background=SECONDARY_COLOR,
+            foreground="#FFFFFF",
+            bordercolor=APP_BORDER,
             focusthickness=1,
-            focuscolor=VS_CODE_ACCENT,
+            focuscolor=APP_ACCENT,
         )
         style.map(
             "TButton",
             background=[
-                ("active", VS_CODE_SURFACE_ACTIVE),
-                ("disabled", VS_CODE_PANEL),
+                ("active", PRIMARY_COLOR),
+                ("disabled", APP_PANEL),
             ],
             foreground=[
-                ("disabled", VS_CODE_MUTED_TEXT),
+                ("active", "#FFFFFF"),
+                ("disabled", APP_MUTED_TEXT),
             ],
         )
         style.configure(
             "TCheckbutton",
-            background=VS_CODE_PANEL,
-            foreground=VS_CODE_TEXT,
-            indicatorbackground=VS_CODE_INPUT,
-            indicatorforeground=VS_CODE_TEXT,
+            background=APP_PANEL,
+            foreground=APP_TEXT,
+            indicatorbackground=APP_INPUT,
+            indicatorforeground=APP_TEXT,
         )
         style.map(
             "TCheckbutton",
-            background=[("active", VS_CODE_PANEL)],
-            foreground=[("active", VS_CODE_MUTED_TEXT)],
+            background=[("active", APP_PANEL)],
+            foreground=[("active", APP_MUTED_TEXT)],
         )
         style.configure(
             "TRadiobutton",
-            background=VS_CODE_PANEL,
-            foreground=VS_CODE_TEXT,
-            indicatorbackground=VS_CODE_INPUT,
+            background=APP_PANEL,
+            foreground=APP_TEXT,
+            indicatorbackground=APP_INPUT,
         )
         style.map(
             "TRadiobutton",
-            background=[("active", VS_CODE_PANEL)],
-            foreground=[("active", VS_CODE_MUTED_TEXT)],
+            background=[("active", APP_PANEL)],
+            foreground=[("active", APP_MUTED_TEXT)],
         )
 
     def _build_ui(self) -> None:
-        self.root.configure(bg=VS_CODE_BACKGROUND)
+        self.root.configure(bg=APP_BACKGROUND)
         container = ttk.Frame(self.root, padding=16)
         container.pack(fill="both", expand=True)
 
@@ -225,10 +231,37 @@ class HRISUploadGUI:
         )
 
         ttk.Label(frame, text="Workflow").grid(row=4, column=0, sticky="w", padx=(0, 10), pady=6)
-        workflow_frame = ttk.Frame(frame)
+        workflow_frame = tk.Frame(
+            frame,
+            bg=APP_PANEL,
+        )
         workflow_frame.grid(row=4, column=1, sticky="w", pady=6)
-        ttk.Radiobutton(workflow_frame, text="HO", value="HO", variable=self.workflow_var).pack(side="left", padx=(0, 16))
-        ttk.Radiobutton(workflow_frame, text="Branch", value="Branch", variable=self.workflow_var).pack(side="left")
+
+        tk.Radiobutton(
+            workflow_frame,
+            text="HO",
+            value="HO",
+            variable=self.workflow_var,
+            bg=APP_PANEL,
+            fg=APP_TEXT,
+            activebackground=APP_PANEL,
+            activeforeground=APP_MUTED_TEXT,
+            selectcolor=APP_INPUT,
+            font=("Segoe UI", 9),
+        ).pack(side="left", padx=(0, 16))
+
+        tk.Radiobutton(
+            workflow_frame,
+            text="Branch",
+            value="Branch",
+            variable=self.workflow_var,
+            bg=APP_PANEL,
+            fg=APP_TEXT,
+            activebackground=APP_PANEL,
+            activeforeground=APP_MUTED_TEXT,
+            selectcolor=APP_INPUT,
+            font=("Segoe UI", 9),
+        ).pack(side="left")
 
         ttk.Label(frame, text="Date Range").grid(row=5, column=0, sticky="w", padx=(0, 10), pady=6)
         date_frame = ttk.Frame(frame)
@@ -255,35 +288,6 @@ class HRISUploadGUI:
             text="Date format: MM/DD/YYYY. Example: 03/30/2026",
             style="Muted.TLabel",
         ).grid(row=6, column=1, sticky="w", pady=(0, 6))
-
-        local_mock_check = ttk.Checkbutton(
-            frame,
-            text="Local Mock Test Mode",
-            variable=self.local_mock_mode_var,
-        )
-
-        local_mock_check.grid(
-            row=7,
-            column=1,
-            sticky="w",
-            pady=(4, 6),
-        )
-
-        mock_hint_label = ttk.Label(
-            frame,
-            text=(
-                "Use this only on personal laptop testing. "
-                "It does not change the real HRIS configuration file."
-            ),
-            style="Muted.TLabel",
-        )
-
-        mock_hint_label.grid(
-            row=8,
-            column=1,
-            sticky="w",
-            pady=(0, 6),
-        )
 
     def _build_action_frame(self, parent: ttk.Frame) -> None:
         frame = ttk.Frame(parent)
@@ -331,13 +335,13 @@ class HRISUploadGUI:
             height=12,
             wrap="word",
             state="disabled",
-            bg=VS_CODE_INPUT,
-            fg=VS_CODE_TEXT,
-            insertbackground=VS_CODE_TEXT,
+            bg=APP_INPUT,
+            fg=APP_TEXT,
+            insertbackground=APP_TEXT,
             relief="flat",
             bd=0,
             highlightthickness=1,
-            highlightbackground=VS_CODE_BORDER,
+            highlightbackground=APP_BORDER,
         )
         self.log_text.pack(side="left", fill="both", expand=True)
 
@@ -483,15 +487,15 @@ class HRISUploadGUI:
         picker.resizable(False, False)
         picker.transient(self.root)
         picker.grab_set()
-        picker.configure(bg=VS_CODE_BACKGROUND)
+        picker.configure(bg=APP_BACKGROUND)
 
         selected_year = tk.IntVar(value=initial_date.year)
         selected_month = tk.IntVar(value=initial_date.month)
 
-        header_frame = tk.Frame(picker, bg=VS_CODE_BACKGROUND)
+        header_frame = tk.Frame(picker, bg=APP_BACKGROUND)
         header_frame.pack(fill="x", pady=8)
 
-        calendar_frame = tk.Frame(picker, bg=VS_CODE_BACKGROUND)
+        calendar_frame = tk.Frame(picker, bg=APP_BACKGROUND)
         calendar_frame.pack(pady=5)
 
         def previous_month() -> None:
@@ -561,8 +565,8 @@ class HRISUploadGUI:
                     calendar_frame,
                     text=day_name,
                     width=4,
-                    bg=VS_CODE_BACKGROUND,
-                    fg=VS_CODE_MUTED_TEXT,
+                    bg=APP_BACKGROUND,
+                    fg=APP_MUTED_TEXT,
                     font=("Segoe UI", 9),
                 ).grid(
                     row=0,
@@ -586,7 +590,7 @@ class HRISUploadGUI:
                             calendar_frame,
                             text="",
                             width=4,
-                            bg=VS_CODE_BACKGROUND,
+                            bg=APP_BACKGROUND,
                         ).grid(
                             row=row_index,
                             column=column_index,
@@ -601,10 +605,10 @@ class HRISUploadGUI:
                             command=lambda day=day_number: select_date(
                                 day
                             ),
-                            bg=VS_CODE_SURFACE,
-                            fg=VS_CODE_TEXT,
-                            activebackground=VS_CODE_SURFACE_ACTIVE,
-                            activeforeground=VS_CODE_TEXT,
+                            bg=APP_SURFACE,
+                            fg=APP_TEXT,
+                            activebackground=APP_SURFACE_ACTIVE,
+                            activeforeground=APP_TEXT,
                             relief="flat",
                             bd=0,
                         ).grid(
@@ -619,10 +623,10 @@ class HRISUploadGUI:
             text="<",
             width=4,
             command=previous_month,
-            bg=VS_CODE_SURFACE,
-            fg=VS_CODE_TEXT,
-            activebackground=VS_CODE_SURFACE_ACTIVE,
-            activeforeground=VS_CODE_TEXT,
+            bg=APP_SURFACE,
+            fg=APP_TEXT,
+            activebackground=APP_SURFACE_ACTIVE,
+            activeforeground=APP_TEXT,
             relief="flat",
             bd=0,
         ).pack(
@@ -634,8 +638,8 @@ class HRISUploadGUI:
             header_frame,
             text="",
             font=("Segoe UI", 12, "bold"),
-            bg=VS_CODE_BACKGROUND,
-            fg=VS_CODE_TEXT,
+            bg=APP_BACKGROUND,
+            fg=APP_TEXT,
         )
 
         title_label.pack(
@@ -648,10 +652,10 @@ class HRISUploadGUI:
             text=">",
             width=4,
             command=next_month,
-            bg=VS_CODE_SURFACE,
-            fg=VS_CODE_TEXT,
-            activebackground=VS_CODE_SURFACE_ACTIVE,
-            activeforeground=VS_CODE_TEXT,
+            bg=APP_SURFACE,
+            fg=APP_TEXT,
+            activebackground=APP_SURFACE_ACTIVE,
+            activeforeground=APP_TEXT,
             relief="flat",
             bd=0,
         ).pack(
@@ -687,18 +691,6 @@ class HRISUploadGUI:
                 self.config_file_var.get().strip()
             )
 
-            if self.local_mock_mode_var.get():
-                self.root.after(
-                    0,
-                    lambda: self._append_log(
-                        "Local Mock Test Mode enabled."
-                    ),
-                )
-
-                configuration_file = self._prepare_local_mock_config(
-                    source_config_file=configuration_file,
-                )
-
             engine = HRISFullUploadEngine(
                 configuration_file=configuration_file,
                 txt_folder=self.txt_folder_var.get(),
@@ -706,7 +698,9 @@ class HRISUploadGUI:
                 workflow=self.workflow_var.get(),
                 start_date=self.start_date_var.get(),
                 end_date=self.end_date_var.get(),
-                wait_for_manual_login=not self.local_mock_mode_var.get(),
+                wait_for_manual_login=True,
+                manual_login_callback=self._wait_for_manual_login_confirmation,
+                close_browser_on_error=False,
             )
 
             result = engine.run()
@@ -725,196 +719,39 @@ class HRISUploadGUI:
                 ),
             )
 
-    def _prepare_local_mock_config(
-        self,
-        source_config_file: Path,
-    ) -> Path:
-        """
-        Create temporary HRIS configuration for local mock GUI test.
+    def _wait_for_manual_login_confirmation(self) -> None:
+        """Wait for operator confirmation after manual HRIS login."""
 
-        This does not modify the real HRIS configuration file.
-        """
-        mock_site_folder = Path(
-            r"D:\Python Project\OfficeAutomationSuite-Karina\temp\hris_mock_site"
-        )
+        login_confirmed = threading.Event()
+        login_cancelled = {"value": False}
 
-        mock_site_folder.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+        def show_login_prompt() -> None:
+            self._append_log(
+                "HRIS browser opened. Waiting for manual login confirmation."
+            )
+            confirmed = messagebox.askokcancel(
+                "HRIS Manual Login",
+                "Silakan login username dan password di browser HRIS "
+                "yang sudah terbuka.\n\n"
+                "Setelah login berhasil dan halaman HRIS siap, "
+                "kembali ke aplikasi ini lalu klik OK untuk lanjut upload.\n\n"
+                "Klik Cancel untuk membatalkan upload.",
+            )
 
-        mock_upload_file = mock_site_folder / "gui_local_mock_upload.html"
+            if not confirmed:
+                self._append_log("Manual HRIS login cancelled.")
+                login_cancelled["value"] = True
+                login_confirmed.set()
+                return
 
-        html = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Mock HRIS GUI Upload - OAS-K</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
-            padding: 40px;
-        }
+            self._append_log("Manual HRIS login confirmed.")
+            login_confirmed.set()
 
-        .card {
-            width: 680px;
-            margin: auto;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 24px;
-        }
+        self.root.after(0, show_login_prompt)
+        login_confirmed.wait()
 
-        h1 {
-            color: #1F4E78;
-            font-size: 22px;
-        }
-
-        button {
-            display: block;
-            width: 100%;
-            margin-top: 12px;
-            padding: 10px;
-            background: #1F4E78;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        input {
-            width: 100%;
-            padding: 8px;
-            margin-top: 6px;
-            box-sizing: border-box;
-        }
-
-        label {
-            display: block;
-            margin-top: 12px;
-            font-weight: bold;
-        }
-
-        .section {
-            margin-top: 18px;
-            padding: 14px;
-            border: 1px solid #ddd;
-            display: none;
-        }
-
-        .success {
-            color: #2E8B57;
-            font-weight: bold;
-            display: none;
-        }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h1>Mock HRIS Home</h1>
-        <p>Local GUI mock upload page for OAS-K.</p>
-
-        <button onclick="document.getElementById('tao').style.display='block';">
-            Time Attendance & Overtime
-        </button>
-
-        <div id="tao" class="section">
-            <button onclick="document.getElementById('upload').style.display='block';">
-                Overtime Upload Attendance
-            </button>
-        </div>
-
-        <div id="upload" class="section">
-            <h2>Upload Attendance Page</h2>
-
-            <label>Run Control ID</label>
-            <input id="run_control_id" type="text">
-
-            <label>Start Date</label>
-            <input id="start_date" type="text">
-
-            <label>End Date</label>
-            <input id="end_date" type="text">
-
-            <label>Attachment</label>
-            <input id="attachment_file" type="file">
-
-            <button id="upload_button" onclick="document.getElementById('upload_ok_button').style.display='block';">
-                Upload
-            </button>
-
-            <button id="upload_ok_button" style="display:none;" onclick="document.getElementById('run_button').style.display='block';">
-                OK
-            </button>
-
-            <button id="run_button" style="display:none;" onclick="document.getElementById('run_ok_button').style.display='block';">
-                Run
-            </button>
-
-            <button id="run_ok_button" style="display:none;" onclick="document.getElementById('success_message').style.display='block';">
-                OK
-            </button>
-
-            <p id="success_message" class="success">
-                Upload simulated successfully.
-            </p>
-        </div>
-    </div>
-</body>
-</html>
-"""
-
-        mock_upload_file.write_text(
-            html,
-            encoding="utf-8",
-        )
-
-        temp_config_file = Path(
-            r"D:\Python Project\OfficeAutomationSuite-Karina\temp\OAS-K_HRIS_Configuration_GUI_Local_Test.xlsx"
-        )
-
-        temp_config_file.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        copy2(
-            source_config_file,
-            temp_config_file,
-        )
-
-        local_url = mock_upload_file.resolve().as_uri()
-
-        workbook = load_workbook(temp_config_file)
-        sheet = workbook["General"]
-
-        for row in sheet.iter_rows(min_row=2):
-            parameter = row[0].value
-
-            if str(parameter).strip() == "HRIS_URL":
-                row[1].value = local_url
-                break
-
-        workbook.save(temp_config_file)
-        workbook.close()
-
-        self.root.after(
-            0,
-            lambda: self._append_log(
-                f"Temporary mock config created: {temp_config_file}"
-            ),
-        )
-
-        self.root.after(
-            0,
-            lambda: self._append_log(
-                f"Mock HRIS URL: {local_url}"
-            ),
-        )
-
-        return temp_config_file
+        if login_cancelled["value"]:
+            raise RuntimeError("Manual HRIS login cancelled by user.")
 
     def _handle_upload_result(self, result: object) -> None:
         self.start_button.configure(state="normal")
@@ -978,7 +815,6 @@ class HRISUploadGUI:
         self.output_folder_var.set("")
         self.workflow_var.set("HO")
         self.use_config_output_var.set(True)
-        self.local_mock_mode_var.set(False)
         self.start_date_var.set("")
         self.end_date_var.set("")
         self.status_var.set("Ready.")
