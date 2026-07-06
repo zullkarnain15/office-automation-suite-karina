@@ -16,6 +16,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox
 
+from attendance.gui import AttendanceGUI
 from config.app_config import (
     APP_ICON,
     APP_VERSION,
@@ -37,6 +38,7 @@ from config.ui_config import (
     WINDOW_RESIZABLE,
     WINDOW_WIDTH,
 )
+from hris.gui import HRISUploadGUI
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
@@ -55,6 +57,23 @@ def coming_soon(module_name: str) -> None:
         "Coming Soon",
         f"{module_name} module is under development.",
     )
+
+def open_hris_module(root: tk.Tk) -> None:
+    """Open HRIS Upload module."""
+
+    logger.info("HRIS module opened.")
+
+    hris_window = tk.Toplevel(root)
+    HRISUploadGUI(hris_window)
+
+
+def open_attendance_module(root: tk.Tk) -> None:
+    """Open Attendance module."""
+
+    logger.info("Attendance module opened.")
+
+    attendance_window = tk.Toplevel(root)
+    AttendanceGUI(attendance_window)
 
 
 # =========================================================
@@ -224,6 +243,13 @@ def main() -> None:
                 font=DEFAULT_FONT,
             ).pack()
 
+        if module_name == "Attendance":
+            button_command = lambda r=root: open_attendance_module(r)
+        elif module_name == "HRIS":
+            button_command = lambda r=root: open_hris_module(r)
+        else:
+            button_command = lambda m=module_name: coming_soon(m)
+
         tk.Button(
             card,
             text=module_name,
@@ -236,7 +262,7 @@ def main() -> None:
             relief="flat",
             bd=0,
             highlightthickness=0,
-            command=lambda m=module_name: coming_soon(m),
+            command=button_command,
         ).pack(pady=10)
 
         col += 1

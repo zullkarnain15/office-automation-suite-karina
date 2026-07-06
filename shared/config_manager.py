@@ -10,10 +10,11 @@ Python      : 3.14+
 =========================================================
 Configuration Manager
 
-Sprint 5.8:
-Attendance Configuration Reader.
+This module contains configuration readers for OAS-K.
 
-This module reads OAS-K_Attendance_Configuration.xlsx.
+Current readers:
+- AttendanceConfigurationReader
+- HRISConfigurationReader
 
 =========================================================
 """
@@ -29,6 +30,11 @@ from openpyxl import load_workbook
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+# =========================================================
+# ATTENDANCE CONFIGURATION
+# =========================================================
 
 
 @dataclass(slots=True)
@@ -350,3 +356,390 @@ class AttendanceConfigurationReader:
             return ""
 
         return str(value).strip()
+
+
+# =========================================================
+# HRIS CONFIGURATION
+# =========================================================
+
+
+@dataclass(slots=True)
+class HRISRunControlConfig:
+    """
+    HRIS Run Control configuration item.
+    """
+
+    active: bool
+    sequence: int
+    workflow: str
+    run_control_id: str
+    description: str
+
+
+@dataclass(slots=True)
+class HRISConfiguration:
+    """
+    HRIS configuration result.
+    """
+
+    configuration_file: Path
+    general: dict[str, Any]
+    browser: dict[str, Any]
+    upload: dict[str, Any]
+    ho_run_controls: list[HRISRunControlConfig]
+    branch_run_controls: list[HRISRunControlConfig]
+
+    def get_output_folder(self) -> Path | None:
+        """
+        Return configured HRIS output folder, if available.
+        """
+        output_value = self._get_first_value(
+            self.general,
+            (
+                "Folder_Upload_Path",
+                "OutputFolder",
+                "Output_Folder",
+                "Output_Root",
+            ),
+        )
+
+        if output_value is None:
+            output_value = self._get_first_value(
+                self.upload,
+                (
+                    "Folder_Upload_Path",
+                    "OutputFolder",
+                    "Output_Folder",
+                    "Output_Root",
+                ),
+            )
+
+        if output_value is None:
+            return None
+
+        output_path = Path(str(output_value).strip())
+
+        if not str(output_path):
+            return None
+
+        if output_path.is_absolute():
+            return output_path
+
+        return self.configuration_file.parent.parent / output_path
+
+    @staticmethod
+    def _get_first_value(
+        values: dict[str, Any],
+        keys: tuple[str, ...],
+    ) -> Any:
+        """
+        Return the first non-empty configuration value for keys.
+        """
+        for key in keys:
+            value = values.get(key)
+
+            if value is None:
+                continue
+
+            value_text = str(value).strip()
+
+            if value_text:
+                return value
+
+        return None
+
+
+class HRISConfigurationReader:
+    """
+    Reader for OAS-K HRIS Configuration workbook.
+    """
+
+    REQUIRED_SHEETS: tuple[str, ...] = (
+        "General",
+        "Run_Control",
+        "Browser",
+        "Upload",
+        "Reference",
+    )
+
+    def __init__(
+        self,
+        configuration_file: str | Path,
+    ) -> None:
+        self.configuration_file = Path(configuration_file)
+
+    def read(self) -> HRISConfiguration:
+        """
+        Read HRIS Configuration workbook.
+        """
+        if not self.configuration_file.exists():
+            raise FileNotFoundError(
+                f"HRIS Configuration file not found: "
+                f"{self.configuration_file}"
+            )
+
+        if self.configuration_file.suffix.lower() != ".xlsx":
+            raise ValueError(
+                "HRIS Configuration must be an .xlsx file."
+            )
+
+        logger.info(
+            "Reading HRIS Configuration: %s",
+            self.configuration_file,
+        )
+
+        workbook = load_workbook(
+            filename=self.configuration_file,
+            data_only=True,
+            read_only=True,
+        )
+
+        self._validate_required_sheets(workbook.sheetnames)
+
+        general = self._read_key_value_sheet(
+            workbook["General"]
+        )
+
+        browser = self._read_key_value_sheet(
+            workbook["Browser"]
+        )
+
+        upload = self._read_key_value_sheet(
+            workbook["Upload"]
+        )
+
+        run_controls = self._read_run_control_sheet(
+            workbook["Run_Control"]
+        )
+
+        workbook.close()
+
+        ho_run_controls = [
+            item
+            for item in run_controls
+            if item.workflow == "HO"
+        ]
+
+        branch_run_controls = [
+            item
+            for item in run_controls
+            if item.workflow == "Branch"
+        ]
+
+        logger.info(
+            "HRIS Configuration loaded. "
+            "HO Run Control: %s, Branch Run Control: %s",
+            len(ho_run_controls),
+            len(branch_run_controls),
+        )
+
+        return HRISConfiguration(
+            configuration_file=self.configuration_file,
+            general=general,
+            browser=browser,
+            upload=upload,
+            ho_run_controls=ho_run_controls,
+            branch_run_controls=branch_run_controls,
+        )
+
+    def _validate_required_sheets(
+        self,
+        sheet_names: list[str],
+    ) -> None:
+        """
+        Validate required sheets.
+        """
+        missing_sheets = [
+            sheet_name
+            for sheet_name in self.REQUIRED_SHEETS
+            if sheet_name not in sheet_names
+        ]
+
+        if missing_sheets:
+            raise ValueError(
+                "Missing required HRIS sheet(s): "
+                + ", ".join(missing_sheets)
+            )
+
+    def _read_key_value_sheet(
+        self,
+        sheet: Any,
+    ) -> dict[str, Any]:
+        """
+        Read sheet with columns:
+        Parameter | Value | Description
+        """
+        result: dict[str, Any] = {}
+
+        rows = list(sheet.iter_rows(values_only=True))
+
+        if not rows:
+            return result
+
+        for row in rows[1:]:
+            if row is None:
+                continue
+
+            parameter = row[0] if len(row) > 0 else None
+            value = row[1] if len(row) > 1 else None
+
+            if parameter is None:
+                continue
+
+            parameter_text = str(parameter).strip()
+
+            if not parameter_text:
+                continue
+
+            result[parameter_text] = value
+
+        return result
+
+    def _read_run_control_sheet(
+        self,
+        sheet: Any,
+    ) -> list[HRISRunControlConfig]:
+        """
+        Read Run_Control sheet.
+
+        Expected columns:
+        Active | Sequence | Workflow | Run_Control_ID | Description
+        """
+        run_controls: list[HRISRunControlConfig] = []
+
+        rows = list(sheet.iter_rows(values_only=True))
+
+        if len(rows) <= 1:
+            return run_controls
+
+        for row in rows[1:]:
+            if row is None:
+                continue
+
+            active = self._to_bool(row[0] if len(row) > 0 else None)
+
+            if not active:
+                continue
+
+            sequence = self._to_int(row[1] if len(row) > 1 else None)
+            workflow = self._normalize_workflow(
+                row[2] if len(row) > 2 else None
+            )
+            run_control_id = self._to_text(
+                row[3] if len(row) > 3 else ""
+            )
+            description = self._to_text(
+                row[4] if len(row) > 4 else ""
+            )
+
+            if sequence <= 0:
+                continue
+
+            if workflow not in ("HO", "Branch"):
+                continue
+
+            if not run_control_id:
+                continue
+
+            run_controls.append(
+                HRISRunControlConfig(
+                    active=active,
+                    sequence=sequence,
+                    workflow=workflow,
+                    run_control_id=run_control_id,
+                    description=description,
+                )
+            )
+
+        run_controls.sort(
+            key=lambda item: (
+                item.workflow,
+                item.sequence,
+            )
+        )
+
+        return run_controls
+
+    @staticmethod
+    def get_run_controls_by_workflow(
+        configuration: HRISConfiguration,
+        workflow: str,
+    ) -> list[HRISRunControlConfig]:
+        """
+        Return active Run Control list by workflow.
+        """
+        workflow_label = HRISConfigurationReader._normalize_workflow(
+            workflow
+        )
+
+        if workflow_label == "HO":
+            return configuration.ho_run_controls
+
+        if workflow_label == "Branch":
+            return configuration.branch_run_controls
+
+        raise ValueError(
+            "workflow must be 'HO' or 'Branch'."
+        )
+
+    @staticmethod
+    def _to_bool(value: Any) -> bool:
+        """
+        Convert Excel value to boolean.
+        """
+        if value is None:
+            return False
+
+        value_text = str(value).strip().lower()
+
+        return value_text in (
+            "y",
+            "yes",
+            "true",
+            "1",
+            "active",
+        )
+
+    @staticmethod
+    def _to_int(value: Any) -> int:
+        """
+        Convert Excel value to integer.
+        """
+        if value is None:
+            return 0
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _to_text(value: Any) -> str:
+        """
+        Convert Excel value to clean string.
+
+        Important:
+        Run_Control_ID must remain text.
+        Example:
+        001 must stay 001.
+        02 must stay 02.
+        """
+        if value is None:
+            return ""
+
+        return str(value).strip()
+
+    @staticmethod
+    def _normalize_workflow(value: Any) -> str:
+        """
+        Normalize workflow value.
+        """
+        value_text = str(value or "").strip().lower()
+
+        if value_text == "ho":
+            return "HO"
+
+        if value_text == "branch":
+            return "Branch"
+
+        return ""
