@@ -1,0 +1,36 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Logs / temp / output
+logs/
+temp/
+output/
+*.log
+Process.log
+summary.json
+
+# Local database files
+*.mdb
+*.accdb
+
+# Local/private config
+Attendance Configuration/
+OAS-K_Attendance_Configuration.xlsx
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
