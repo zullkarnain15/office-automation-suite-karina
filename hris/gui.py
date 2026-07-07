@@ -14,23 +14,29 @@ HRIS Upload GUI - Sprint 6.23
 from __future__ import annotations
 
 import calendar
-from datetime import date
-from datetime import datetime
-
 import os
 import threading
 import tkinter as tk
+from datetime import date
+from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog
+from tkinter import messagebox
+from tkinter import ttk
+from tkinter.scrolledtext import ScrolledText
+from typing import Any
 
 from config.app_config import DATE_FORMAT
+from config.app_config import HRIS_ICON
 from config.ui_config import BACKGROUND_COLOR
 from config.ui_config import BORDER_COLOR
+from config.ui_config import BUTTON_FONT
 from config.ui_config import CARD_COLOR
 from config.ui_config import DEFAULT_FONT
 from config.ui_config import HEADER_FONT
 from config.ui_config import PRIMARY_COLOR
 from config.ui_config import SECONDARY_COLOR
+from config.ui_config import SUCCESS_COLOR
 from config.ui_config import TEXT_PRIMARY
 from config.ui_config import TEXT_SECONDARY
 from hris.engine import HRISFullUploadEngine
@@ -48,6 +54,15 @@ APP_BORDER = BORDER_COLOR
 APP_TEXT = TEXT_PRIMARY
 APP_MUTED_TEXT = TEXT_SECONDARY
 APP_ACCENT = SECONDARY_COLOR
+APP_ACCENT_HOVER = PRIMARY_COLOR
+APP_SUCCESS = SUCCESS_COLOR
+APP_SUCCESS_ACTIVE = "#257A4C"
+APP_SUCCESS_BORDER = "#1F6B42"
+APP_LOG_BG = "#263746"
+APP_LOG_FG = "#F4F7FB"
+APP_SOFT_ACCENT = "#E8F5F4"
+APP_TITLE_FONT = ("Segoe UI", 22, "bold")
+APP_SECTION_FONT = ("Segoe UI", 13, "bold")
 
 
 class HRISUploadGUI:
@@ -55,9 +70,15 @@ class HRISUploadGUI:
 
     def __init__(self, root: tk.Tk | tk.Toplevel) -> None:
         self.root = root
-        self.root.title("OAS-K - HRIS Upload")
-        self.root.geometry("920x680")
-        self.root.minsize(900, 640)
+        self.root.title("HRIS Upload Module")
+        self.root.geometry("1120x720")
+        self.root.minsize(1000, 660)
+        self.root.configure(bg=APP_BACKGROUND)
+
+        try:
+            self.root.iconbitmap(HRIS_ICON)
+        except Exception:
+            logger.warning("HRIS icon could not be loaded.")
 
         self.config_file_var = tk.StringVar()
         self.txt_folder_var = tk.StringVar()
@@ -66,6 +87,9 @@ class HRISUploadGUI:
         self.workflow_var = tk.StringVar(value="HO")
         self.start_date_var = tk.StringVar()
         self.end_date_var = tk.StringVar()
+        self.manual_login_var = tk.BooleanVar(value=True)
+        self.username_var = tk.StringVar()
+        self.password_var = tk.StringVar()
 
         self.status_var = tk.StringVar(value="Ready.")
         self.job_id_var = tk.StringVar(value="-")
@@ -73,235 +97,564 @@ class HRISUploadGUI:
         self.failed_count_var = tk.StringVar(value="0")
         self.report_folder_var = tk.StringVar(value="-")
 
-        self._configure_launcher_style()
-        self._build_ui()
+        self._configure_ttk_style()
+        self._create_widgets()
+        self._apply_widget_theme(self.root)
+        self._style_primary_action()
         self.toggle_output_source()
+        self.toggle_login_mode()
 
-    def _configure_launcher_style(self) -> None:
-        """Configure HRIS GUI using launcher theme."""
+    # =====================================================
+    # GUI
+    # =====================================================
 
-        style = ttk.Style(self.root)
-
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
-
-        style.configure(
-            ".",
-            background=APP_BACKGROUND,
-            foreground=APP_TEXT,
-            fieldbackground=APP_INPUT,
-            bordercolor=APP_BORDER,
-            lightcolor=APP_BORDER,
-            darkcolor=APP_BORDER,
-            font=("Segoe UI", 9),
-        )
-        style.configure("TFrame", background=APP_BACKGROUND)
-        style.configure("TLabel", background=APP_BACKGROUND, foreground=APP_TEXT)
-        style.configure(
-            "Muted.TLabel",
-            background=APP_PANEL,
-            foreground=APP_MUTED_TEXT,
-        )
-        style.configure(
-            "TLabelframe",
-            background=APP_PANEL,
-            foreground=APP_MUTED_TEXT,
-            bordercolor=APP_BORDER,
-        )
-        style.configure(
-            "TLabelframe.Label",
-            background=APP_PANEL,
-            foreground=APP_MUTED_TEXT,
-        )
-        style.configure(
-            "TEntry",
-            fieldbackground=APP_INPUT,
-            foreground=APP_TEXT,
-            insertcolor=APP_TEXT,
-            bordercolor=APP_BORDER,
-        )
-        style.map(
-            "TEntry",
-            fieldbackground=[
-                ("disabled", APP_SURFACE),
-                ("readonly", APP_INPUT),
-            ],
-            foreground=[
-                ("disabled", APP_MUTED_TEXT),
-            ],
-        )
-        style.configure(
-            "TButton",
-            background=SECONDARY_COLOR,
-            foreground="#FFFFFF",
-            bordercolor=APP_BORDER,
-            focusthickness=1,
-            focuscolor=APP_ACCENT,
-        )
-        style.map(
-            "TButton",
-            background=[
-                ("active", PRIMARY_COLOR),
-                ("disabled", APP_PANEL),
-            ],
-            foreground=[
-                ("active", "#FFFFFF"),
-                ("disabled", APP_MUTED_TEXT),
-            ],
-        )
-        style.configure(
-            "TCheckbutton",
-            background=APP_PANEL,
-            foreground=APP_TEXT,
-            indicatorbackground=APP_INPUT,
-            indicatorforeground=APP_TEXT,
-        )
-        style.map(
-            "TCheckbutton",
-            background=[("active", APP_PANEL)],
-            foreground=[("active", APP_MUTED_TEXT)],
-        )
-        style.configure(
-            "TRadiobutton",
-            background=APP_PANEL,
-            foreground=APP_TEXT,
-            indicatorbackground=APP_INPUT,
-        )
-        style.map(
-            "TRadiobutton",
-            background=[("active", APP_PANEL)],
-            foreground=[("active", APP_MUTED_TEXT)],
-        )
-
-    def _build_ui(self) -> None:
-        self.root.configure(bg=APP_BACKGROUND)
-        container = ttk.Frame(self.root, padding=16)
-        container.pack(fill="both", expand=True)
-
-        ttk.Label(
-            container,
+    def _create_widgets(self) -> None:
+        header = tk.Label(
+            self.root,
             text="HRIS Upload Module",
-            font=("Segoe UI", 18, "bold"),
-        ).pack(anchor="w", pady=(0, 4))
+            font=APP_TITLE_FONT,
+            bg=APP_BACKGROUND,
+            fg=APP_ACCENT_HOVER,
+        )
 
-        ttk.Label(
-            container,
-            text=(
-                "Upload HRIS TXT files using configured Run Control IDs. "
-                "Login HRIS is manual; password is not stored."
-            ),
-            font=("Segoe UI", 10),
-        ).pack(anchor="w", pady=(0, 16))
+        header.pack(pady=(12, 10))
 
-        self._build_input_frame(container)
-        self._build_action_frame(container)
-        self._build_result_frame(container)
-        self._build_log_frame(container)
+        frame = tk.LabelFrame(
+            self.root,
+            text="HRIS Upload Configuration",
+            font=APP_SECTION_FONT,
+            padx=16,
+            pady=14,
+        )
 
-    def _build_input_frame(self, parent: ttk.Frame) -> None:
-        frame = ttk.LabelFrame(parent, text="Input", padding=12)
-        frame.pack(fill="x", pady=(0, 12))
-        frame.columnconfigure(1, weight=1)
+        frame.pack(
+            fill="x",
+            padx=18,
+            pady=(0, 10),
+        )
 
-        self._add_file_row(frame, 0, "HRIS Configuration File", self.config_file_var, self._browse_config_file)
-        self._add_file_row(frame, 1, "TXT Folder", self.txt_folder_var, self._browse_txt_folder)
+        # CONFIGURATION FILE
 
-        ttk.Label(frame, text="Output Folder").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=6)
-        self.output_entry = ttk.Entry(frame, textvariable=self.output_folder_var)
-        self.output_entry.grid(row=2, column=1, sticky="ew", pady=6)
-        self.output_browse_button = ttk.Button(
+        tk.Label(
+            frame,
+            text="HRIS Configuration (.xlsx)",
+            font=DEFAULT_FONT,
+        ).grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(0, 4),
+        )
+
+        self.config_entry = tk.Entry(
+            frame,
+            width=62,
+            textvariable=self.config_file_var,
+        )
+
+        self.config_entry.grid(
+            row=1,
+            column=0,
+            sticky="we",
+            pady=(0, 10),
+        )
+
+        tk.Button(
             frame,
             text="Browse",
+            font=BUTTON_FONT,
+            command=self._browse_config_file,
+        ).grid(
+            row=1,
+            column=1,
+            sticky="e",
+            padx=(8, 18),
+            pady=(0, 10),
+        )
+
+        # TXT FOLDER
+
+        tk.Label(
+            frame,
+            text="TXT Folder",
+            font=DEFAULT_FONT,
+        ).grid(
+            row=0,
+            column=2,
+            columnspan=2,
+            sticky="w",
+            pady=(0, 4),
+        )
+
+        self.txt_folder_entry = tk.Entry(
+            frame,
+            width=62,
+            textvariable=self.txt_folder_var,
+        )
+
+        self.txt_folder_entry.grid(
+            row=1,
+            column=2,
+            sticky="we",
+            pady=(0, 10),
+        )
+
+        tk.Button(
+            frame,
+            text="Browse",
+            font=BUTTON_FONT,
+            command=self._browse_txt_folder,
+        ).grid(
+            row=1,
+            column=3,
+            sticky="e",
+            padx=(8, 0),
+            pady=(0, 10),
+        )
+
+        # OUTPUT FOLDER
+
+        tk.Label(
+            frame,
+            text="Output Folder",
+            font=DEFAULT_FONT,
+        ).grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(0, 4),
+        )
+
+        self.output_entry = tk.Entry(
+            frame,
+            width=62,
+            textvariable=self.output_folder_var,
+        )
+
+        self.output_entry.grid(
+            row=3,
+            column=0,
+            sticky="we",
+            pady=(0, 10),
+        )
+
+        self.output_browse_button = tk.Button(
+            frame,
+            text="Browse",
+            font=BUTTON_FONT,
             command=self._browse_output_folder,
         )
-        self.output_browse_button.grid(row=2, column=2, padx=(8, 0), pady=6)
 
-        ttk.Checkbutton(
+        self.output_browse_button.grid(
+            row=3,
+            column=1,
+            sticky="e",
+            padx=(8, 18),
+            pady=(0, 10),
+        )
+
+        tk.Checkbutton(
             frame,
             text="Same as Configuration File",
             variable=self.use_config_output_var,
+            font=DEFAULT_FONT,
             command=self.toggle_output_source,
         ).grid(
-            row=3,
-            column=1,
+            row=4,
+            column=0,
+            columnspan=4,
             sticky="w",
-            pady=(0, 6),
+            pady=(0, 10),
         )
 
-        ttk.Label(frame, text="Workflow").grid(row=4, column=0, sticky="w", padx=(0, 10), pady=6)
-        workflow_frame = tk.Frame(
+        # DATE RANGE
+
+        tk.Label(
             frame,
-            bg=APP_PANEL,
+            text="Date Range",
+            font=DEFAULT_FONT,
+        ).grid(
+            row=2,
+            column=2,
+            columnspan=2,
+            sticky="w",
+            pady=(0, 4),
         )
-        workflow_frame.grid(row=4, column=1, sticky="w", pady=6)
+
+        date_frame = tk.Frame(frame)
+
+        date_frame.grid(
+            row=3,
+            column=2,
+            columnspan=2,
+            sticky="w",
+            pady=(0, 2),
+        )
+
+        tk.Label(
+            date_frame,
+            text="From",
+            font=DEFAULT_FONT,
+        ).pack(side="left")
+
+        self.start_date_entry = tk.Entry(
+            date_frame,
+            width=15,
+            textvariable=self.start_date_var,
+        )
+
+        self.start_date_entry.pack(
+            side="left",
+            padx=(5, 3),
+        )
+
+        tk.Button(
+            date_frame,
+            text="Cal",
+            width=3,
+            command=lambda: self.open_date_picker("start"),
+        ).pack(
+            side="left",
+            padx=(0, 15),
+        )
+
+        tk.Label(
+            date_frame,
+            text="To",
+            font=DEFAULT_FONT,
+        ).pack(side="left")
+
+        self.end_date_entry = tk.Entry(
+            date_frame,
+            width=15,
+            textvariable=self.end_date_var,
+        )
+
+        self.end_date_entry.pack(
+            side="left",
+            padx=(5, 3),
+        )
+
+        tk.Button(
+            date_frame,
+            text="Cal",
+            width=3,
+            command=lambda: self.open_date_picker("end"),
+        ).pack(
+            side="left",
+            padx=(0, 15),
+        )
+
+        tk.Label(
+            date_frame,
+            text="Format: MM/DD/YYYY",
+            font=DEFAULT_FONT,
+        ).pack(side="left")
+
+        # LOGIN MODE
+
+        login_frame = tk.LabelFrame(
+            frame,
+            text="HRIS Login",
+            font=APP_SECTION_FONT,
+            padx=12,
+            pady=10,
+        )
+
+        login_frame.grid(
+            row=5,
+            column=0,
+            columnspan=4,
+            sticky="ew",
+            pady=(2, 0),
+        )
+
+        tk.Checkbutton(
+            login_frame,
+            text="Manual login di Microsoft Edge",
+            variable=self.manual_login_var,
+            font=DEFAULT_FONT,
+            command=self.toggle_login_mode,
+        ).grid(
+            row=0,
+            column=0,
+            columnspan=4,
+            sticky="w",
+            pady=(0, 8),
+        )
+
+        tk.Label(
+            login_frame,
+            text="Username",
+            font=DEFAULT_FONT,
+        ).grid(
+            row=1,
+            column=0,
+            sticky="w",
+            padx=(0, 8),
+        )
+
+        self.username_entry = tk.Entry(
+            login_frame,
+            width=36,
+            textvariable=self.username_var,
+        )
+
+        self.username_entry.grid(
+            row=1,
+            column=1,
+            sticky="we",
+            padx=(0, 18),
+        )
+
+        tk.Label(
+            login_frame,
+            text="Password",
+            font=DEFAULT_FONT,
+        ).grid(
+            row=1,
+            column=2,
+            sticky="w",
+            padx=(0, 8),
+        )
+
+        self.password_entry = tk.Entry(
+            login_frame,
+            width=36,
+            show="*",
+            textvariable=self.password_var,
+        )
+
+        self.password_entry.grid(
+            row=1,
+            column=3,
+            sticky="we",
+        )
+
+        login_frame.columnconfigure(1, weight=1)
+        login_frame.columnconfigure(3, weight=1)
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(2, weight=1)
+
+        # =================================================
+        # OPTIONS WRAPPER
+        # =================================================
+
+        option_wrapper = tk.Frame(
+            self.root,
+            bg=APP_BACKGROUND,
+        )
+
+        option_wrapper.pack(
+            fill="x",
+            padx=18,
+            pady=(8, 0),
+        )
+
+        self._build_workflow_frame(option_wrapper)
+        self._build_result_frame(option_wrapper)
+
+        # =================================================
+        # ACTION + PROGRESS
+        # =================================================
+
+        action_frame = tk.Frame(
+            self.root,
+            bg=APP_BACKGROUND,
+        )
+
+        action_frame.pack(
+            fill="x",
+            padx=18,
+            pady=(14, 0),
+        )
+
+        self.start_button = tk.Button(
+            action_frame,
+            text="Start Upload",
+            width=18,
+            font=("Segoe UI", 13, "bold"),
+            command=self._start_upload,
+        )
+
+        self.start_button.pack(
+            side="left",
+            padx=(0, 12),
+            ipady=8,
+        )
+
+        tk.Button(
+            action_frame,
+            text="Reset",
+            width=12,
+            font=BUTTON_FONT,
+            command=self._reset_form,
+        ).pack(
+            side="left",
+            padx=(0, 8),
+            ipady=8,
+        )
+
+        tk.Button(
+            action_frame,
+            text="Open Report Folder",
+            width=18,
+            font=BUTTON_FONT,
+            command=self._open_report_folder,
+        ).pack(
+            side="left",
+            padx=(0, 18),
+            ipady=8,
+        )
+
+        progress_frame = tk.LabelFrame(
+            action_frame,
+            text="Progress",
+            font=APP_SECTION_FONT,
+            padx=12,
+            pady=10,
+        )
+
+        progress_frame.pack(
+            side="left",
+            fill="x",
+            expand=True,
+        )
+
+        self.progress = ttk.Progressbar(
+            progress_frame,
+            length=500,
+            mode="determinate",
+            style="HRIS.Horizontal.TProgressbar",
+        )
+
+        self.progress.pack(fill="x")
+
+        # =================================================
+        # PROCESS LOG
+        # =================================================
+
+        self.log_frame = tk.LabelFrame(
+            self.root,
+            text="Process Log",
+            font=APP_SECTION_FONT,
+            padx=10,
+            pady=8,
+        )
+
+        self.log_frame.pack(
+            fill="both",
+            expand=True,
+            padx=18,
+            pady=(12, 8),
+        )
+
+        self.log_text = ScrolledText(
+            self.log_frame,
+            height=12,
+            wrap="word",
+            state="disabled",
+            font=("Consolas", 10),
+        )
+
+        self.log_text.pack(
+            fill="both",
+            expand=True,
+        )
+
+        self._append_log("Application Ready.")
+        self._append_log("Waiting for user input...")
+
+        # STATUS BAR
+
+        self.status_label = tk.Label(
+            self.root,
+            text="Status : Ready",
+            anchor="w",
+            relief="sunken",
+        )
+
+        self.status_label.pack(
+            fill="x",
+            side="bottom",
+        )
+
+    def _build_workflow_frame(self, parent: tk.Frame) -> None:
+        workflow_frame = tk.LabelFrame(
+            parent,
+            text="Workflow",
+            font=APP_SECTION_FONT,
+            padx=16,
+            pady=12,
+        )
+
+        workflow_frame.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(0, 8),
+        )
 
         tk.Radiobutton(
             workflow_frame,
-            text="HO",
-            value="HO",
+            text="Head Office (HO)",
             variable=self.workflow_var,
-            bg=APP_PANEL,
-            fg=APP_TEXT,
-            activebackground=APP_PANEL,
-            activeforeground=APP_MUTED_TEXT,
-            selectcolor=APP_INPUT,
-            font=("Segoe UI", 9),
-        ).pack(side="left", padx=(0, 16))
+            value="HO",
+            font=DEFAULT_FONT,
+            command=self.update_workflow_status,
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=5,
+        )
 
         tk.Radiobutton(
             workflow_frame,
             text="Branch",
-            value="Branch",
             variable=self.workflow_var,
-            bg=APP_PANEL,
-            fg=APP_TEXT,
-            activebackground=APP_PANEL,
-            activeforeground=APP_MUTED_TEXT,
-            selectcolor=APP_INPUT,
-            font=("Segoe UI", 9),
-        ).pack(side="left")
+            value="Branch",
+            font=DEFAULT_FONT,
+            command=self.update_workflow_status,
+        ).grid(
+            row=0,
+            column=1,
+            sticky="w",
+            padx=20,
+        )
 
-        ttk.Label(frame, text="Date Range").grid(row=5, column=0, sticky="w", padx=(0, 10), pady=6)
-        date_frame = ttk.Frame(frame)
-        date_frame.grid(row=5, column=1, sticky="w", pady=6)
-        ttk.Label(date_frame, text="Start Date").pack(side="left", padx=(0, 6))
-        ttk.Entry(date_frame, textvariable=self.start_date_var, width=16).pack(side="left", padx=(0, 16))
-        ttk.Button(
-            date_frame,
-            text="...",
-            width=3,
-            command=lambda: self.open_date_picker("start"),
-        ).pack(side="left", padx=(0, 16))
-        ttk.Label(date_frame, text="End Date").pack(side="left", padx=(0, 6))
-        ttk.Entry(date_frame, textvariable=self.end_date_var, width=16).pack(side="left")
-        ttk.Button(
-            date_frame,
-            text="...",
-            width=3,
-            command=lambda: self.open_date_picker("end"),
-        ).pack(side="left", padx=(6, 0))
+        self.workflow_status_label = tk.Label(
+            workflow_frame,
+            text="Selected Workflow : Head Office (HO)",
+            font=DEFAULT_FONT,
+        )
 
-        ttk.Label(
-            frame,
-            text="Date format: MM/DD/YYYY. Example: 03/30/2026",
-            style="Muted.TLabel",
-        ).grid(row=6, column=1, sticky="w", pady=(0, 6))
+        self.workflow_status_label.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            padx=5,
+            pady=(6, 0),
+        )
 
-    def _build_action_frame(self, parent: ttk.Frame) -> None:
-        frame = ttk.Frame(parent)
-        frame.pack(fill="x", pady=(0, 12))
+    def _build_result_frame(self, parent: tk.Frame) -> None:
+        result_frame = tk.LabelFrame(
+            parent,
+            text="Upload Result",
+            font=APP_SECTION_FONT,
+            padx=16,
+            pady=12,
+        )
 
-        self.start_button = ttk.Button(frame, text="Start Upload", command=self._start_upload)
-        self.start_button.pack(side="left", padx=(0, 8))
-        ttk.Button(frame, text="Reset", command=self._reset_form).pack(side="left", padx=(0, 8))
-        ttk.Button(frame, text="Open Report Folder", command=self._open_report_folder).pack(side="left")
-
-    def _build_result_frame(self, parent: ttk.Frame) -> None:
-        frame = ttk.LabelFrame(parent, text="Result", padding=12)
-        frame.pack(fill="x", pady=(0, 12))
-        frame.columnconfigure(1, weight=1)
+        result_frame.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(8, 0),
+        )
 
         rows = [
             ("Status", self.status_var),
@@ -312,62 +665,49 @@ class HRISUploadGUI:
         ]
 
         for row_index, (label_text, variable) in enumerate(rows):
-            ttk.Label(frame, text=label_text, font=("Segoe UI", 9, "bold")).grid(
+            tk.Label(
+                result_frame,
+                text=f"{label_text} :",
+                font=DEFAULT_FONT,
+            ).grid(
                 row=row_index,
                 column=0,
                 sticky="w",
-                padx=(0, 10),
-                pady=3,
+                padx=(5, 12),
+                pady=2,
             )
-            ttk.Label(frame, textvariable=variable, wraplength=680).grid(
+
+            tk.Label(
+                result_frame,
+                textvariable=variable,
+                font=DEFAULT_FONT,
+                wraplength=420,
+                justify="left",
+            ).grid(
                 row=row_index,
                 column=1,
                 sticky="w",
-                pady=3,
+                pady=2,
             )
 
-    def _build_log_frame(self, parent: ttk.Frame) -> None:
-        frame = ttk.LabelFrame(parent, text="Process Log", padding=12)
-        frame.pack(fill="both", expand=True)
+        result_frame.columnconfigure(1, weight=1)
 
-        self.log_text = tk.Text(
-            frame,
-            height=12,
-            wrap="word",
-            state="disabled",
-            bg=APP_INPUT,
-            fg=APP_TEXT,
-            insertbackground=APP_TEXT,
-            relief="flat",
-            bd=0,
-            highlightthickness=1,
-            highlightbackground=APP_BORDER,
-        )
-        self.log_text.pack(side="left", fill="both", expand=True)
-
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.log_text.yview)
-        scrollbar.pack(side="right", fill="y")
-        self.log_text.configure(yscrollcommand=scrollbar.set)
-
-    def _add_file_row(
-        self,
-        frame: ttk.LabelFrame,
-        row: int,
-        label: str,
-        variable: tk.StringVar,
-        command: object,
-    ) -> None:
-        ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=6)
-        ttk.Entry(frame, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=6)
-        ttk.Button(frame, text="Browse", command=command).grid(row=row, column=2, padx=(8, 0), pady=6)
+    # =====================================================
+    # EVENT
+    # =====================================================
 
     def _browse_config_file(self) -> None:
         file_path = filedialog.askopenfilename(
+            parent=self.root,
             title="Select HRIS Configuration File",
             filetypes=[("Excel Workbook", "*.xlsx"), ("All Files", "*.*")],
         )
+        self._bring_to_front()
+
         if file_path:
             self.config_file_var.set(file_path)
+            self._append_log("HRIS Configuration selected.")
+            self.update_status("Configuration selected")
 
             if self.use_config_output_var.get():
                 self.load_output_folder_from_configuration(
@@ -375,33 +715,47 @@ class HRISUploadGUI:
                 )
 
     def _browse_txt_folder(self) -> None:
-        folder_path = filedialog.askdirectory(title="Select TXT Folder")
+        folder_path = filedialog.askdirectory(
+            parent=self.root,
+            title="Select TXT Folder",
+        )
+        self._bring_to_front()
+
         if folder_path:
             self.txt_folder_var.set(folder_path)
+            self._append_log("TXT folder selected.")
+            self.update_status("TXT folder selected")
 
     def _browse_output_folder(self) -> None:
-        folder_path = filedialog.askdirectory(title="Select Output Folder")
+        folder_path = filedialog.askdirectory(
+            parent=self.root,
+            title="Select Output Folder",
+        )
+        self._bring_to_front()
+
         if folder_path:
             self.output_folder_var.set(folder_path)
+            self._append_log("Output folder selected.")
+            self.update_status("Output folder selected")
 
     def toggle_output_source(self) -> None:
         """Toggle output folder source between config and manual."""
 
         if self.use_config_output_var.get():
-            self.output_browse_button.configure(state="disabled")
-            self.output_entry.configure(state="normal")
+            self.output_browse_button.config(state="disabled")
+            self.output_entry.config(state="normal")
             self.load_output_folder_from_configuration(
                 show_warning=False
             )
-            self.output_entry.configure(state="disabled")
+            self.output_entry.config(state="disabled")
 
             if hasattr(self, "log_text"):
                 self._append_log(
                     "Output folder source: HRIS Configuration."
                 )
         else:
-            self.output_entry.configure(state="normal")
-            self.output_browse_button.configure(state="normal")
+            self.output_entry.config(state="normal")
+            self.output_browse_button.config(state="normal")
 
             if hasattr(self, "log_text"):
                 self._append_log("Output folder source: Manual selection.")
@@ -433,7 +787,9 @@ class HRISUploadGUI:
                     "Output Folder could not be read from "
                     "HRIS Configuration.\n\n"
                     f"{exc}",
+                    parent=self.root,
                 )
+                self._bring_to_front()
 
             return False
 
@@ -448,33 +804,75 @@ class HRISUploadGUI:
                     "HRIS Configuration",
                     "Folder_Upload_Path is not set in "
                     "HRIS Configuration.",
+                    parent=self.root,
                 )
+                self._bring_to_front()
 
             return False
 
-        self.output_entry.configure(state="normal")
+        self.output_entry.config(state="normal")
         self.output_folder_var.set(str(output_folder))
 
         if self.use_config_output_var.get():
-            self.output_entry.configure(state="disabled")
+            self.output_entry.config(state="disabled")
 
         if hasattr(self, "log_text"):
             self._append_log(
                 f"Output folder loaded from configuration: {output_folder}"
             )
+            self.update_status("Output folder loaded from configuration")
 
         return True
 
+    def update_workflow_status(self) -> None:
+        """Update selected workflow information."""
+
+        workflow = self.workflow_var.get()
+
+        if workflow == "HO":
+            text = "Selected Workflow : Head Office (HO)"
+        else:
+            text = "Selected Workflow : Branch"
+
+        self.workflow_status_label.config(text=text)
+        self._append_log(text)
+
+    def toggle_login_mode(self) -> None:
+        """Toggle HRIS credential fields based on login mode."""
+
+        if self.manual_login_var.get():
+            self.username_entry.config(state="disabled")
+            self.password_entry.config(state="disabled")
+
+            if hasattr(self, "log_text"):
+                self._append_log("Login mode: Manual login in Microsoft Edge.")
+        else:
+            self.username_entry.config(state="normal")
+            self.password_entry.config(state="normal")
+
+            if hasattr(self, "log_text"):
+                self._append_log("Login mode: Automatic login from GUI.")
+
     def _start_upload(self) -> None:
+        self._append_log("Start Upload button clicked.")
+        self.update_status("Validating input")
+
         if not self._validate_inputs():
             return
 
-        self.start_button.configure(state="disabled")
+        self.start_button.config(state="disabled")
+        self.progress["value"] = 15
         self._clear_log()
+        self._append_log("Input validation success.")
         self._append_log("Starting HRIS upload...")
+        self.update_status("Running HRIS upload")
 
         thread = threading.Thread(target=self._run_upload_worker, daemon=True)
         thread.start()
+
+    # =====================================================
+    # DATE PICKER
+    # =====================================================
 
     def open_date_picker(self, target: str) -> None:
         """Open simple calendar date picker."""
@@ -487,15 +885,14 @@ class HRISUploadGUI:
         picker.resizable(False, False)
         picker.transient(self.root)
         picker.grab_set()
-        picker.configure(bg=APP_BACKGROUND)
 
         selected_year = tk.IntVar(value=initial_date.year)
         selected_month = tk.IntVar(value=initial_date.month)
 
-        header_frame = tk.Frame(picker, bg=APP_BACKGROUND)
+        header_frame = tk.Frame(picker)
         header_frame.pack(fill="x", pady=8)
 
-        calendar_frame = tk.Frame(picker, bg=APP_BACKGROUND)
+        calendar_frame = tk.Frame(picker)
         calendar_frame.pack(pady=5)
 
         def previous_month() -> None:
@@ -533,10 +930,10 @@ class HRISUploadGUI:
 
             if target == "start":
                 self.start_date_var.set(formatted_date)
-                self._append_log(f"Start Date selected: {formatted_date}")
+                self._append_log(f"Date From selected: {formatted_date}")
             else:
                 self.end_date_var.set(formatted_date)
-                self._append_log(f"End Date selected: {formatted_date}")
+                self._append_log(f"Date To selected: {formatted_date}")
 
             picker.destroy()
 
@@ -565,9 +962,7 @@ class HRISUploadGUI:
                     calendar_frame,
                     text=day_name,
                     width=4,
-                    bg=APP_BACKGROUND,
-                    fg=APP_MUTED_TEXT,
-                    font=("Segoe UI", 9),
+                    font=DEFAULT_FONT,
                 ).grid(
                     row=0,
                     column=column_index,
@@ -590,7 +985,6 @@ class HRISUploadGUI:
                             calendar_frame,
                             text="",
                             width=4,
-                            bg=APP_BACKGROUND,
                         ).grid(
                             row=row_index,
                             column=column_index,
@@ -605,12 +999,6 @@ class HRISUploadGUI:
                             command=lambda day=day_number: select_date(
                                 day
                             ),
-                            bg=APP_SURFACE,
-                            fg=APP_TEXT,
-                            activebackground=APP_SURFACE_ACTIVE,
-                            activeforeground=APP_TEXT,
-                            relief="flat",
-                            bd=0,
                         ).grid(
                             row=row_index,
                             column=column_index,
@@ -618,17 +1006,13 @@ class HRISUploadGUI:
                             pady=2,
                         )
 
+            self._apply_widget_theme(picker)
+
         tk.Button(
             header_frame,
             text="<",
             width=4,
             command=previous_month,
-            bg=APP_SURFACE,
-            fg=APP_TEXT,
-            activebackground=APP_SURFACE_ACTIVE,
-            activeforeground=APP_TEXT,
-            relief="flat",
-            bd=0,
         ).pack(
             side="left",
             padx=10,
@@ -637,9 +1021,7 @@ class HRISUploadGUI:
         title_label = tk.Label(
             header_frame,
             text="",
-            font=("Segoe UI", 12, "bold"),
-            bg=APP_BACKGROUND,
-            fg=APP_TEXT,
+            font=HEADER_FONT,
         )
 
         title_label.pack(
@@ -652,12 +1034,6 @@ class HRISUploadGUI:
             text=">",
             width=4,
             command=next_month,
-            bg=APP_SURFACE,
-            fg=APP_TEXT,
-            activebackground=APP_SURFACE_ACTIVE,
-            activeforeground=APP_TEXT,
-            relief="flat",
-            bd=0,
         ).pack(
             side="right",
             padx=10,
@@ -682,10 +1058,13 @@ class HRISUploadGUI:
         except ValueError:
             return date.today()
 
+    # =====================================================
+    # ENGINE INTEGRATION
+    # =====================================================
+
     def _run_upload_worker(self) -> None:
-        """
-        Run HRIS upload engine.
-        """
+        """Run HRIS upload engine."""
+
         try:
             configuration_file = Path(
                 self.config_file_var.get().strip()
@@ -698,8 +1077,10 @@ class HRISUploadGUI:
                 workflow=self.workflow_var.get(),
                 start_date=self.start_date_var.get(),
                 end_date=self.end_date_var.get(),
-                wait_for_manual_login=True,
+                wait_for_manual_login=self.manual_login_var.get(),
                 manual_login_callback=self._wait_for_manual_login_confirmation,
+                hris_username=self.username_var.get().strip(),
+                hris_password=self.password_var.get(),
                 close_browser_on_error=False,
             )
 
@@ -736,7 +1117,9 @@ class HRISUploadGUI:
                 "Setelah login berhasil dan halaman HRIS siap, "
                 "kembali ke aplikasi ini lalu klik OK untuk lanjut upload.\n\n"
                 "Klik Cancel untuk membatalkan upload.",
+                parent=self.root,
             )
+            self._bring_to_front()
 
             if not confirmed:
                 self._append_log("Manual HRIS login cancelled.")
@@ -754,7 +1137,8 @@ class HRISUploadGUI:
             raise RuntimeError("Manual HRIS login cancelled by user.")
 
     def _handle_upload_result(self, result: object) -> None:
-        self.start_button.configure(state="normal")
+        self.start_button.config(state="normal")
+        self.progress["value"] = 100
         self.status_var.set("SUCCESS" if result.success else "FAILED")
         self.job_id_var.set(result.job_id or "-")
         self.success_count_var.set(str(result.success_count))
@@ -762,16 +1146,50 @@ class HRISUploadGUI:
         self.report_folder_var.set(str(result.report_folder or "-"))
         self._append_log(result.message)
 
+        if getattr(result, "diagnostic_folder", None):
+            self._append_log(
+                f"Diagnostic folder: {result.diagnostic_folder}"
+            )
+
+        if getattr(result, "diagnostic_zip_file", None):
+            self._append_log(
+                f"Diagnostic ZIP: {result.diagnostic_zip_file}"
+            )
+
         if result.success:
-            messagebox.showinfo("HRIS Upload", "HRIS upload completed successfully.")
+            self.update_status("Upload completed")
+            messagebox.showinfo(
+                "HRIS Upload",
+                "HRIS upload completed successfully.",
+                parent=self.root,
+            )
+            self._bring_to_front()
         else:
-            messagebox.showerror("HRIS Upload", result.message)
+            self.progress["value"] = 0
+            self.update_status("Upload failed")
+            messagebox.showerror(
+                "HRIS Upload",
+                result.message,
+                parent=self.root,
+            )
+            self._bring_to_front()
 
     def _handle_upload_error(self, error: Exception) -> None:
-        self.start_button.configure(state="normal")
+        self.start_button.config(state="normal")
+        self.progress["value"] = 0
         self.status_var.set("FAILED")
         self._append_log(str(error))
-        messagebox.showerror("HRIS Upload Error", str(error))
+        self.update_status("Upload failed")
+        messagebox.showerror(
+            "HRIS Upload Error",
+            str(error),
+            parent=self.root,
+        )
+        self._bring_to_front()
+
+    # =====================================================
+    # VALIDATION
+    # =====================================================
 
     def _validate_inputs(self) -> bool:
         config_file = Path(self.config_file_var.get().strip())
@@ -780,14 +1198,17 @@ class HRISUploadGUI:
         end_date = self.end_date_var.get().strip()
 
         if not config_file.exists():
-            messagebox.showerror("Validation Error", "HRIS Configuration file is required.")
-            return False
+            return self._validation_failed(
+                "HRIS Configuration file is required."
+            )
+
         if config_file.suffix.lower() != ".xlsx":
-            messagebox.showerror("Validation Error", "HRIS Configuration file must be .xlsx.")
-            return False
+            return self._validation_failed(
+                "HRIS Configuration file must be .xlsx."
+            )
+
         if not txt_folder.exists() or not txt_folder.is_dir():
-            messagebox.showerror("Validation Error", "TXT Folder is required.")
-            return False
+            return self._validation_failed("TXT Folder is required.")
 
         if self.use_config_output_var.get():
             self.load_output_folder_from_configuration(
@@ -797,17 +1218,85 @@ class HRISUploadGUI:
         output_folder = Path(self.output_folder_var.get().strip())
 
         if not output_folder.exists() or not output_folder.is_dir():
-            messagebox.showerror(
-                "Validation Error",
+            return self._validation_failed(
                 "Output Folder is required.\n\n"
                 "Set Folder_Upload_Path in HRIS Configuration or "
-                "turn off Same as Configuration File and select it manually.",
+                "turn off Same as Configuration File and select it manually."
             )
-            return False
+
         if not start_date or not end_date:
-            messagebox.showerror("Validation Error", "Start Date and End Date are required.")
-            return False
+            return self._validation_failed(
+                "Start Date and End Date are required."
+            )
+
+        parsed_start_date = self._parse_date(start_date)
+        parsed_end_date = self._parse_date(end_date)
+
+        if parsed_start_date is None:
+            return self._validation_failed(
+                "Start Date format is invalid.\n\n"
+                "Please use MM/DD/YYYY format.\n"
+                "Example: 07/01/2026"
+            )
+
+        if parsed_end_date is None:
+            return self._validation_failed(
+                "End Date format is invalid.\n\n"
+                "Please use MM/DD/YYYY format.\n"
+                "Example: 07/31/2026"
+            )
+
+        if parsed_start_date > parsed_end_date:
+            return self._validation_failed(
+                "Start Date cannot be greater than End Date."
+            )
+
+        if self.workflow_var.get() not in ("HO", "Branch"):
+            return self._validation_failed(
+                "Workflow must be Head Office (HO) or Branch."
+            )
+
+        if not self.manual_login_var.get():
+            if not self.username_var.get().strip():
+                return self._validation_failed(
+                    "Username is required for automatic HRIS login."
+                )
+
+            if not self.password_var.get():
+                return self._validation_failed(
+                    "Password is required for automatic HRIS login."
+                )
+
         return True
+
+    def _parse_date(self, value: str) -> datetime | None:
+        """Parse date using application date format."""
+
+        try:
+            return datetime.strptime(
+                value,
+                DATE_FORMAT,
+            )
+        except ValueError:
+            return None
+
+    def _validation_failed(self, message: str) -> bool:
+        """Handle validation failure."""
+
+        self._append_log(f"Validation failed: {message}")
+        self.update_status("Validation failed")
+        messagebox.showwarning(
+            "Validation Error",
+            message,
+            parent=self.root,
+        )
+        self._bring_to_front()
+
+        return False
+
+    # =====================================================
+    # HELPER
+    # =====================================================
 
     def _reset_form(self) -> None:
         self.config_file_var.set("")
@@ -815,6 +1304,9 @@ class HRISUploadGUI:
         self.output_folder_var.set("")
         self.workflow_var.set("HO")
         self.use_config_output_var.set(True)
+        self.manual_login_var.set(True)
+        self.username_var.set("")
+        self.password_var.set("")
         self.start_date_var.set("")
         self.end_date_var.set("")
         self.status_var.set("Ready.")
@@ -822,32 +1314,249 @@ class HRISUploadGUI:
         self.success_count_var.set("0")
         self.failed_count_var.set("0")
         self.report_folder_var.set("-")
+        self.progress["value"] = 0
         self._clear_log()
+        self._append_log("Application Ready.")
+        self._append_log("Waiting for user input...")
+        self.workflow_status_label.config(
+            text="Selected Workflow : Head Office (HO)"
+        )
         self.toggle_output_source()
+        self.toggle_login_mode()
+        self.update_status("Ready")
 
     def _open_report_folder(self) -> None:
         report_folder = self.report_folder_var.get().strip()
+
         if not report_folder or report_folder == "-":
-            messagebox.showinfo("Report Folder", "No report folder available yet.")
+            messagebox.showinfo(
+                "Report Folder",
+                "No report folder available yet.",
+                parent=self.root,
+            )
+            self._bring_to_front()
             return
 
         folder_path = Path(report_folder)
+
         if not folder_path.exists():
-            messagebox.showerror("Report Folder", "Report folder does not exist.")
+            messagebox.showerror(
+                "Report Folder",
+                "Report folder does not exist.",
+                parent=self.root,
+            )
+            self._bring_to_front()
             return
 
         os.startfile(folder_path)
 
+    def _configure_ttk_style(self) -> None:
+        """Configure themed widget colors."""
+
+        style = ttk.Style(self.root)
+
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        style.configure(
+            "HRIS.Horizontal.TProgressbar",
+            background=APP_SUCCESS,
+            troughcolor="#E2E9F2",
+            bordercolor=APP_BORDER,
+            lightcolor=APP_SUCCESS,
+            darkcolor=APP_SUCCESS_ACTIVE,
+            thickness=18,
+        )
+
+    def _apply_widget_theme(self, widget: tk.Misc) -> None:
+        """Apply launcher color theme to existing widgets."""
+
+        widget_class = widget.winfo_class()
+
+        if widget_class in {"Toplevel", "Tk"}:
+            self._safe_configure(
+                widget,
+                bg=APP_BACKGROUND,
+            )
+        elif widget_class == "Frame":
+            parent_class = widget.master.winfo_class()
+            frame_bg = (
+                APP_PANEL
+                if parent_class == "Labelframe"
+                else APP_BACKGROUND
+            )
+
+            self._safe_configure(
+                widget,
+                bg=frame_bg,
+            )
+        elif widget is getattr(self, "log_frame", None):
+            self._safe_configure(
+                widget,
+                bg=APP_LOG_BG,
+                fg=APP_LOG_FG,
+                highlightbackground=APP_LOG_BG,
+                highlightcolor=APP_LOG_BG,
+            )
+        elif widget_class == "Labelframe":
+            self._safe_configure(
+                widget,
+                bg=APP_PANEL,
+                fg=APP_ACCENT_HOVER,
+                highlightbackground=APP_BORDER,
+                highlightcolor=APP_ACCENT,
+            )
+        elif widget_class == "Label":
+            parent_class = widget.master.winfo_class()
+            parent_bg = None
+
+            try:
+                parent_bg = widget.master.cget("bg")
+            except tk.TclError:
+                parent_bg = None
+
+            if parent_class in {"Labelframe", "Frame"} and parent_bg:
+                label_bg = parent_bg
+            else:
+                label_bg = APP_BACKGROUND
+
+            self._safe_configure(
+                widget,
+                bg=label_bg,
+                fg=APP_TEXT,
+            )
+        elif widget_class == "Button":
+            self._safe_configure(
+                widget,
+                bg=APP_ACCENT,
+                fg="#FFFFFF",
+                activebackground=APP_ACCENT_HOVER,
+                activeforeground="#FFFFFF",
+                relief="flat",
+                bd=0,
+                highlightthickness=1,
+                highlightbackground=APP_BORDER,
+            )
+        elif widget_class in {"Radiobutton", "Checkbutton"}:
+            parent_bg = APP_PANEL
+
+            try:
+                parent_bg = widget.master.cget("bg")
+            except tk.TclError:
+                pass
+
+            self._safe_configure(
+                widget,
+                bg=parent_bg,
+                fg=APP_TEXT,
+                activebackground=parent_bg,
+                activeforeground=APP_MUTED_TEXT,
+                selectcolor=APP_SOFT_ACCENT,
+            )
+        elif widget_class == "Entry":
+            self._safe_configure(
+                widget,
+                bg=APP_INPUT,
+                fg=APP_TEXT,
+                insertbackground=APP_TEXT,
+                relief="solid",
+                bd=1,
+                highlightthickness=1,
+                highlightbackground=APP_BORDER,
+                highlightcolor=APP_ACCENT,
+            )
+        elif widget_class == "Text":
+            text_bg = APP_INPUT
+            text_fg = APP_TEXT
+            border_color = APP_BORDER
+
+            if widget.master is getattr(self, "log_frame", None):
+                text_bg = APP_LOG_BG
+                text_fg = APP_LOG_FG
+                border_color = APP_LOG_BG
+
+            self._safe_configure(
+                widget,
+                bg=text_bg,
+                fg=text_fg,
+                insertbackground=text_fg,
+                relief="flat",
+                bd=0,
+                highlightthickness=1,
+                highlightbackground=border_color,
+            )
+
+        for child in widget.winfo_children():
+            self._apply_widget_theme(child)
+
+        if widget is getattr(self, "status_label", None):
+            self._safe_configure(
+                widget,
+                bg=APP_ACCENT_HOVER,
+                fg="#FFFFFF",
+            )
+
+    def _style_primary_action(self) -> None:
+        """Apply upload action color to the Start Upload button."""
+
+        self._safe_configure(
+            self.start_button,
+            bg=APP_SUCCESS,
+            fg="#FFFFFF",
+            activebackground=APP_SUCCESS_ACTIVE,
+            activeforeground="#FFFFFF",
+            relief="raised",
+            bd=0,
+            overrelief="flat",
+            highlightthickness=1,
+            highlightbackground=APP_SUCCESS_BORDER,
+            highlightcolor=APP_SUCCESS_BORDER,
+        )
+
+    @staticmethod
+    def _safe_configure(widget: tk.Misc, **options: Any) -> None:
+        """Configure supported widget options only."""
+
+        try:
+            widget.configure(**options)
+        except tk.TclError:
+            pass
+
+    def _bring_to_front(self) -> None:
+        """Bring HRIS window back after native dialogs."""
+
+        try:
+            self.root.lift()
+            self.root.focus_force()
+        except tk.TclError:
+            pass
+
     def _append_log(self, message: str) -> None:
-        self.log_text.configure(state="normal")
-        self.log_text.insert("end", f"{message}\n")
-        self.log_text.see("end")
-        self.log_text.configure(state="disabled")
+        """Append message to process log."""
+
+        self.log_text.config(state="normal")
+        self.log_text.insert(
+            tk.END,
+            message + "\n",
+        )
+        self.log_text.see(tk.END)
+        self.log_text.config(state="disabled")
+
+        logger.info(message)
 
     def _clear_log(self) -> None:
-        self.log_text.configure(state="normal")
-        self.log_text.delete("1.0", "end")
-        self.log_text.configure(state="disabled")
+        self.log_text.config(state="normal")
+        self.log_text.delete("1.0", tk.END)
+        self.log_text.config(state="disabled")
+
+    def update_status(self, message: str) -> None:
+        """Update status bar."""
+
+        self.status_label.config(
+            text=f"Status : {message}"
+        )
 
 
 def main() -> None:

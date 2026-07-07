@@ -46,6 +46,7 @@ class HRISBatchUploadResult:
     success_count: int
     failed_count: int
     results: list[HRISUploadPlanItem]
+    error_traceback: str = ""
 
 
 class HRISBatchUploader:
@@ -76,6 +77,7 @@ class HRISBatchUploader:
         """
         success_count = 0
         failed_count = 0
+        error_traceback = ""
 
         logger.info(
             "Starting HRIS batch upload. Total item=%s",
@@ -102,6 +104,7 @@ class HRISBatchUploader:
                 plan_item.status = FILE_STATUS_FAILED
                 plan_item.message = result.message
                 failed_count += 1
+                error_traceback = result.traceback_text
 
                 logger.warning(
                     "Batch upload item failed. File=%s, Message=%s",
@@ -123,4 +126,5 @@ class HRISBatchUploader:
             success_count=success_count,
             failed_count=failed_count,
             results=upload_plan.plan_items,
+            error_traceback=error_traceback,
         )

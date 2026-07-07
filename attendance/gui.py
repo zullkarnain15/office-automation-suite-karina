@@ -30,6 +30,8 @@ from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
+from openpyxl import load_workbook
+
 from attendance.engine import AttendanceProcessEngine
 from config.app_config import ATTENDANCE_ICON
 from config.app_config import DATE_FORMAT
@@ -67,6 +69,11 @@ APP_ACCENT_HOVER = PRIMARY_COLOR
 APP_SUCCESS = SUCCESS_COLOR
 APP_SUCCESS_ACTIVE = "#257A4C"
 APP_SUCCESS_BORDER = "#1F6B42"
+APP_LOG_BG = "#263746"
+APP_LOG_FG = "#F4F7FB"
+APP_SOFT_ACCENT = "#E8F5F4"
+APP_TITLE_FONT = ("Segoe UI", 22, "bold")
+APP_SECTION_FONT = ("Segoe UI", 13, "bold")
 
 
 class AttendanceGUI:
@@ -76,8 +83,8 @@ class AttendanceGUI:
         self.master = master
 
         self.master.title("Attendance Module")
-        self.master.geometry("900x650")
-        self.master.minsize(850, 600)
+        self.master.geometry("1120x720")
+        self.master.minsize(1000, 660)
         self.master.configure(bg=APP_BACKGROUND)
 
         try:
@@ -87,6 +94,7 @@ class AttendanceGUI:
 
         self.workflow_var = tk.StringVar(value="HO")
         self.use_config_output_var = tk.BooleanVar(value=True)
+        self.use_config_date_var = tk.BooleanVar(value=False)
         self.generate_txt_var = tk.BooleanVar(value=True)
         self.generate_report_var = tk.BooleanVar(value=True)
 
@@ -103,22 +111,25 @@ class AttendanceGUI:
         header = tk.Label(
             self.master,
             text="Attendance Module",
-            font=HEADER_FONT,
+            font=APP_TITLE_FONT,
             bg=APP_BACKGROUND,
+            fg=APP_ACCENT_HOVER,
         )
 
-        header.pack(pady=(8, 6))
+        header.pack(pady=(12, 10))
 
         frame = tk.LabelFrame(
             self.master,
             text="Attendance Configuration",
-            padx=12,
-            pady=10,
+            font=APP_SECTION_FONT,
+            padx=16,
+            pady=14,
         )
 
         frame.pack(
             fill="x",
-            padx=15,
+            padx=18,
+            pady=(0, 10),
         )
 
         # CONFIGURATION FILE
@@ -130,8 +141,9 @@ class AttendanceGUI:
         ).grid(
             row=0,
             column=0,
+            columnspan=2,
             sticky="w",
-            pady=5,
+            pady=(0, 4),
         )
 
         self.config_entry = tk.Entry(
@@ -140,10 +152,10 @@ class AttendanceGUI:
         )
 
         self.config_entry.grid(
-            row=0,
-            column=1,
-            padx=10,
+            row=1,
+            column=0,
             sticky="we",
+            pady=(0, 10),
         )
 
         tk.Button(
@@ -152,8 +164,11 @@ class AttendanceGUI:
             font=BUTTON_FONT,
             command=self.browse_configuration,
         ).grid(
-            row=0,
-            column=2,
+            row=1,
+            column=1,
+            sticky="e",
+            padx=(8, 18),
+            pady=(0, 10),
         )
 
         # OUTPUT FOLDER
@@ -163,10 +178,11 @@ class AttendanceGUI:
             text="Output Folder",
             font=DEFAULT_FONT,
         ).grid(
-            row=1,
-            column=0,
+            row=0,
+            column=2,
+            columnspan=2,
             sticky="w",
-            pady=5,
+            pady=(0, 4),
         )
 
         self.output_entry = tk.Entry(
@@ -176,9 +192,9 @@ class AttendanceGUI:
 
         self.output_entry.grid(
             row=1,
-            column=1,
-            padx=10,
+            column=2,
             sticky="we",
+            pady=(0, 10),
         )
 
         self.output_browse_button = tk.Button(
@@ -190,7 +206,10 @@ class AttendanceGUI:
 
         self.output_browse_button.grid(
             row=1,
-            column=2,
+            column=3,
+            sticky="e",
+            padx=(8, 0),
+            pady=(0, 10),
         )
 
         tk.Checkbutton(
@@ -201,10 +220,10 @@ class AttendanceGUI:
             command=self.toggle_output_source,
         ).grid(
             row=2,
-            column=1,
+            column=0,
+            columnspan=4,
             sticky="w",
-            padx=10,
-            pady=(0, 5),
+            pady=(0, 10),
         )
 
         # DATE RANGE
@@ -216,8 +235,9 @@ class AttendanceGUI:
         ).grid(
             row=3,
             column=0,
+            columnspan=4,
             sticky="w",
-            pady=5,
+            pady=(0, 4),
         )
 
         date_frame = tk.Frame(
@@ -225,11 +245,11 @@ class AttendanceGUI:
         )
 
         date_frame.grid(
-            row=3,
-            column=1,
+            row=4,
+            column=0,
+            columnspan=4,
             sticky="w",
-            padx=10,
-            pady=5,
+            pady=(0, 2),
         )
 
         tk.Label(
@@ -248,12 +268,14 @@ class AttendanceGUI:
             padx=(5, 3),
         )
 
-        tk.Button(
+        self.date_from_button = tk.Button(
             date_frame,
-            text="📅",
+            text="Cal",
             width=3,
             command=lambda: self.open_date_picker("from"),
-        ).pack(
+        )
+
+        self.date_from_button.pack(
             side="left",
             padx=(0, 15),
         )
@@ -274,12 +296,14 @@ class AttendanceGUI:
             padx=(5, 3),
         )
 
-        tk.Button(
+        self.date_to_button = tk.Button(
             date_frame,
-            text="📅",
+            text="Cal",
             width=3,
             command=lambda: self.open_date_picker("to"),
-        ).pack(
+        )
+
+        self.date_to_button.pack(
             side="left",
             padx=(0, 15),
         )
@@ -290,8 +314,24 @@ class AttendanceGUI:
             font=DEFAULT_FONT,
         ).pack(side="left")
 
-        frame.columnconfigure(1, weight=1)
+        tk.Checkbutton(
+            frame,
+            text="Same as Configuration Date (General B8:B9)",
+            variable=self.use_config_date_var,
+            font=DEFAULT_FONT,
+            command=self.toggle_date_source,
+        ).grid(
+            row=5,
+            column=0,
+            columnspan=4,
+            sticky="w",
+            pady=(8, 0),
+        )
+
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(2, weight=1)
         self.toggle_output_source()
+        self.toggle_date_source()
 
         # =================================================
         # OPTIONS WRAPPER
@@ -304,7 +344,7 @@ class AttendanceGUI:
 
         option_wrapper.pack(
             fill="x",
-            padx=15,
+            padx=18,
             pady=(8, 0),
         )
 
@@ -313,8 +353,9 @@ class AttendanceGUI:
         workflow_frame = tk.LabelFrame(
             option_wrapper,
             text="Workflow",
-            padx=12,
-            pady=8,
+            font=APP_SECTION_FONT,
+            padx=16,
+            pady=12,
         )
 
         workflow_frame.pack(
@@ -372,8 +413,9 @@ class AttendanceGUI:
         output_option_frame = tk.LabelFrame(
             option_wrapper,
             text="Output Options",
-            padx=12,
-            pady=8,
+            font=APP_SECTION_FONT,
+            padx=16,
+            pady=12,
         )
 
         output_option_frame.pack(
@@ -419,28 +461,30 @@ class AttendanceGUI:
 
         action_frame.pack(
             fill="x",
-            padx=15,
-            pady=(10, 0),
+            padx=18,
+            pady=(14, 0),
         )
 
         self.generate_button = tk.Button(
             action_frame,
             text="Generate",
-            width=18,
-            font=BUTTON_FONT,
+            width=24,
+            font=("Segoe UI", 13, "bold"),
             command=self.generate,
         )
 
         self.generate_button.pack(
             side="left",
-            padx=(0, 15),
+            padx=(0, 18),
+            ipady=8,
         )
 
         progress_frame = tk.LabelFrame(
             action_frame,
             text="Progress",
-            padx=8,
-            pady=6,
+            font=APP_SECTION_FONT,
+            padx=12,
+            pady=10,
         )
 
         progress_frame.pack(
@@ -464,24 +508,26 @@ class AttendanceGUI:
         # PROCESS LOG
         # =================================================
 
-        log_frame = tk.LabelFrame(
+        self.log_frame = tk.LabelFrame(
             self.master,
             text="Process Log",
+            font=APP_SECTION_FONT,
             padx=10,
             pady=8,
         )
 
-        log_frame.pack(
+        self.log_frame.pack(
             fill="both",
             expand=True,
-            padx=15,
-            pady=(10, 8),
+            padx=18,
+            pady=(12, 8),
         )
 
         self.log_text = ScrolledText(
-            log_frame,
+            self.log_frame,
             height=12,
             wrap="word",
+            font=("Consolas", 10),
         )
 
         self.log_text.pack(
@@ -514,11 +560,13 @@ class AttendanceGUI:
         """Browse Attendance Configuration workbook."""
 
         filename = filedialog.askopenfilename(
+            parent=self.master,
             title="Select Attendance Configuration",
             filetypes=[
                 ("Excel Workbook", "*.xlsx"),
             ],
         )
+        self._bring_to_front()
 
         if filename:
             self.config_entry.delete(0, tk.END)
@@ -532,12 +580,19 @@ class AttendanceGUI:
                     show_warning=True
                 )
 
+            if self.use_config_date_var.get():
+                self.load_date_range_from_configuration(
+                    show_warning=True
+                )
+
     def browse_output(self) -> None:
         """Browse output folder."""
 
         folder = filedialog.askdirectory(
+            parent=self.master,
             title="Select Output Folder"
         )
+        self._bring_to_front()
 
         if folder:
             self.output_entry.delete(0, tk.END)
@@ -565,6 +620,101 @@ class AttendanceGUI:
             self.output_browse_button.config(state="normal")
             if hasattr(self, "log_text"):
                 self.append_log("Output folder source: Manual selection.")
+
+    def toggle_date_source(self) -> None:
+        """Toggle date range source between config and manual."""
+
+        if self.use_config_date_var.get():
+            self.date_from_entry.config(state="normal")
+            self.date_to_entry.config(state="normal")
+            self.load_date_range_from_configuration(
+                show_warning=False
+            )
+            self.date_from_entry.config(state="disabled")
+            self.date_to_entry.config(state="disabled")
+            self.date_from_button.config(state="disabled")
+            self.date_to_button.config(state="disabled")
+
+            if hasattr(self, "log_text"):
+                self.append_log(
+                    "Date range source: Attendance Configuration."
+                )
+        else:
+            self.date_from_entry.config(state="normal")
+            self.date_to_entry.config(state="normal")
+            self.date_from_button.config(state="normal")
+            self.date_to_button.config(state="normal")
+
+            if hasattr(self, "log_text"):
+                self.append_log("Date range source: Manual selection.")
+
+    def load_date_range_from_configuration(
+        self,
+        show_warning: bool,
+    ) -> bool:
+        """Load Date From and Date To from General!B8 and General!B9."""
+
+        config_file = self.config_entry.get().strip()
+
+        if not config_file:
+            return False
+
+        try:
+            workbook = load_workbook(
+                filename=config_file,
+                data_only=True,
+                read_only=True,
+            )
+
+            if "General" not in workbook.sheetnames:
+                raise ValueError("Sheet General was not found.")
+
+            sheet = workbook["General"]
+            date_from = self._format_config_date(sheet["B8"].value)
+            date_to = self._format_config_date(sheet["B9"].value)
+            workbook.close()
+
+            if not date_from or not date_to:
+                raise ValueError(
+                    "General!B8 and General!B9 must contain dates."
+                )
+
+        except Exception as exc:
+            if "workbook" in locals():
+                workbook.close()
+
+            self.append_log(
+                f"Failed to read date range from configuration: {exc}"
+            )
+
+            if show_warning:
+                Dialog.warning(
+                    "Date range could not be read from "
+                    "Attendance Configuration.\n\n"
+                    "Expected dates in General!B8 and General!B9.\n\n"
+                    f"{exc}"
+                )
+                self._bring_to_front()
+
+            return False
+
+        self.date_from_entry.config(state="normal")
+        self.date_to_entry.config(state="normal")
+        self.date_from_entry.delete(0, tk.END)
+        self.date_from_entry.insert(0, date_from)
+        self.date_to_entry.delete(0, tk.END)
+        self.date_to_entry.insert(0, date_to)
+
+        if self.use_config_date_var.get():
+            self.date_from_entry.config(state="disabled")
+            self.date_to_entry.config(state="disabled")
+
+        self.append_log(
+            f"Date range loaded from configuration: {date_from} - {date_to}"
+        )
+        self.update_status("Date range loaded from configuration")
+
+        return True
 
     def load_output_folder_from_configuration(
         self,
@@ -594,6 +744,7 @@ class AttendanceGUI:
                     "Attendance Configuration.\n\n"
                     f"{exc}"
                 )
+                self._bring_to_front()
 
             return False
 
@@ -606,6 +757,7 @@ class AttendanceGUI:
                 Dialog.warning(
                     "OutputFolder is not set in Attendance Configuration."
                 )
+                self._bring_to_front()
 
             return False
 
@@ -973,6 +1125,7 @@ class AttendanceGUI:
                 f"Valid Records: {result['valid_record_count']}\n"
                 f"Anomaly Records: {result['anomaly_record_count']}"
             )
+            self._bring_to_front()
 
         except Exception as exc:
             self.progress["value"] = 0
@@ -987,6 +1140,7 @@ class AttendanceGUI:
                 "Attendance process failed.\n\n"
                 f"{exc}"
             )
+            self._bring_to_front()
 
         finally:
             self.generate_button.config(state="normal")
@@ -1109,6 +1263,19 @@ class AttendanceGUI:
             )
             output_folder = self.output_entry.get().strip()
 
+        if self.use_config_date_var.get():
+            if not self.load_date_range_from_configuration(
+                show_warning=False
+            ):
+                return self._validation_failed(
+                    "Date range could not be read from "
+                    "Attendance Configuration.\n\n"
+                    "Expected dates in General!B8 and General!B9."
+                )
+
+            date_from_text = self.date_from_entry.get().strip()
+            date_to_text = self.date_to_entry.get().strip()
+
         result = validate_required(output_folder)
 
         if not result.valid:
@@ -1192,6 +1359,42 @@ class AttendanceGUI:
         except ValueError:
             return None
 
+    def _format_config_date(self, value: Any) -> str:
+        """Format Excel date value using application date format."""
+
+        if value is None:
+            return ""
+
+        if isinstance(value, datetime):
+            return value.strftime(DATE_FORMAT)
+
+        if isinstance(value, date):
+            return value.strftime(DATE_FORMAT)
+
+        value_text = str(value).strip()
+
+        if not value_text:
+            return ""
+
+        date_formats = (
+            DATE_FORMAT,
+            "%Y-%m-%d",
+            "%Y-%m-%d %H:%M:%S",
+            "%d/%m/%Y",
+            "%d-%m-%Y",
+        )
+
+        for date_format in date_formats:
+            try:
+                return datetime.strptime(
+                    value_text,
+                    date_format,
+                ).strftime(DATE_FORMAT)
+            except ValueError:
+                continue
+
+        return value_text
+
     def _validation_failed(self, message: str) -> bool:
         """Handle validation failure."""
 
@@ -1199,6 +1402,7 @@ class AttendanceGUI:
         self.update_status("Validation failed")
 
         Dialog.warning(message)
+        self._bring_to_front()
 
         return False
 
@@ -1219,10 +1423,11 @@ class AttendanceGUI:
         style.configure(
             "Attendance.Horizontal.TProgressbar",
             background=APP_SUCCESS,
-            troughcolor=APP_SURFACE,
+            troughcolor="#E2E9F2",
             bordercolor=APP_BORDER,
             lightcolor=APP_SUCCESS,
             darkcolor=APP_SUCCESS_ACTIVE,
+            thickness=18,
         )
 
     def _apply_widget_theme(self, widget: tk.Misc) -> None:
@@ -1247,21 +1452,35 @@ class AttendanceGUI:
                 widget,
                 bg=frame_bg,
             )
+        elif widget is getattr(self, "log_frame", None):
+            self._safe_configure(
+                widget,
+                bg=APP_LOG_BG,
+                fg=APP_LOG_FG,
+                highlightbackground=APP_LOG_BG,
+                highlightcolor=APP_LOG_BG,
+            )
         elif widget_class == "Labelframe":
             self._safe_configure(
                 widget,
                 bg=APP_PANEL,
-                fg=APP_MUTED_TEXT,
+                fg=APP_ACCENT_HOVER,
                 highlightbackground=APP_BORDER,
                 highlightcolor=APP_ACCENT,
             )
         elif widget_class == "Label":
             parent_class = widget.master.winfo_class()
-            label_bg = (
-                APP_PANEL
-                if parent_class in {"Labelframe", "Frame"}
-                else APP_BACKGROUND
-            )
+            parent_bg = None
+
+            try:
+                parent_bg = widget.master.cget("bg")
+            except tk.TclError:
+                parent_bg = None
+
+            if parent_class in {"Labelframe", "Frame"} and parent_bg:
+                label_bg = parent_bg
+            else:
+                label_bg = APP_BACKGROUND
 
             self._safe_configure(
                 widget,
@@ -1281,13 +1500,20 @@ class AttendanceGUI:
                 highlightbackground=APP_BORDER,
             )
         elif widget_class in {"Radiobutton", "Checkbutton"}:
+            parent_bg = APP_PANEL
+
+            try:
+                parent_bg = widget.master.cget("bg")
+            except tk.TclError:
+                pass
+
             self._safe_configure(
                 widget,
-                bg=APP_PANEL,
+                bg=parent_bg,
                 fg=APP_TEXT,
-                activebackground=APP_PANEL,
+                activebackground=parent_bg,
                 activeforeground=APP_MUTED_TEXT,
-                selectcolor=APP_INPUT,
+                selectcolor=APP_SOFT_ACCENT,
             )
         elif widget_class == "Entry":
             self._safe_configure(
@@ -1302,15 +1528,24 @@ class AttendanceGUI:
                 highlightcolor=APP_ACCENT,
             )
         elif widget_class == "Text":
+            text_bg = APP_INPUT
+            text_fg = APP_TEXT
+            border_color = APP_BORDER
+
+            if widget.master is getattr(self, "log_frame", None):
+                text_bg = APP_LOG_BG
+                text_fg = APP_LOG_FG
+                border_color = APP_LOG_BG
+
             self._safe_configure(
                 widget,
-                bg=APP_INPUT,
-                fg=APP_TEXT,
-                insertbackground=APP_TEXT,
+                bg=text_bg,
+                fg=text_fg,
+                insertbackground=text_fg,
                 relief="flat",
                 bd=0,
                 highlightthickness=1,
-                highlightbackground=APP_BORDER,
+                highlightbackground=border_color,
             )
 
         for child in widget.winfo_children():
@@ -1333,8 +1568,8 @@ class AttendanceGUI:
             activebackground=APP_SUCCESS_ACTIVE,
             activeforeground="#FFFFFF",
             relief="raised",
-            bd=4,
-            overrelief="groove",
+            bd=0,
+            overrelief="flat",
             highlightthickness=1,
             highlightbackground=APP_SUCCESS_BORDER,
             highlightcolor=APP_SUCCESS_BORDER,
@@ -1346,6 +1581,15 @@ class AttendanceGUI:
 
         try:
             widget.configure(**options)
+        except tk.TclError:
+            pass
+
+    def _bring_to_front(self) -> None:
+        """Bring Attendance window back after native dialogs."""
+
+        try:
+            self.master.lift()
+            self.master.focus_force()
         except tk.TclError:
             pass
 

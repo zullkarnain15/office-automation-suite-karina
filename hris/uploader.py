@@ -25,6 +25,7 @@ Sprint 6.15:
 
 from __future__ import annotations
 
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,6 +48,7 @@ class HRISUploadItemResult:
     message: str
     txt_file_name: str
     run_control_id: str
+    traceback_text: str = ""
 
 
 class HRISUploadPageHandler:
@@ -129,6 +131,7 @@ class HRISUploadPageHandler:
                 message=str(error),
                 txt_file_name=plan_item.txt_file_name,
                 run_control_id=plan_item.run_control_id,
+                traceback_text=traceback.format_exc(),
             )
 
     def _fill_run_control_id(

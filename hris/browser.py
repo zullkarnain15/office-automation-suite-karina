@@ -135,6 +135,70 @@ class HRISBrowserManager:
             "Operator confirmed manual HRIS login."
         )
 
+    def login(
+        self,
+        username: str,
+        password: str,
+    ) -> None:
+        """
+        Fill HRIS login form and submit it.
+        """
+        if self._session is None:
+            raise RuntimeError("HRIS browser session is not open.")
+
+        page = self._session.page
+
+        logger.info("Starting automatic HRIS login.")
+
+        username_input = self._find_first_visible_locator(
+            [
+                "#username",
+                "#userName",
+                "#userid",
+                "#user_id",
+                "input[name='username']",
+                "input[name='userName']",
+                "input[name='userid']",
+                "input[name='user_id']",
+                "input[type='text']",
+            ]
+        )
+
+        password_input = self._find_first_visible_locator(
+            [
+                "#password",
+                "#pwd",
+                "input[name='password']",
+                "input[name='pwd']",
+                "input[type='password']",
+            ]
+        )
+
+        username_input.fill(username)
+        password_input.fill(password)
+
+        login_button = self._find_first_visible_locator(
+            [
+                "button[type='submit']",
+                "input[type='submit']",
+                "button:has-text('Login')",
+                "button:has-text('Log In')",
+                "button:has-text('Sign In')",
+                "input[value='Login']",
+                "input[value='Log In']",
+                "input[value='Sign In']",
+            ]
+        )
+
+        login_button.click()
+
+        page.wait_for_load_state(
+            "domcontentloaded",
+            timeout=30_000,
+        )
+
+        logger.info("Automatic HRIS login submitted.")
+
     def close(self) -> None:
         """
         Close browser session.
@@ -206,4 +270,32 @@ class HRISBrowserManager:
             "1",
             "yes",
             "y",
+        )
+
+    def _find_first_visible_locator(
+        self,
+        selectors: list[str],
+    ) -> Any:
+        """
+        Return the first visible locator from a selector list.
+        """
+        if self._session is None:
+            raise RuntimeError("HRIS browser session is not open.")
+
+        page = self._session.page
+
+        for selector in selectors:
+            locator = page.locator(selector).first
+
+            try:
+                locator.wait_for(
+                    state="visible",
+                    timeout=2_000,
+                )
+                return locator
+            except Exception:
+                continue
+
+        raise RuntimeError(
+            "Required HRIS login element was not found."
         )

@@ -29,9 +29,9 @@ from config.ui_config import (
     BUTTON_FONT,
     CARD_COLOR,
     DEFAULT_FONT,
-    HEADER_FONT,
     PRIMARY_COLOR,
     SECONDARY_COLOR,
+    SUCCESS_COLOR,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     WINDOW_HEIGHT,
@@ -42,6 +42,19 @@ from hris.gui import HRISUploadGUI
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
+
+APP_BACKGROUND = BACKGROUND_COLOR
+APP_PANEL = CARD_COLOR
+APP_TEXT = TEXT_PRIMARY
+APP_MUTED_TEXT = TEXT_SECONDARY
+APP_ACCENT = SECONDARY_COLOR
+APP_ACCENT_HOVER = PRIMARY_COLOR
+APP_SUCCESS = SUCCESS_COLOR
+APP_SUCCESS_ACTIVE = "#257A4C"
+APP_BORDER = BORDER_COLOR
+APP_TITLE_FONT = ("Segoe UI", 22, "bold")
+APP_SECTION_FONT = ("Segoe UI", 13, "bold")
+APP_CARD_TITLE_FONT = ("Segoe UI", 12, "bold")
 
 
 # =========================================================
@@ -64,7 +77,10 @@ def open_hris_module(root: tk.Tk) -> None:
     logger.info("HRIS module opened.")
 
     hris_window = tk.Toplevel(root)
+    hris_window.transient(root)
     HRISUploadGUI(hris_window)
+    hris_window.lift()
+    hris_window.focus_force()
 
 
 def open_attendance_module(root: tk.Tk) -> None:
@@ -73,7 +89,10 @@ def open_attendance_module(root: tk.Tk) -> None:
     logger.info("Attendance module opened.")
 
     attendance_window = tk.Toplevel(root)
+    attendance_window.transient(root)
     AttendanceGUI(attendance_window)
+    attendance_window.lift()
+    attendance_window.focus_force()
 
 
 # =========================================================
@@ -90,7 +109,7 @@ def main() -> None:
 
     root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
 
-    root.configure(bg=BACKGROUND_COLOR)
+    root.configure(bg=APP_BACKGROUND)
 
     root.resizable(
         WINDOW_RESIZABLE,
@@ -102,13 +121,32 @@ def main() -> None:
     except Exception:
         logger.warning("Application icon could not be loaded.")
 
+    status_var = tk.StringVar(value="Status : Ready")
+
+    def launch_module(
+        module_name: str,
+        command: object,
+    ) -> None:
+        status_var.set(f"Status : Opening {module_name}")
+        command()
+
     # =====================================================
     # Header
     # =====================================================
 
-    header = tk.Frame(
+    shell = tk.Frame(
         root,
-        bg=PRIMARY_COLOR,
+        bg=APP_BACKGROUND,
+    )
+
+    shell.pack(
+        fill="both",
+        expand=True,
+    )
+
+    header = tk.Frame(
+        shell,
+        bg=APP_BACKGROUND,
     )
 
     header.pack(fill="x")
@@ -123,11 +161,11 @@ def main() -> None:
         logo = tk.Label(
             header,
             image=logo_image,
-            bg=PRIMARY_COLOR,
+            bg=APP_BACKGROUND,
         )
 
         logo.image = logo_image
-        logo.pack(pady=(10, 4))
+        logo.pack(pady=(14, 4))
 
     except Exception as ex:
         logger.warning("Logo image failed : %s", ex)
@@ -135,73 +173,89 @@ def main() -> None:
     tk.Label(
         header,
         text="Office Automation Suite - Karina",
-        font=("Segoe UI", 16, "bold"),
-        bg=PRIMARY_COLOR,
-        fg="#FFFFFF",
+        font=APP_TITLE_FONT,
+        bg=APP_BACKGROUND,
+        fg=PRIMARY_COLOR,
     ).pack(pady=(0, 2))
 
     tk.Label(
         header,
         text="OTO Finance",
         font=("Segoe UI", 11, "bold"),
-        bg=PRIMARY_COLOR,
-        fg="#DDEBFA",
-    ).pack()
+        bg=APP_BACKGROUND,
+        fg=APP_TEXT,
+    ).pack(pady=(0, 2))
 
     tk.Label(
         header,
         text=f"Version {APP_VERSION}",
         font=("Segoe UI", 9),
-        bg=PRIMARY_COLOR,
-        fg="#BFD4EA",
+        bg=APP_BACKGROUND,
+        fg=APP_MUTED_TEXT,
     ).pack(pady=(0, 10))
 
     # =====================================================
     # Content
     # =====================================================
 
-    content = tk.Frame(
-        root,
-        bg=BACKGROUND_COLOR,
+    content = tk.LabelFrame(
+        shell,
+        text="Automation Modules",
+        font=APP_SECTION_FONT,
+        padx=18,
+        pady=16,
+        bg=APP_PANEL,
+        fg=PRIMARY_COLOR,
+        bd=1,
+        relief="solid",
+        highlightbackground=APP_BORDER,
+        highlightcolor=APP_ACCENT,
     )
 
-    content.pack(expand=True, pady=(24, 18))
-
-    tk.Label(
-        content,
-        text="Automation Modules",
-        font=HEADER_FONT,
-        bg=BACKGROUND_COLOR,
-        fg=TEXT_PRIMARY,
-    ).grid(
-        row=0,
-        column=0,
-        columnspan=2,
-        pady=(0, 18),
+    content.pack(
+        fill="both",
+        expand=True,
+        padx=18,
+        pady=(8, 14),
     )
 
     modules = [
-        ("Attendance", "attendance.png"),
-        ("Outlook", "outlook.png"),
-        ("HRIS", "hris.png"),
-        ("Utilities", "utilities.png"),
+        (
+            "Attendance",
+            "attendance.png",
+            "Generate HRIS TXT and Excel report from attendance data.",
+            True,
+        ),
+        (
+            "Outlook",
+            "outlook.png",
+            "Email automation module.",
+            False,
+        ),
+        (
+            "HRIS",
+            "hris.png",
+            "Upload HRIS TXT files with configured Run Control IDs.",
+            True,
+        ),
+        (
+            "Utilities",
+            "utilities.png",
+            "Merge, split, and clean office files.",
+            False,
+        ),
     ]
 
     images = []
 
-    row = 1
+    row = 0
     col = 0
 
-    for module_name, image_file in modules:
+    for module_name, image_file, description, is_available in modules:
 
-        card = tk.LabelFrame(
+        card = tk.Frame(
             content,
-            text=module_name,
-            padx=20,
-            pady=15,
             bg=CARD_COLOR,
-            fg=PRIMARY_COLOR,
-            font=HEADER_FONT,
             bd=1,
             relief="solid",
             highlightbackground=BORDER_COLOR,
@@ -211,8 +265,9 @@ def main() -> None:
         card.grid(
             row=row,
             column=col,
-            padx=20,
-            pady=20,
+            padx=16,
+            pady=14,
+            sticky="nsew",
         )
 
         try:
@@ -231,7 +286,7 @@ def main() -> None:
                 bg=CARD_COLOR,
             )
 
-            label.pack()
+            label.pack(pady=(16, 8))
 
         except Exception:
 
@@ -241,7 +296,29 @@ def main() -> None:
                 bg=CARD_COLOR,
                 fg=TEXT_SECONDARY,
                 font=DEFAULT_FONT,
-            ).pack()
+            ).pack(pady=(16, 8))
+
+        tk.Label(
+            card,
+            text=module_name,
+            bg=CARD_COLOR,
+            fg=PRIMARY_COLOR,
+            font=APP_CARD_TITLE_FONT,
+        ).pack(pady=(0, 4))
+
+        tk.Label(
+            card,
+            text=description,
+            bg=CARD_COLOR,
+            fg=TEXT_SECONDARY,
+            font=DEFAULT_FONT,
+            justify="center",
+            wraplength=360,
+        ).pack(
+            fill="x",
+            padx=18,
+            pady=(0, 12),
+        )
 
         if module_name == "Attendance":
             button_command = lambda r=root: open_attendance_module(r)
@@ -250,26 +327,41 @@ def main() -> None:
         else:
             button_command = lambda m=module_name: coming_soon(m)
 
+        button_bg = APP_SUCCESS if is_available else APP_ACCENT
+        button_active_bg = APP_SUCCESS_ACTIVE if is_available else PRIMARY_COLOR
+
         tk.Button(
             card,
-            text=module_name,
+            text=f"Open {module_name}" if is_available else module_name,
             width=18,
             font=BUTTON_FONT,
-            bg=SECONDARY_COLOR,
+            bg=button_bg,
             fg="#FFFFFF",
-            activebackground=PRIMARY_COLOR,
+            activebackground=button_active_bg,
             activeforeground="#FFFFFF",
             relief="flat",
             bd=0,
-            highlightthickness=0,
-            command=button_command,
-        ).pack(pady=10)
+            highlightthickness=1,
+            highlightbackground=BORDER_COLOR,
+            command=lambda m=module_name, c=button_command: launch_module(
+                m,
+                c,
+            ),
+        ).pack(
+            pady=(0, 16),
+            ipady=6,
+        )
 
         col += 1
 
         if col > 1:
             col = 0
             row += 1
+
+    content.columnconfigure(0, weight=1, uniform="module")
+    content.columnconfigure(1, weight=1, uniform="module")
+    content.rowconfigure(0, weight=1, uniform="module")
+    content.rowconfigure(1, weight=1, uniform="module")
 
     # =====================================================
     # Footer
@@ -288,7 +380,7 @@ def main() -> None:
 
     tk.Label(
         footer,
-        text="Status : Ready",
+        textvariable=status_var,
         bg=PRIMARY_COLOR,
         fg="#FFFFFF",
         font=DEFAULT_FONT,

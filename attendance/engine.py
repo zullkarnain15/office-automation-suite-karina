@@ -727,7 +727,6 @@ class AttendanceExcelReportWriter:
         from openpyxl.utils import get_column_letter
 
         workflow_label = self._normalize_workflow(workflow)
-
         output_folder = (
             Path(output_root)
             / workflow_label
@@ -741,7 +740,7 @@ class AttendanceExcelReportWriter:
         )
 
         if report_name is None:
-            report_name = f"Report_{workflow_label}_{job_id}.xlsx"
+            report_name = f"Report_{job_id}.xlsx"
 
         report_path = output_folder / report_name
 
@@ -794,6 +793,7 @@ class AttendanceExcelReportWriter:
             )
 
         workbook.save(report_path)
+        workbook.close()
 
         logger.info(
             "Generated Attendance Excel report: %s",
@@ -1381,7 +1381,8 @@ class AttendanceRunArtifactWriter:
     Attendance run artifact writer.
 
     Sprint 5.11:
-    Write Process.log and summary.json for each Attendance run.
+    Write Process_<JOB_ID>.txt and summary_<JOB_ID>.json
+    for each Attendance run.
 
     Output location:
     output_root / workflow / Report / job_id
@@ -1411,8 +1412,8 @@ class AttendanceRunArtifactWriter:
             exist_ok=True,
         )
 
-        process_log_path = artifact_folder / "Process.log"
-        summary_json_path = artifact_folder / "summary.json"
+        process_log_path = artifact_folder / f"Process_{job_id}.txt"
+        summary_json_path = artifact_folder / f"summary_{job_id}.json"
 
         self._write_process_log(
             file_path=process_log_path,

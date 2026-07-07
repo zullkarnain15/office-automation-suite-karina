@@ -15,8 +15,8 @@ Sprint 6.9:
 - Create Upload folder
 - Create Failed folder
 - Create Report/<JOB_ID> folder
-- Create Upload_Process.log
-- Create Upload_Summary.json
+- Create Upload_Process_<JOB_ID>.txt
+- Create Upload_Summary_<JOB_ID>.json
 
 No browser automation yet.
 
@@ -88,8 +88,8 @@ class HRISJobArtifactWriter:
         report_root = workflow_root / "Report"
         job_report_folder = report_root / job_id
 
-        process_log_file = job_report_folder / "Upload_Process.log"
-        summary_json_file = job_report_folder / "Upload_Summary.json"
+        process_log_file = job_report_folder / f"Upload_Process_{job_id}.txt"
+        summary_json_file = job_report_folder / f"Upload_Summary_{job_id}.json"
 
         artifacts = HRISJobArtifacts(
             job_id=job_id,
@@ -129,7 +129,7 @@ class HRISJobArtifactWriter:
         message: str,
     ) -> None:
         """
-        Append message to Upload_Process.log.
+        Append message to upload process text file.
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         line = f"{timestamp} | {message}\n"
@@ -152,7 +152,7 @@ class HRISJobArtifactWriter:
         status: str,
     ) -> None:
         """
-        Write initial Upload_Summary.json.
+        Write initial upload summary JSON file.
         """
         now = datetime.now().isoformat(timespec="seconds")
 
@@ -196,7 +196,7 @@ class HRISJobArtifactWriter:
         summary: dict[str, Any],
     ) -> None:
         """
-        Write Upload_Summary.json.
+        Write upload summary JSON file.
         """
         artifacts.summary_json_file.parent.mkdir(
             parents=True,
@@ -219,7 +219,7 @@ class HRISJobArtifactWriter:
         summary_json_file: str | Path,
     ) -> dict[str, Any]:
         """
-        Read Upload_Summary.json.
+        Read upload summary JSON file.
         """
         summary_path = Path(summary_json_file)
 
@@ -235,7 +235,7 @@ class HRISJobArtifactWriter:
         batch_result: Any,
     ) -> None:
         """
-        Update Upload_Summary.json after batch upload.
+        Update upload summary JSON file after batch upload.
         """
         summary = self.read_summary(
             artifacts.summary_json_file,
@@ -308,7 +308,7 @@ class HRISJobArtifactWriter:
         move_results: list[Any],
     ) -> None:
         """
-        Update Upload_Summary.json after TXT files are moved.
+        Update upload summary JSON file after TXT files are moved.
         """
         summary = self.read_summary(
             artifacts.summary_json_file,

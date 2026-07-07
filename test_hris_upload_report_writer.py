@@ -114,7 +114,7 @@ def main() -> None:
     print()
     print("EXPECTED REPORT")
     print("-" * 80)
-    print(f"Upload_Report_{WORKFLOW}.xlsx")
+    print(f"Upload_Report_{WORKFLOW}_{job_id}.xlsx")
 
     print()
     print("=" * 80)

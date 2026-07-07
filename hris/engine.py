@@ -23,6 +23,7 @@ Sprint 6.11:
 
 from __future__ import annotations
 
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -205,6 +206,8 @@ class HRISFullUploadEngineResult:
     process_log_file: Path | None
     success_count: int
     failed_count: int
+    diagnostic_folder: Path | None = None
+    diagnostic_zip_file: Path | None = None
 
 
 class HRISFullUploadEngine:
@@ -235,6 +238,8 @@ class HRISFullUploadEngine:
         end_date: str,
         wait_for_manual_login: bool = True,
         manual_login_callback: Callable[[], None] | None = None,
+        hris_username: str | None = None,
+        hris_password: str | None = None,
         close_browser_on_error: bool = True,
     ) -> None:
         self.configuration_file = Path(configuration_file)
@@ -245,6 +250,8 @@ class HRISFullUploadEngine:
         self.end_date = end_date
         self.wait_for_manual_login = wait_for_manual_login
         self.manual_login_callback = manual_login_callback
+        self.hris_username = hris_username
+        self.hris_password = hris_password
         self.close_browser_on_error = close_browser_on_error
 
         self.config_reader = HRISConfigurationReader(
@@ -272,6 +279,10 @@ class HRISFullUploadEngine:
         artifacts = None
         report_file = None
         job_id = None
+        configuration = None
+        upload_plan = None
+        session = None
+        diagnostic_folder = None
         close_browser = True
 
         try:
@@ -344,6 +355,48 @@ class HRISFullUploadEngine:
                     artifacts=artifacts,
                     message="Operator confirmed manual login.",
                 )
+            elif self.hris_username and self.hris_password:
+                automatic_login_submitted = True
+
+                try:
+                    browser_manager.login(
+                        username=self.hris_username,
+                        password=self.hris_password,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Automatic HRIS login failed."
+                    )
+
+                    if self.manual_login_callback is None:
+                        raise
+
+                    self.artifact_writer.write_process_log(
+                        artifacts=artifacts,
+                        message=(
+                            "Automatic HRIS login failed. "
+                            "Waiting for manual login confirmation."
+                        ),
+                    )
+
+                    self.manual_login_callback()
+                    automatic_login_submitted = False
+
+                    session.page.wait_for_load_state(
+                        "domcontentloaded",
+                        timeout=30_000,
+                    )
+
+                login_message = (
+                    "Automatic HRIS login submitted."
+                    if automatic_login_submitted
+                    else "Operator confirmed manual login after automatic login fallback."
+                )
+
+                self.artifact_writer.write_process_log(
+                    artifacts=artifacts,
+                    message=login_message,
+                )
 
             navigator = HRISNavigator(
                 page=session.page,
@@ -393,6 +446,21 @@ class HRISFullUploadEngine:
                 summary=summary,
             )
 
+            if batch_result.failed_count > 0:
+                diagnostic_folder = self._write_diagnostic_pack(
+                    artifacts=artifacts,
+                    configuration=configuration,
+                    upload_plan=upload_plan,
+                    report_file=report_file,
+                    page=session.page,
+                    error_message=summary.get(
+                        "message",
+                        "HRIS batch upload finished with failed item(s).",
+                    ),
+                    traceback_text=batch_result.error_traceback,
+                    stage="batch_upload",
+                )
+
             self.artifact_writer.write_process_log(
                 artifacts=artifacts,
                 message="HRIS full upload engine finished.",
@@ -412,6 +480,12 @@ class HRISFullUploadEngine:
                 process_log_file=artifacts.process_log_file,
                 success_count=batch_result.success_count,
                 failed_count=batch_result.failed_count,
+                diagnostic_folder=diagnostic_folder,
+                diagnostic_zip_file=(
+                    diagnostic_folder.parent / "Diagnostic.zip"
+                    if diagnostic_folder is not None
+                    else None
+                ),
             )
 
         except Exception as error:
@@ -435,6 +509,17 @@ class HRISFullUploadEngine:
                     message=f"HRIS full upload engine failed: {error_message}",
                 )
 
+                diagnostic_folder = self._write_diagnostic_pack(
+                    artifacts=artifacts,
+                    configuration=configuration,
+                    upload_plan=upload_plan,
+                    report_file=report_file,
+                    page=session.page if session is not None else None,
+                    error_message=error_message,
+                    traceback_text=traceback.format_exc(),
+                    stage="engine_exception",
+                )
+
             return HRISFullUploadEngineResult(
                 success=False,
                 message=error_message,
@@ -446,8 +531,50 @@ class HRISFullUploadEngine:
                 process_log_file=artifacts.process_log_file if artifacts else None,
                 success_count=0,
                 failed_count=0,
+                diagnostic_folder=diagnostic_folder,
+                diagnostic_zip_file=(
+                    diagnostic_folder.parent / "Diagnostic.zip"
+                    if diagnostic_folder is not None
+                    else None
+                ),
             )
 
         finally:
             if browser_manager is not None and close_browser:
                 browser_manager.close()
+
+    def _write_diagnostic_pack(
+        self,
+        artifacts: HRISJobArtifacts,
+        configuration: HRISConfiguration | None,
+        upload_plan: HRISUploadPlan | None,
+        report_file: str | Path | None,
+        page: object | None,
+        error_message: str,
+        traceback_text: str,
+        stage: str,
+    ) -> Path:
+        """
+        Create HRIS diagnostic pack for failed upload.
+        """
+        from hris.diagnostics import HRISDiagnosticPackWriter
+
+        diagnostic_writer = HRISDiagnosticPackWriter()
+
+        diagnostic_folder = diagnostic_writer.write_diagnostic_pack(
+            artifacts=artifacts,
+            configuration=configuration,
+            upload_plan=upload_plan,
+            report_file=report_file,
+            page=page,
+            error_message=error_message,
+            traceback_text=traceback_text,
+            stage=stage,
+        )
+
+        self.artifact_writer.write_process_log(
+            artifacts=artifacts,
+            message=f"Diagnostic pack created: {diagnostic_folder}",
+        )
+
+        return diagnostic_folder

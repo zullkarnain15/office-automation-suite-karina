@@ -11,7 +11,7 @@ Python      : 3.14+
 HRIS Upload Report Writer
 
 Sprint 6.10:
-- Generate Upload_Report_<Workflow>.xlsx
+- Generate Upload_Report_<Workflow>_<JOB_ID>.xlsx
 - Write upload plan detail
 - No browser automation yet
 
@@ -55,7 +55,7 @@ class HRISUploadReportWriter:
         """
         report_file = (
             artifacts.job_report_folder
-            / f"Upload_Report_{artifacts.workflow}.xlsx"
+            / f"Upload_Report_{artifacts.workflow}_{artifacts.job_id}.xlsx"
         )
 
         workbook = Workbook()
@@ -217,7 +217,7 @@ class HRISUploadReportWriter:
         summary: dict[str, Any],
     ) -> None:
         """
-        Update Upload_Report_<Workflow>.xlsx after upload and file movement.
+        Update Upload_Report_<Workflow>_<JOB_ID>.xlsx after upload and file movement.
 
         This updates:
         - Status
@@ -233,6 +233,7 @@ class HRISUploadReportWriter:
 
         workbook = load_workbook(report_path)
         worksheet = workbook[self.SHEET_UPLOAD_DETAIL]
+        worksheet.freeze_panes = None
 
         plan_items = summary.get("plan_items", [])
 
@@ -372,5 +373,4 @@ class HRISUploadReportWriter:
                     wrap_text=True,
                 )
 
-        worksheet.freeze_panes = "A13"
         worksheet.auto_filter.ref = "A12:I12"
