@@ -22,6 +22,7 @@ Sprint 6.16:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from playwright.sync_api import Page
@@ -30,6 +31,7 @@ from hris.job_manager import HRISUploadPlan
 from hris.job_manager import HRISUploadPlanItem
 from hris.job_manager import FILE_STATUS_FAILED
 from hris.job_manager import FILE_STATUS_SUCCESS
+from hris.navigator import HRISNavigator
 from hris.uploader import HRISUploadPageHandler
 from shared.logger import get_logger
 
@@ -59,9 +61,15 @@ class HRISBatchUploader:
     def __init__(
         self,
         page: Page,
+        manual_checkpoint_callback: Callable[[str], None] | None = None,
     ) -> None:
         self.page = page
+        self.manual_checkpoint_callback = manual_checkpoint_callback
         self.page_handler = HRISUploadPageHandler(
+            page=self.page,
+            manual_checkpoint_callback=self.manual_checkpoint_callback,
+        )
+        self.navigator = HRISNavigator(
             page=self.page,
         )
 
@@ -84,7 +92,13 @@ class HRISBatchUploader:
             len(upload_plan.plan_items),
         )
 
-        for plan_item in upload_plan.plan_items:
+        for index, plan_item in enumerate(upload_plan.plan_items):
+            if index > 0:
+                logger.info(
+                    "Reopening Overtime Upload Attendance page before next item."
+                )
+                self.navigator.open_overtime_upload_attendance()
+
             result = self.page_handler.upload_one_file(
                 plan_item=plan_item,
                 start_date=start_date,

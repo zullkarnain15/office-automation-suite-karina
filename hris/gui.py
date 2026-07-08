@@ -1079,6 +1079,7 @@ class HRISUploadGUI:
                 end_date=self.end_date_var.get(),
                 wait_for_manual_login=self.manual_login_var.get(),
                 manual_login_callback=self._wait_for_manual_login_confirmation,
+                manual_checkpoint_callback=self._wait_for_manual_checkpoint,
                 hris_username=self.username_var.get().strip(),
                 hris_password=self.password_var.get(),
                 close_browser_on_error=False,
@@ -1136,10 +1137,46 @@ class HRISUploadGUI:
         if login_cancelled["value"]:
             raise RuntimeError("Manual HRIS login cancelled by user.")
 
+    def _wait_for_manual_checkpoint(self, message: str) -> None:
+        """Wait for operator confirmation for a manual HRIS checkpoint."""
+
+        checkpoint_confirmed = threading.Event()
+        checkpoint_cancelled = {"value": False}
+
+        def show_checkpoint_prompt() -> None:
+            self._append_log("Automation paused for manual HRIS checkpoint.")
+            confirmed = messagebox.askokcancel(
+                "HRIS Manual Checkpoint",
+                (
+                    f"{message}\n\n"
+                    "Silakan lakukan penyesuaian di browser HRIS yang terbuka. "
+                    "Setelah halaman/elemen sudah siap, kembali ke aplikasi ini "
+                    "lalu klik OK untuk mencoba lanjut otomatis.\n\n"
+                    "Klik Cancel untuk membatalkan upload."
+                ),
+                parent=self.root,
+            )
+            self._bring_to_front()
+
+            if not confirmed:
+                self._append_log("Manual HRIS checkpoint cancelled.")
+                checkpoint_cancelled["value"] = True
+                checkpoint_confirmed.set()
+                return
+
+            self._append_log("Manual HRIS checkpoint confirmed.")
+            checkpoint_confirmed.set()
+
+        self.root.after(0, show_checkpoint_prompt)
+        checkpoint_confirmed.wait()
+
+        if checkpoint_cancelled["value"]:
+            raise RuntimeError("Manual HRIS checkpoint cancelled by user.")
+
     def _handle_upload_result(self, result: object) -> None:
         self.start_button.config(state="normal")
-        self.progress["value"] = 100
         self.status_var.set("SUCCESS" if result.success else "FAILED")
+        self.progress["value"] = 100 if result.success else 0
         self.job_id_var.set(result.job_id or "-")
         self.success_count_var.set(str(result.success_count))
         self.failed_count_var.set(str(result.failed_count))

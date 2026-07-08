@@ -184,6 +184,8 @@ class HRISBrowserManager:
                 "button:has-text('Login')",
                 "button:has-text('Log In')",
                 "button:has-text('Sign In')",
+                "button[name='submit']",
+                "[name='submit']",
                 "input[value='Login']",
                 "input[value='Log In']",
                 "input[value='Sign In']",

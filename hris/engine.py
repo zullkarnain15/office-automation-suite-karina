@@ -238,6 +238,7 @@ class HRISFullUploadEngine:
         end_date: str,
         wait_for_manual_login: bool = True,
         manual_login_callback: Callable[[], None] | None = None,
+        manual_checkpoint_callback: Callable[[str], None] | None = None,
         hris_username: str | None = None,
         hris_password: str | None = None,
         close_browser_on_error: bool = True,
@@ -250,6 +251,7 @@ class HRISFullUploadEngine:
         self.end_date = end_date
         self.wait_for_manual_login = wait_for_manual_login
         self.manual_login_callback = manual_login_callback
+        self.manual_checkpoint_callback = manual_checkpoint_callback
         self.hris_username = hris_username
         self.hris_password = hris_password
         self.close_browser_on_error = close_browser_on_error
@@ -411,6 +413,7 @@ class HRISFullUploadEngine:
 
             batch_uploader = HRISBatchUploader(
                 page=session.page,
+                manual_checkpoint_callback=self.manual_checkpoint_callback,
             )
 
             batch_result = batch_uploader.upload_batch(

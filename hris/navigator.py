@@ -27,6 +27,10 @@ from shared.logger import get_logger
 
 logger = get_logger(__name__)
 
+OVERTIME_UPLOAD_COMPONENT_PATH = (
+    "/psp/HPROD/EMPLOYEE/HRMS/c/IDOT_ATTENDANCE.IDOT_UPLOAD_ATT.GBL"
+)
+
 
 class HRISNavigator:
     """
@@ -61,6 +65,11 @@ class HRISNavigator:
             "Overtime Upload Attendance",
         )
 
+        self._wait_after_navigation_action()
+
+        if not self.verify_upload_page_opened():
+            self._open_overtime_upload_attendance_url()
+
         logger.info(
             "Overtime Upload Attendance page opened."
         )
@@ -84,6 +93,8 @@ class HRISNavigator:
 
         locator.click()
 
+        self._wait_after_navigation_action()
+
     def verify_upload_page_opened(self) -> bool:
         """
         Verify upload page marker exists.
@@ -94,16 +105,61 @@ class HRISNavigator:
         Later for real HRIS:
         - This can be adjusted based on real page marker.
         """
-        marker = self.page.get_by_text(
-            "Upload Attendance Page",
-            exact=True,
+        markers = [
+            self.page.locator("#PRCSRUNCNTL_RUN_CNTL_ID"),
+            self.page.locator("#IDOT_UPLOAD_ATT_START_DATE"),
+            self.page.locator("#IDOT_UPLOAD_ATT_ATTACHADD"),
+            self.page.get_by_text(
+                "Upload Attendance Page",
+                exact=True,
+            ),
+        ]
+
+        for marker in markers:
+            try:
+                marker.first.wait_for(
+                    state="visible",
+                    timeout=1_500,
+                )
+                return True
+            except Exception:
+                continue
+
+        return False
+
+    def _open_overtime_upload_attendance_url(self) -> None:
+        """
+        Open PeopleSoft Overtime Upload Attendance component directly.
+        """
+        current_url = self.page.url
+
+        if not current_url.startswith(("http://", "https://")):
+            return
+
+        origin = self.page.evaluate("() => window.location.origin")
+        target_url = f"{origin}{OVERTIME_UPLOAD_COMPONENT_PATH}"
+
+        logger.info(
+            "Opening Overtime Upload Attendance component URL directly: %s",
+            target_url,
         )
 
+        self.page.goto(
+            target_url,
+            wait_until="domcontentloaded",
+            timeout=30_000,
+        )
+
+        self._wait_after_navigation_action()
+
+    def _wait_after_navigation_action(self) -> None:
+        """
+        Wait briefly after a PeopleSoft navigation action.
+        """
         try:
-            marker.wait_for(
-                state="visible",
-                timeout=5_000,
+            self.page.wait_for_load_state(
+                "domcontentloaded",
+                timeout=10_000,
             )
-            return True
         except Exception:
-            return False
+            pass
