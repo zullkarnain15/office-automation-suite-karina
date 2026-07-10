@@ -54,6 +54,7 @@ class HRISDiagnosticPackWriter:
         error_message: str,
         traceback_text: str,
         stage: str,
+        assisted_context: dict[str, Any] | None = None,
     ) -> Path:
         """
         Write diagnostic files and return the diagnostic folder path.
@@ -94,6 +95,7 @@ class HRISDiagnosticPackWriter:
             error_message=error_message,
             traceback_text=traceback_text,
             stage=stage,
+            assisted_context=assisted_context,
         )
 
         self._write_zip_file(diagnostic_folder)
@@ -213,6 +215,7 @@ class HRISDiagnosticPackWriter:
         error_message: str,
         traceback_text: str,
         stage: str,
+        assisted_context: dict[str, Any] | None = None,
     ) -> None:
         """
         Write JSON summary with safe diagnostic context.
@@ -239,6 +242,7 @@ class HRISDiagnosticPackWriter:
             "configuration": self._safe_configuration(configuration),
             "txt_files": self._safe_txt_files(upload_plan),
             "file_status": self._safe_file_status(upload_plan),
+            "assisted": self._redact_mapping(assisted_context or {}),
         }
 
         with (diagnostic_folder / "diagnostic_summary.json").open(
@@ -284,6 +288,17 @@ class HRISDiagnosticPackWriter:
             "upload": self._redact_mapping(configuration.upload),
             "ho_run_control_count": len(configuration.ho_run_controls),
             "branch_run_control_count": len(configuration.branch_run_controls),
+            "assisted_steps": [
+                {
+                    "sequence": step.sequence,
+                    "step_name": step.step_name,
+                    "action": step.action,
+                    "input_source": step.input_source,
+                    "method": step.method,
+                    "required": step.required,
+                }
+                for step in configuration.assisted_steps
+            ],
         }
 
     def _redact_mapping(

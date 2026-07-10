@@ -210,6 +210,16 @@ class HRISUploadReportWriter:
                 column=9,
                 value="",
             )
+            worksheet.cell(
+                row=row_index,
+                column=10,
+                value=item.verification_status,
+            )
+            worksheet.cell(
+                row=row_index,
+                column=11,
+                value=item.process_instance,
+            )
 
     def update_report_after_upload(
         self,
@@ -254,6 +264,8 @@ class HRISUploadReportWriter:
             "Status",
             "Message",
             "Moved To",
+            "Verification",
+            "Process Instance",
         )
 
         for column_name in required_columns:
@@ -298,6 +310,18 @@ class HRISUploadReportWriter:
                 column=columns["Moved To"],
                 value=item.get("moved_to", ""),
             )
+            if "Verification" in columns:
+                worksheet.cell(
+                    row=row_index,
+                    column=columns["Verification"],
+                    value=item.get("verification_status", ""),
+                )
+            if "Process Instance" in columns:
+                worksheet.cell(
+                    row=row_index,
+                    column=columns["Process Instance"],
+                    value=item.get("process_instance", ""),
+                )
 
         worksheet["B9"] = summary.get("status", "")
         workbook.save(report_path)
@@ -359,6 +383,8 @@ class HRISUploadReportWriter:
             7: 16,
             8: 40,
             9: 50,
+            10: 18,
+            11: 20,
         }
 
         for column_index, width in column_widths.items():
@@ -373,4 +399,4 @@ class HRISUploadReportWriter:
                     wrap_text=True,
                 )
 
-        worksheet.auto_filter.ref = "A12:I12"
+        worksheet.auto_filter.ref = "A12:K12"

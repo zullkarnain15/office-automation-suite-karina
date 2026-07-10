@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import calendar
 import os
+import shutil
+import sys
 import threading
 import tkinter as tk
 from datetime import date
@@ -40,29 +42,35 @@ from config.ui_config import SUCCESS_COLOR
 from config.ui_config import TEXT_PRIMARY
 from config.ui_config import TEXT_SECONDARY
 from hris.engine import HRISFullUploadEngine
-from shared.config_manager import HRISConfigurationReader
+from hris.click_profile import HRISClickProfileManager
+from shared.config_manager import (
+    HRISConfigurationReader,
+    HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES,
+)
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
 
-APP_BACKGROUND = BACKGROUND_COLOR
-APP_PANEL = CARD_COLOR
+APP_BACKGROUND = "#EAF2FA"
+APP_PANEL = "#F8FBFF"
 APP_SURFACE = "#FFFFFF"
-APP_SURFACE_ACTIVE = "#EAF2FB"
-APP_INPUT = "#FFFFFF"
-APP_BORDER = BORDER_COLOR
-APP_TEXT = TEXT_PRIMARY
-APP_MUTED_TEXT = TEXT_SECONDARY
-APP_ACCENT = SECONDARY_COLOR
-APP_ACCENT_HOVER = PRIMARY_COLOR
-APP_SUCCESS = SUCCESS_COLOR
-APP_SUCCESS_ACTIVE = "#257A4C"
-APP_SUCCESS_BORDER = "#1F6B42"
-APP_LOG_BG = "#263746"
+APP_SURFACE_ACTIVE = "#E2F2F5"
+APP_INPUT = "#F4F7FB"
+APP_BORDER = "#C7D5E6"
+APP_TEXT = "#102A43"
+APP_MUTED_TEXT = "#60758A"
+APP_ACCENT = "#198FA3"
+APP_ACCENT_HOVER = "#123B63"
+APP_SUCCESS = "#43A58F"
+APP_SUCCESS_ACTIVE = "#2E8775"
+APP_SUCCESS_BORDER = "#247363"
+APP_LOG_BG = "#24384C"
 APP_LOG_FG = "#F4F7FB"
-APP_SOFT_ACCENT = "#E8F5F4"
-APP_TITLE_FONT = ("Segoe UI", 22, "bold")
-APP_SECTION_FONT = ("Segoe UI", 13, "bold")
+APP_SOFT_ACCENT = "#DDF3F3"
+APP_TITLE_FONT = ("Segoe UI", 24, "bold")
+APP_SECTION_FONT = ("Segoe UI", 12, "bold")
+DEFAULT_FONT = ("Segoe UI", 9)
+BUTTON_FONT = ("Segoe UI", 9, "bold")
 
 
 class HRISUploadGUI:
@@ -71,8 +79,8 @@ class HRISUploadGUI:
     def __init__(self, root: tk.Tk | tk.Toplevel) -> None:
         self.root = root
         self.root.title("HRIS Upload Module")
-        self.root.geometry("1120x720")
-        self.root.minsize(1000, 660)
+        self.root.geometry("1240x720")
+        self.root.minsize(1100, 680)
         self.root.configure(bg=APP_BACKGROUND)
 
         try:
@@ -80,7 +88,9 @@ class HRISUploadGUI:
         except Exception:
             logger.warning("HRIS icon could not be loaded.")
 
-        self.config_file_var = tk.StringVar()
+        self.config_file_var = tk.StringVar(
+            value=str(self._ensure_default_configuration())
+        )
         self.txt_folder_var = tk.StringVar()
         self.output_folder_var = tk.StringVar()
         self.use_config_output_var = tk.BooleanVar(value=True)
@@ -90,6 +100,8 @@ class HRISUploadGUI:
         self.manual_login_var = tk.BooleanVar(value=True)
         self.username_var = tk.StringVar()
         self.password_var = tk.StringVar()
+        self.use_date_from_config_var = tk.BooleanVar(value=False)
+        self.profile_status_var = tk.StringVar(value="NOT FOUND")
 
         self.status_var = tk.StringVar(value="Ready.")
         self.job_id_var = tk.StringVar(value="-")
@@ -103,13 +115,14 @@ class HRISUploadGUI:
         self._style_primary_action()
         self.toggle_output_source()
         self.toggle_login_mode()
+        self._load_assisted_configuration()
 
     # =====================================================
     # GUI
     # =====================================================
 
     def _create_widgets(self) -> None:
-        header = tk.Label(
+        self.header_label = tk.Label(
             self.root,
             text="HRIS Upload Module",
             font=APP_TITLE_FONT,
@@ -117,20 +130,29 @@ class HRISUploadGUI:
             fg=APP_ACCENT_HOVER,
         )
 
-        header.pack(pady=(12, 10))
+        self.header_label.pack(pady=(8, 0))
+
+        self.subtitle_label = tk.Label(
+            self.root,
+            text="Calibrate, verify, and upload attendance files with confidence",
+            font=("Segoe UI", 10),
+            bg=APP_BACKGROUND,
+            fg=APP_MUTED_TEXT,
+        )
+        self.subtitle_label.pack(pady=(0, 5))
 
         frame = tk.LabelFrame(
             self.root,
             text="HRIS Upload Configuration",
             font=APP_SECTION_FONT,
-            padx=16,
-            pady=14,
+            padx=10,
+            pady=6,
         )
 
         frame.pack(
             fill="x",
             padx=18,
-            pady=(0, 10),
+            pady=(0, 8),
         )
 
         # CONFIGURATION FILE
@@ -149,7 +171,7 @@ class HRISUploadGUI:
 
         self.config_entry = tk.Entry(
             frame,
-            width=62,
+            width=34,
             textvariable=self.config_file_var,
         )
 
@@ -157,6 +179,7 @@ class HRISUploadGUI:
             row=1,
             column=0,
             sticky="we",
+            ipady=1,
             pady=(0, 10),
         )
 
@@ -189,7 +212,7 @@ class HRISUploadGUI:
 
         self.txt_folder_entry = tk.Entry(
             frame,
-            width=62,
+            width=34,
             textvariable=self.txt_folder_var,
         )
 
@@ -197,6 +220,7 @@ class HRISUploadGUI:
             row=1,
             column=2,
             sticky="we",
+            ipady=1,
             pady=(0, 10),
         )
 
@@ -229,7 +253,7 @@ class HRISUploadGUI:
 
         self.output_entry = tk.Entry(
             frame,
-            width=62,
+            width=34,
             textvariable=self.output_folder_var,
         )
 
@@ -237,6 +261,7 @@ class HRISUploadGUI:
             row=3,
             column=0,
             sticky="we",
+            ipady=1,
             pady=(0, 10),
         )
 
@@ -301,13 +326,14 @@ class HRISUploadGUI:
 
         self.start_date_entry = tk.Entry(
             date_frame,
-            width=15,
+            width=12,
             textvariable=self.start_date_var,
         )
 
         self.start_date_entry.pack(
             side="left",
             padx=(5, 3),
+            ipady=1,
         )
 
         tk.Button(
@@ -328,13 +354,14 @@ class HRISUploadGUI:
 
         self.end_date_entry = tk.Entry(
             date_frame,
-            width=15,
+            width=12,
             textvariable=self.end_date_var,
         )
 
         self.end_date_entry.pack(
             side="left",
             padx=(5, 3),
+            ipady=1,
         )
 
         tk.Button(
@@ -359,8 +386,8 @@ class HRISUploadGUI:
             frame,
             text="HRIS Login",
             font=APP_SECTION_FONT,
-            padx=12,
-            pady=10,
+            padx=10,
+            pady=6,
         )
 
         login_frame.grid(
@@ -435,6 +462,35 @@ class HRISUploadGUI:
 
         login_frame.columnconfigure(1, weight=1)
         login_frame.columnconfigure(3, weight=1)
+
+        assisted_frame = tk.Frame(login_frame)
+        assisted_frame.grid(
+            row=2, column=0, columnspan=4, sticky="ew", pady=(6, 0)
+        )
+        tk.Checkbutton(
+            assisted_frame,
+            text="Use Date From Config",
+            variable=self.use_date_from_config_var,
+            command=self._toggle_config_dates,
+            font=DEFAULT_FONT,
+        ).pack(side="left", padx=(0, 12))
+        tk.Button(
+            assisted_frame,
+            text="Calibrate Click Profile",
+            command=self._calibrate_click_profile,
+            font=BUTTON_FONT,
+        ).pack(side="left", padx=(0, 8))
+        tk.Button(
+            assisted_frame,
+            text="Open Profile Folder",
+            command=self._open_profile_folder,
+            font=BUTTON_FONT,
+        ).pack(side="left", padx=(0, 8))
+        tk.Label(
+            assisted_frame,
+            textvariable=self.profile_status_var,
+            font=DEFAULT_FONT,
+        ).pack(side="left")
         frame.columnconfigure(0, weight=1)
         frame.columnconfigure(2, weight=1)
 
@@ -468,7 +524,7 @@ class HRISUploadGUI:
         action_frame.pack(
             fill="x",
             padx=18,
-            pady=(14, 0),
+            pady=(8, 0),
         )
 
         self.start_button = tk.Button(
@@ -482,7 +538,7 @@ class HRISUploadGUI:
         self.start_button.pack(
             side="left",
             padx=(0, 12),
-            ipady=8,
+            ipady=5,
         )
 
         tk.Button(
@@ -494,7 +550,7 @@ class HRISUploadGUI:
         ).pack(
             side="left",
             padx=(0, 8),
-            ipady=8,
+            ipady=5,
         )
 
         tk.Button(
@@ -506,15 +562,15 @@ class HRISUploadGUI:
         ).pack(
             side="left",
             padx=(0, 18),
-            ipady=8,
+            ipady=5,
         )
 
         progress_frame = tk.LabelFrame(
             action_frame,
             text="Progress",
             font=APP_SECTION_FONT,
-            padx=12,
-            pady=10,
+            padx=10,
+            pady=6,
         )
 
         progress_frame.pack(
@@ -548,12 +604,12 @@ class HRISUploadGUI:
             fill="both",
             expand=True,
             padx=18,
-            pady=(12, 8),
+            pady=(8, 6),
         )
 
         self.log_text = ScrolledText(
             self.log_frame,
-            height=12,
+            height=7,
             wrap="word",
             state="disabled",
             font=("Consolas", 10),
@@ -586,8 +642,8 @@ class HRISUploadGUI:
             parent,
             text="Workflow",
             font=APP_SECTION_FONT,
-            padx=16,
-            pady=12,
+            padx=12,
+            pady=6,
         )
 
         workflow_frame.pack(
@@ -645,8 +701,8 @@ class HRISUploadGUI:
             parent,
             text="Upload Result",
             font=APP_SECTION_FONT,
-            padx=16,
-            pady=12,
+            padx=12,
+            pady=6,
         )
 
         result_frame.pack(
@@ -657,21 +713,21 @@ class HRISUploadGUI:
         )
 
         rows = [
-            ("Status", self.status_var),
-            ("Job ID", self.job_id_var),
-            ("Success", self.success_count_var),
-            ("Failed", self.failed_count_var),
-            ("Report Folder", self.report_folder_var),
+            ("Status", self.status_var, 0, 0),
+            ("Job ID", self.job_id_var, 0, 2),
+            ("Success", self.success_count_var, 1, 0),
+            ("Failed", self.failed_count_var, 1, 2),
+            ("Report Folder", self.report_folder_var, 2, 0),
         ]
 
-        for row_index, (label_text, variable) in enumerate(rows):
+        for label_text, variable, row_index, column_index in rows:
             tk.Label(
                 result_frame,
                 text=f"{label_text} :",
                 font=DEFAULT_FONT,
             ).grid(
                 row=row_index,
-                column=0,
+                column=column_index,
                 sticky="w",
                 padx=(5, 12),
                 pady=2,
@@ -685,16 +741,42 @@ class HRISUploadGUI:
                 justify="left",
             ).grid(
                 row=row_index,
-                column=1,
+                column=column_index + 1,
+                columnspan=3 if label_text == "Report Folder" else 1,
                 sticky="w",
                 pady=2,
             )
 
         result_frame.columnconfigure(1, weight=1)
+        result_frame.columnconfigure(3, weight=1)
 
     # =====================================================
     # EVENT
     # =====================================================
+
+    @staticmethod
+    def _ensure_default_configuration() -> Path:
+        """Return a writable external config path for source and frozen runs."""
+        file_name = "OAS-K_HRIS_Configuration.xlsx"
+        bundled_path = (
+            Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+            / "config"
+            / "hris"
+            / file_name
+        )
+        if not getattr(sys, "frozen", False):
+            return bundled_path
+
+        external_path = (
+            Path(sys.executable).resolve().parent
+            / "config"
+            / "hris"
+            / file_name
+        )
+        if not external_path.exists() and bundled_path.exists():
+            external_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(bundled_path, external_path)
+        return external_path
 
     def _browse_config_file(self) -> None:
         file_path = filedialog.askopenfilename(
@@ -713,6 +795,248 @@ class HRISUploadGUI:
                 self.load_output_folder_from_configuration(
                     show_warning=True
                 )
+            self._load_assisted_configuration()
+
+    def _load_assisted_configuration(self) -> None:
+        config_file = self.config_file_var.get().strip()
+        if not config_file:
+            return
+        try:
+            configuration = HRISConfigurationReader(config_file).read()
+            self.use_date_from_config_var.set(
+                str(configuration.upload.get("Use_Date_From_Config", False))
+                .strip().lower() in {"true", "1", "yes", "y"}
+            )
+            if self.use_date_from_config_var.get():
+                self.start_date_var.set(
+                    str(configuration.upload.get("Start_Date", "") or "")
+                )
+                self.end_date_var.set(
+                    str(configuration.upload.get("End_Date", "") or "")
+                )
+            profile_path = HRISClickProfileManager.resolve_profile_path(
+                configuration
+            )
+            self.profile_status_var.set(
+                self._get_profile_status(configuration, profile_path)
+            )
+            self._toggle_config_dates()
+        except Exception as error:
+            self.profile_status_var.set("Click Profile Status: NOT FOUND")
+            self._append_log(f"Assisted configuration could not be loaded: {error}")
+
+    def _toggle_config_dates(self) -> None:
+        if self.use_date_from_config_var.get():
+            config_file = self.config_file_var.get().strip()
+            if config_file:
+                try:
+                    configuration = HRISConfigurationReader(config_file).read()
+                    self.start_date_var.set(
+                        str(configuration.upload.get("Start_Date", "") or "")
+                    )
+                    self.end_date_var.set(
+                        str(configuration.upload.get("End_Date", "") or "")
+                    )
+                except Exception as error:
+                    self._append_log(
+                        f"Configured dates could not be loaded: {error}"
+                    )
+        state = "disabled" if self.use_date_from_config_var.get() else "normal"
+        self.start_date_entry.config(state=state)
+        self.end_date_entry.config(state=state)
+
+    def _calibrate_click_profile(self) -> None:
+        config_file = self.config_file_var.get().strip()
+        if not config_file:
+            self._validation_failed("Select HRIS Configuration first.")
+            return
+
+        def worker() -> None:
+            try:
+                from hris.assisted_calibrator import HRISAssistedCalibrator
+                calibrator = HRISAssistedCalibrator(
+                    config_file,
+                    instruction_callback=self._wait_for_calibration_navigation,
+                    coordinate_callback=self._capture_calibration_point,
+                )
+                path = calibrator.run()
+                self.root.after(
+                    0,
+                    lambda: self.profile_status_var.set(
+                        "Click Profile Status: READY"
+                    ),
+                )
+                self.root.after(
+                    0, lambda: self._append_log(f"Click profile saved: {path}")
+                )
+            except Exception as error:
+                self.root.after(
+                    0, lambda calibration_error=error: self._handle_upload_error(
+                        calibration_error
+                    )
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _wait_for_calibration_navigation(self, message: str) -> None:
+        confirmed = threading.Event()
+        cancelled = {"value": False}
+
+        def prompt() -> None:
+            if not messagebox.askokcancel(
+                "HRIS Calibration - Manual Navigation",
+                f"{message}\n\nKlik OK hanya setelah halaman upload siap.",
+                parent=self.root,
+            ):
+                cancelled["value"] = True
+            confirmed.set()
+
+        self.root.after(0, prompt)
+        confirmed.wait()
+        if cancelled["value"]:
+            raise RuntimeError("Click profile calibration cancelled.")
+
+    def _capture_calibration_point(self, message: str) -> tuple[int, int]:
+        """Capture the pointer with global F8 while Edge remains interactive."""
+        from hris.global_hotkey import WindowsGlobalHotkey
+
+        completed = threading.Event()
+        dialog_ready = threading.Event()
+        result: dict[str, Any] = {"cancelled": False}
+        dialog_holder: dict[str, tk.Toplevel] = {}
+
+        def finish_capture() -> None:
+            dialog = dialog_holder.get("dialog")
+            if dialog is not None and dialog.winfo_exists():
+                dialog.destroy()
+            try:
+                self.root.bell()
+            except tk.TclError:
+                pass
+            completed.set()
+
+        def close_dialog() -> None:
+            dialog = dialog_holder.get("dialog")
+            if dialog is not None and dialog.winfo_exists():
+                dialog.destroy()
+
+        def capture_hotkey() -> None:
+            if completed.is_set():
+                return
+            import pyautogui
+
+            position = pyautogui.position()
+            result["coordinate"] = (int(position.x), int(position.y))
+            self.root.after(0, finish_capture)
+
+        def prompt() -> None:
+            dialog = tk.Toplevel(self.root)
+            dialog_holder["dialog"] = dialog
+            dialog.title("HRIS Click Calibration")
+            dialog.geometry(
+                f"460x250+{max(10, dialog.winfo_screenwidth() - 480)}+40"
+            )
+            dialog.resizable(False, False)
+            dialog.attributes("-topmost", True)
+
+            tk.Label(
+                dialog,
+                text=message,
+                justify="left",
+                wraplength=420,
+                padx=18,
+                pady=18,
+            ).pack(fill="both", expand=True)
+            tk.Label(
+                dialog,
+                text=(
+                    "Arahkan pointer ke target di Edge,\n"
+                    "lalu tekan F8 untuk REKAM."
+                ),
+                font=("Segoe UI", 12, "bold"),
+                fg=APP_ACCENT_HOVER,
+                pady=8,
+            ).pack()
+            tk.Button(
+                dialog,
+                text="Cancel Calibration",
+                command=lambda: cancel(),
+                font=BUTTON_FONT,
+            ).pack(pady=(0, 14))
+
+            def cancel(_event: object | None = None) -> None:
+                if completed.is_set():
+                    return
+                result["cancelled"] = True
+                dialog.destroy()
+                completed.set()
+
+            dialog.bind("<Escape>", cancel)
+            dialog.protocol("WM_DELETE_WINDOW", cancel)
+            dialog_ready.set()
+
+        self.root.after(0, prompt)
+        dialog_ready.wait()
+        listener = WindowsGlobalHotkey(capture_hotkey)
+        try:
+            listener.start()
+            completed.wait()
+        finally:
+            listener.stop()
+            if not completed.is_set():
+                self.root.after(0, close_dialog)
+        if result["cancelled"]:
+            raise RuntimeError("Click profile calibration cancelled.")
+        return result["coordinate"]
+
+    def _get_profile_status(
+        self,
+        configuration: object,
+        profile_path: Path,
+    ) -> str:
+        if not profile_path.exists():
+            return "Click Profile Status: NOT FOUND"
+        try:
+            import pyautogui
+
+            profile = HRISClickProfileManager.load_profile(profile_path)
+            screen = pyautogui.size()
+            validation = HRISClickProfileManager.validate_profile(
+                profile,
+                (int(screen.width), int(screen.height)),
+                configuration.upload,
+                current_scale_percent=self._get_display_scale_percent(),
+                required_steps=[
+                    step
+                    for step in configuration.assisted_steps
+                    if step.step_name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
+                ],
+            )
+            return f"Click Profile Status: {validation.message}"
+        except Exception as error:
+            logger.warning("Click profile validation failed: %s", error)
+            return "Click Profile Status: NOT FOUND"
+
+    @staticmethod
+    def _get_display_scale_percent() -> int:
+        try:
+            import ctypes
+            return round(ctypes.windll.shcore.GetScaleFactorForDevice(0))
+        except Exception:
+            return 100
+
+    def _open_profile_folder(self) -> None:
+        try:
+            configuration = HRISConfigurationReader(
+                self.config_file_var.get().strip()
+            ).read()
+            folder = HRISClickProfileManager.resolve_profile_path(
+                configuration
+            ).parent
+            folder.mkdir(parents=True, exist_ok=True)
+            os.startfile(folder)
+        except Exception as error:
+            self._validation_failed(str(error))
 
     def _browse_txt_folder(self) -> None:
         folder_path = filedialog.askdirectory(
@@ -1083,6 +1407,9 @@ class HRISUploadGUI:
                 hris_username=self.username_var.get().strip(),
                 hris_password=self.password_var.get(),
                 close_browser_on_error=False,
+                manual_verification_callback=(
+                    self._wait_for_assisted_verification
+                ),
             )
 
             result = engine.run()
@@ -1172,6 +1499,63 @@ class HRISUploadGUI:
 
         if checkpoint_cancelled["value"]:
             raise RuntimeError("Manual HRIS checkpoint cancelled by user.")
+
+    def _wait_for_assisted_verification(self, message: str) -> str:
+        """Let the operator resolve an ambiguous HRIS submission result."""
+        completed = threading.Event()
+        result = {"action": "stop"}
+
+        def show_verification_panel() -> None:
+            panel = tk.Toplevel(self.root)
+            panel.title("HRIS Submission Verification")
+            panel.geometry(
+                f"540x360+{max(10, panel.winfo_screenwidth() - 560)}+60"
+            )
+            panel.resizable(False, False)
+            panel.attributes("-topmost", True)
+
+            tk.Label(
+                panel,
+                text="Verification result is unclear",
+                font=APP_SECTION_FONT,
+                fg=APP_ACCENT_HOVER,
+                pady=14,
+            ).pack()
+            tk.Label(
+                panel,
+                text=message,
+                justify="left",
+                wraplength=500,
+                padx=18,
+                pady=8,
+            ).pack(fill="both", expand=True)
+
+            button_frame = tk.Frame(panel)
+            button_frame.pack(fill="x", padx=14, pady=14)
+
+            def choose(action: str) -> None:
+                result["action"] = action
+                panel.destroy()
+                completed.set()
+
+            for label, action in (
+                ("Confirm Submitted", "submitted"),
+                ("Mark Failed", "failed"),
+                ("Retry Verification", "retry"),
+                ("Stop Batch", "stop"),
+            ):
+                tk.Button(
+                    button_frame,
+                    text=label,
+                    command=lambda value=action: choose(value),
+                    font=BUTTON_FONT,
+                ).pack(side="left", padx=4)
+
+            panel.protocol("WM_DELETE_WINDOW", lambda: choose("stop"))
+
+        self.root.after(0, show_verification_panel)
+        completed.wait()
+        return result["action"]
 
     def _handle_upload_result(self, result: object) -> None:
         self.start_button.config(state="normal")
@@ -1344,6 +1728,8 @@ class HRISUploadGUI:
         self.manual_login_var.set(True)
         self.username_var.set("")
         self.password_var.set("")
+        self.use_date_from_config_var.set(False)
+        self.profile_status_var.set("Click Profile Status: NOT FOUND")
         self.start_date_var.set("")
         self.end_date_var.set("")
         self.status_var.set("Ready.")
@@ -1404,7 +1790,7 @@ class HRISUploadGUI:
             bordercolor=APP_BORDER,
             lightcolor=APP_SUCCESS,
             darkcolor=APP_SUCCESS_ACTIVE,
-            thickness=18,
+            thickness=22,
         )
 
     def _apply_widget_theme(self, widget: tk.Misc) -> None:
@@ -1442,6 +1828,9 @@ class HRISUploadGUI:
                 widget,
                 bg=APP_PANEL,
                 fg=APP_ACCENT_HOVER,
+                relief="solid",
+                bd=1,
+                highlightthickness=1,
                 highlightbackground=APP_BORDER,
                 highlightcolor=APP_ACCENT,
             )
@@ -1473,6 +1862,7 @@ class HRISUploadGUI:
                 activeforeground="#FFFFFF",
                 relief="flat",
                 bd=0,
+                cursor="hand2",
                 highlightthickness=1,
                 highlightbackground=APP_BORDER,
             )
@@ -1503,6 +1893,8 @@ class HRISUploadGUI:
                 highlightthickness=1,
                 highlightbackground=APP_BORDER,
                 highlightcolor=APP_ACCENT,
+                disabledbackground="#E8EEF5",
+                disabledforeground=APP_MUTED_TEXT,
             )
         elif widget_class == "Text":
             text_bg = APP_INPUT
@@ -1533,6 +1925,22 @@ class HRISUploadGUI:
                 widget,
                 bg=APP_ACCENT_HOVER,
                 fg="#FFFFFF",
+                relief="flat",
+                padx=12,
+                pady=4,
+                font=("Segoe UI", 9, "bold"),
+            )
+        elif widget is getattr(self, "header_label", None):
+            self._safe_configure(
+                widget,
+                bg=APP_BACKGROUND,
+                fg=APP_ACCENT_HOVER,
+            )
+        elif widget is getattr(self, "subtitle_label", None):
+            self._safe_configure(
+                widget,
+                bg=APP_BACKGROUND,
+                fg=APP_MUTED_TEXT,
             )
 
     def _style_primary_action(self) -> None:
@@ -1544,12 +1952,13 @@ class HRISUploadGUI:
             fg="#FFFFFF",
             activebackground=APP_SUCCESS_ACTIVE,
             activeforeground="#FFFFFF",
-            relief="raised",
+            relief="flat",
             bd=0,
             overrelief="flat",
             highlightthickness=1,
             highlightbackground=APP_SUCCESS_BORDER,
             highlightcolor=APP_SUCCESS_BORDER,
+            cursor="hand2",
         )
 
     @staticmethod

@@ -71,6 +71,9 @@ class HRISBrowserManager:
         hris_url = self._get_hris_url()
         browser_channel = self._get_browser_channel()
         headless = self._get_headless()
+        window_x, window_y, window_width, window_height = (
+            self._get_window_geometry()
+        )
 
         logger.info(
             "Opening HRIS login page. URL=%s, Channel=%s, Headless=%s",
@@ -84,10 +87,17 @@ class HRISBrowserManager:
         browser = playwright.chromium.launch(
             channel=browser_channel,
             headless=headless,
+            args=[
+                f"--window-position={window_x},{window_y}",
+                f"--window-size={window_width},{window_height}",
+                "--high-dpi-support=1",
+                "--force-device-scale-factor=1",
+            ],
         )
 
         context = browser.new_context(
             accept_downloads=True,
+            no_viewport=True,
         )
 
         page = context.new_page()
@@ -95,6 +105,7 @@ class HRISBrowserManager:
             hris_url,
             wait_until="domcontentloaded",
         )
+        self._apply_browser_zoom(page)
 
         self._session = HRISBrowserSession(
             playwright=playwright,
@@ -108,6 +119,45 @@ class HRISBrowserManager:
         )
 
         return self._session
+
+    def _get_window_geometry(self) -> tuple[int, int, int, int]:
+        """Return configured native Edge window geometry."""
+        upload = self.configuration.upload
+        return (
+            self._to_int(upload.get("Browser_X"), 0),
+            self._to_int(upload.get("Browser_Y"), 0),
+            self._to_int(upload.get("Browser_Width"), 1200, minimum=640),
+            self._to_int(upload.get("Browser_Height"), 800, minimum=480),
+        )
+
+    def _apply_browser_zoom(self, page: Page) -> None:
+        """Reset Edge page zoom and apply supported configured increments."""
+        expected_zoom = self._to_int(
+            self.configuration.upload.get("Browser_Zoom"),
+            100,
+            minimum=25,
+        )
+        page.keyboard.press("Control+0")
+
+        # Chromium zoom uses discrete steps. Default HRIS profile is 100%.
+        direction = "Control+Equal" if expected_zoom > 100 else "Control+-"
+        steps = round(abs(expected_zoom - 100) / 25)
+        for _ in range(steps):
+            page.keyboard.press(direction)
+
+    @staticmethod
+    def _to_int(
+        value: Any,
+        default: int,
+        minimum: int | None = None,
+    ) -> int:
+        try:
+            result = int(value)
+        except (TypeError, ValueError):
+            result = default
+        if minimum is not None:
+            result = max(minimum, result)
+        return result
 
     def wait_for_manual_login(
         self,

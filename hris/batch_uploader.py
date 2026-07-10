@@ -62,12 +62,14 @@ class HRISBatchUploader:
         self,
         page: Page,
         manual_checkpoint_callback: Callable[[str], None] | None = None,
+        post_upload_recorder_callback: Callable[..., object] | None = None,
     ) -> None:
         self.page = page
         self.manual_checkpoint_callback = manual_checkpoint_callback
         self.page_handler = HRISUploadPageHandler(
             page=self.page,
             manual_checkpoint_callback=self.manual_checkpoint_callback,
+            post_upload_recorder_callback=post_upload_recorder_callback,
         )
         self.navigator = HRISNavigator(
             page=self.page,

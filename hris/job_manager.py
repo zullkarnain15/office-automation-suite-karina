@@ -48,6 +48,7 @@ FILE_STATUS_PROCESSING = "PROCESSING"
 FILE_STATUS_SUCCESS = "SUCCESS"
 FILE_STATUS_FAILED = "FAILED"
 FILE_STATUS_SKIPPED = "SKIPPED"
+FILE_STATUS_INTERRUPTED = "INTERRUPTED"
 
 
 @dataclass(slots=True)
@@ -77,6 +78,8 @@ class HRISUploadPlanItem:
     run_control_description: str
     status: str = FILE_STATUS_PENDING
     message: str = ""
+    verification_status: str = ""
+    process_instance: str = ""
 
 
 @dataclass(slots=True)

@@ -56,24 +56,26 @@ from shared.validators import validate_required
 
 logger = get_logger(__name__)
 
-APP_BACKGROUND = BACKGROUND_COLOR
-APP_PANEL = CARD_COLOR
+APP_BACKGROUND = "#EAF2FA"
+APP_PANEL = "#F8FBFF"
 APP_SURFACE = "#FFFFFF"
-APP_SURFACE_ACTIVE = "#EAF2FB"
-APP_INPUT = "#FFFFFF"
-APP_BORDER = BORDER_COLOR
-APP_TEXT = TEXT_PRIMARY
-APP_MUTED_TEXT = TEXT_SECONDARY
-APP_ACCENT = SECONDARY_COLOR
-APP_ACCENT_HOVER = PRIMARY_COLOR
-APP_SUCCESS = SUCCESS_COLOR
-APP_SUCCESS_ACTIVE = "#257A4C"
-APP_SUCCESS_BORDER = "#1F6B42"
-APP_LOG_BG = "#263746"
+APP_SURFACE_ACTIVE = "#E2F2F5"
+APP_INPUT = "#F4F7FB"
+APP_BORDER = "#C7D5E6"
+APP_TEXT = "#102A43"
+APP_MUTED_TEXT = "#60758A"
+APP_ACCENT = "#198FA3"
+APP_ACCENT_HOVER = "#123B63"
+APP_SUCCESS = "#43A58F"
+APP_SUCCESS_ACTIVE = "#2E8775"
+APP_SUCCESS_BORDER = "#247363"
+APP_LOG_BG = "#24384C"
 APP_LOG_FG = "#F4F7FB"
-APP_SOFT_ACCENT = "#E8F5F4"
-APP_TITLE_FONT = ("Segoe UI", 22, "bold")
-APP_SECTION_FONT = ("Segoe UI", 13, "bold")
+APP_SOFT_ACCENT = "#DDF3F3"
+APP_TITLE_FONT = ("Segoe UI", 24, "bold")
+APP_SECTION_FONT = ("Segoe UI", 12, "bold")
+DEFAULT_FONT = ("Segoe UI", 9)
+BUTTON_FONT = ("Segoe UI", 9, "bold")
 
 
 class AttendanceGUI:
@@ -83,8 +85,8 @@ class AttendanceGUI:
         self.master = master
 
         self.master.title("Attendance Module")
-        self.master.geometry("1120x720")
-        self.master.minsize(1000, 660)
+        self.master.geometry("1180x700")
+        self.master.minsize(1000, 650)
         self.master.configure(bg=APP_BACKGROUND)
 
         try:
@@ -108,7 +110,7 @@ class AttendanceGUI:
     # =====================================================
 
     def _create_widgets(self) -> None:
-        header = tk.Label(
+        self.header_label = tk.Label(
             self.master,
             text="Attendance Module",
             font=APP_TITLE_FONT,
@@ -116,20 +118,29 @@ class AttendanceGUI:
             fg=APP_ACCENT_HOVER,
         )
 
-        header.pack(pady=(12, 10))
+        self.header_label.pack(pady=(8, 0))
+
+        self.subtitle_label = tk.Label(
+            self.master,
+            text="Prepare HRIS-ready attendance files and reports",
+            font=("Segoe UI", 10),
+            bg=APP_BACKGROUND,
+            fg=APP_MUTED_TEXT,
+        )
+        self.subtitle_label.pack(pady=(0, 5))
 
         frame = tk.LabelFrame(
             self.master,
             text="Attendance Configuration",
             font=APP_SECTION_FONT,
-            padx=16,
-            pady=14,
+            padx=10,
+            pady=6,
         )
 
         frame.pack(
             fill="x",
             padx=18,
-            pady=(0, 10),
+            pady=(0, 8),
         )
 
         # CONFIGURATION FILE
@@ -148,13 +159,14 @@ class AttendanceGUI:
 
         self.config_entry = tk.Entry(
             frame,
-            width=62,
+            width=34,
         )
 
         self.config_entry.grid(
             row=1,
             column=0,
             sticky="we",
+            ipady=1,
             pady=(0, 10),
         )
 
@@ -187,13 +199,14 @@ class AttendanceGUI:
 
         self.output_entry = tk.Entry(
             frame,
-            width=62,
+            width=34,
         )
 
         self.output_entry.grid(
             row=1,
             column=2,
             sticky="we",
+            ipady=1,
             pady=(0, 10),
         )
 
@@ -260,12 +273,13 @@ class AttendanceGUI:
 
         self.date_from_entry = tk.Entry(
             date_frame,
-            width=15,
+            width=12,
         )
 
         self.date_from_entry.pack(
             side="left",
             padx=(5, 3),
+            ipady=1,
         )
 
         self.date_from_button = tk.Button(
@@ -288,12 +302,13 @@ class AttendanceGUI:
 
         self.date_to_entry = tk.Entry(
             date_frame,
-            width=15,
+            width=12,
         )
 
         self.date_to_entry.pack(
             side="left",
             padx=(5, 3),
+            ipady=1,
         )
 
         self.date_to_button = tk.Button(
@@ -354,8 +369,8 @@ class AttendanceGUI:
             option_wrapper,
             text="Workflow",
             font=APP_SECTION_FONT,
-            padx=16,
-            pady=12,
+            padx=12,
+            pady=6,
         )
 
         workflow_frame.pack(
@@ -414,8 +429,8 @@ class AttendanceGUI:
             option_wrapper,
             text="Output Options",
             font=APP_SECTION_FONT,
-            padx=16,
-            pady=12,
+            padx=12,
+            pady=6,
         )
 
         output_option_frame.pack(
@@ -462,7 +477,7 @@ class AttendanceGUI:
         action_frame.pack(
             fill="x",
             padx=18,
-            pady=(14, 0),
+            pady=(8, 0),
         )
 
         self.generate_button = tk.Button(
@@ -476,15 +491,15 @@ class AttendanceGUI:
         self.generate_button.pack(
             side="left",
             padx=(0, 18),
-            ipady=8,
+            ipady=5,
         )
 
         progress_frame = tk.LabelFrame(
             action_frame,
             text="Progress",
             font=APP_SECTION_FONT,
-            padx=12,
-            pady=10,
+            padx=10,
+            pady=6,
         )
 
         progress_frame.pack(
@@ -520,12 +535,12 @@ class AttendanceGUI:
             fill="both",
             expand=True,
             padx=18,
-            pady=(12, 8),
+            pady=(8, 6),
         )
 
         self.log_text = ScrolledText(
             self.log_frame,
-            height=12,
+            height=7,
             wrap="word",
             font=("Consolas", 10),
         )
@@ -1427,7 +1442,7 @@ class AttendanceGUI:
             bordercolor=APP_BORDER,
             lightcolor=APP_SUCCESS,
             darkcolor=APP_SUCCESS_ACTIVE,
-            thickness=18,
+            thickness=22,
         )
 
     def _apply_widget_theme(self, widget: tk.Misc) -> None:
@@ -1465,6 +1480,9 @@ class AttendanceGUI:
                 widget,
                 bg=APP_PANEL,
                 fg=APP_ACCENT_HOVER,
+                relief="solid",
+                bd=1,
+                highlightthickness=1,
                 highlightbackground=APP_BORDER,
                 highlightcolor=APP_ACCENT,
             )
@@ -1496,6 +1514,7 @@ class AttendanceGUI:
                 activeforeground="#FFFFFF",
                 relief="flat",
                 bd=0,
+                cursor="hand2",
                 highlightthickness=1,
                 highlightbackground=APP_BORDER,
             )
@@ -1526,6 +1545,8 @@ class AttendanceGUI:
                 highlightthickness=1,
                 highlightbackground=APP_BORDER,
                 highlightcolor=APP_ACCENT,
+                disabledbackground="#E8EEF5",
+                disabledforeground=APP_MUTED_TEXT,
             )
         elif widget_class == "Text":
             text_bg = APP_INPUT
@@ -1556,6 +1577,22 @@ class AttendanceGUI:
                 widget,
                 bg=APP_ACCENT_HOVER,
                 fg="#FFFFFF",
+                relief="flat",
+                padx=12,
+                pady=4,
+                font=("Segoe UI", 9, "bold"),
+            )
+        elif widget is getattr(self, "header_label", None):
+            self._safe_configure(
+                widget,
+                bg=APP_BACKGROUND,
+                fg=APP_ACCENT_HOVER,
+            )
+        elif widget is getattr(self, "subtitle_label", None):
+            self._safe_configure(
+                widget,
+                bg=APP_BACKGROUND,
+                fg=APP_MUTED_TEXT,
             )
 
     def _style_primary_action(self) -> None:
@@ -1567,12 +1604,13 @@ class AttendanceGUI:
             fg="#FFFFFF",
             activebackground=APP_SUCCESS_ACTIVE,
             activeforeground="#FFFFFF",
-            relief="raised",
+            relief="flat",
             bd=0,
             overrelief="flat",
             highlightthickness=1,
             highlightbackground=APP_SUCCESS_BORDER,
             highlightcolor=APP_SUCCESS_BORDER,
+            cursor="hand2",
         )
 
     @staticmethod

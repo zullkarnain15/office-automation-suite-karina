@@ -80,6 +80,7 @@ class HRISUploadEngine:
         self.job_manager = HRISUploadJobManager()
         self.artifact_writer = HRISJobArtifactWriter()
         self.report_writer = HRISUploadReportWriter()
+        self._assisted_diagnostic_context: dict[str, object] = {}
 
     def prepare_upload_job(self) -> HRISUploadEngineResult:
         """
@@ -242,6 +243,7 @@ class HRISFullUploadEngine:
         hris_username: str | None = None,
         hris_password: str | None = None,
         close_browser_on_error: bool = True,
+        manual_verification_callback: Callable[[str], str] | None = None,
     ) -> None:
         self.configuration_file = Path(configuration_file)
         self.txt_folder = Path(txt_folder)
@@ -255,6 +257,7 @@ class HRISFullUploadEngine:
         self.hris_username = hris_username
         self.hris_password = hris_password
         self.close_browser_on_error = close_browser_on_error
+        self.manual_verification_callback = manual_verification_callback
 
         self.config_reader = HRISConfigurationReader(
             self.configuration_file,
@@ -262,12 +265,12 @@ class HRISFullUploadEngine:
         self.job_manager = HRISUploadJobManager()
         self.artifact_writer = HRISJobArtifactWriter()
         self.report_writer = HRISUploadReportWriter()
+        self._assisted_diagnostic_context: dict[str, object] = {}
 
     def run(self) -> HRISFullUploadEngineResult:
         """
         Run full HRIS upload process.
         """
-        from hris.batch_uploader import HRISBatchUploader
         from hris.browser import HRISBrowserManager
         from hris.file_manager import HRISFileManager
         from hris.navigator import HRISNavigator
@@ -411,16 +414,10 @@ class HRISFullUploadEngine:
                 message="Overtime Upload Attendance page opened.",
             )
 
-            batch_uploader = HRISBatchUploader(
-                page=session.page,
-                manual_checkpoint_callback=self.manual_checkpoint_callback,
-            )
-
-            batch_result = batch_uploader.upload_batch(
+            batch_result = self._run_assisted_batch(
+                configuration=configuration,
                 upload_plan=upload_plan,
-                start_date=self.start_date,
-                end_date=self.end_date,
-                stop_on_first_failure=True,
+                page=session.page,
             )
 
             self.artifact_writer.update_summary_after_batch(
@@ -573,6 +570,7 @@ class HRISFullUploadEngine:
             error_message=error_message,
             traceback_text=traceback_text,
             stage=stage,
+            assisted_context=self._assisted_diagnostic_context,
         )
 
         self.artifact_writer.write_process_log(
@@ -581,3 +579,128 @@ class HRISFullUploadEngine:
         )
 
         return diagnostic_folder
+
+    def _run_assisted_batch(
+        self,
+        configuration: HRISConfiguration,
+        upload_plan: HRISUploadPlan,
+        page: object,
+    ) -> object:
+        """Run configured assisted steps while preserving batch result shape."""
+        from hris.assisted_replay import HRISAssistedReplayEngine
+        from hris.assisted_verifier import HRISAssistedResultVerifier
+        from hris.batch_uploader import HRISBatchUploader
+        from hris.click_profile import HRISClickProfileManager
+        from shared.config_manager import HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
+
+        post_upload_steps = [
+            step
+            for step in configuration.assisted_steps
+            if step.step_name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
+        ]
+
+        profile_path = HRISClickProfileManager.resolve_profile_path(configuration)
+        if not profile_path.exists():
+            raise FileNotFoundError(
+                f"HRIS click profile not found: {profile_path}. "
+                "Run Calibrate Click Profile first."
+            )
+        profile = HRISClickProfileManager.load_profile(profile_path)
+        self._assisted_diagnostic_context = {
+            "profile_path": str(profile_path),
+            "profile_validation_result": "NOT CHECKED",
+            "assisted_steps": [
+                {
+                    "sequence": step.sequence,
+                    "step_name": step.step_name,
+                    "action": step.action,
+                    "input_source": step.input_source,
+                    "method": step.method,
+                    "required": step.required,
+                }
+                for step in post_upload_steps
+            ],
+        }
+
+        if self._to_bool(
+            configuration.upload.get("Require_Profile_Match", True)
+        ):
+            import pyautogui
+
+            screen = pyautogui.size()
+            validation = HRISClickProfileManager.validate_profile(
+                profile,
+                (int(screen.width), int(screen.height)),
+                configuration.upload,
+                current_scale_percent=self._get_display_scale_percent(),
+                required_steps=post_upload_steps,
+            )
+            self._assisted_diagnostic_context[
+                "profile_validation_result"
+            ] = validation.message
+            if not validation.valid:
+                raise RuntimeError(
+                    f"HRIS click profile validation failed: {validation.message}"
+                )
+
+        replay = HRISAssistedReplayEngine(
+            configuration=configuration,
+            profile=profile,
+            page=page,
+            manual_recovery_callback=self.manual_checkpoint_callback,
+        )
+        verifier = HRISAssistedResultVerifier(
+            page=page,
+            configuration=configuration,
+            manual_callback=self.manual_verification_callback,
+        )
+
+        def run_post_upload_recorder(
+            item: object,
+            start_date: str,
+            end_date: str,
+        ) -> object:
+            result = replay.run_item(item, start_date, end_date)
+            self._assisted_diagnostic_context.update(replay.last_context)
+
+            if not result.success:
+                return result
+
+            verification = verifier.verify_item(item)
+            self._assisted_diagnostic_context[
+                "verification_status"
+            ] = verification.status
+            self._assisted_diagnostic_context[
+                "verification_message"
+            ] = verification.message
+            if verification.submitted:
+                result.message = verification.message
+                return result
+
+            result.success = False
+            result.message = verification.message
+            return result
+
+        batch_uploader = HRISBatchUploader(
+            page=page,
+            manual_checkpoint_callback=self.manual_checkpoint_callback,
+            post_upload_recorder_callback=run_post_upload_recorder,
+        )
+        return batch_uploader.upload_batch(
+            upload_plan=upload_plan,
+            start_date=self.start_date,
+            end_date=self.end_date,
+            stop_on_first_failure=True,
+        )
+
+    @staticmethod
+    def _to_bool(value: object) -> bool:
+        return str(value).strip().lower() in {"true", "1", "yes", "y"}
+
+    @staticmethod
+    def _get_display_scale_percent() -> int:
+        try:
+            import ctypes
+            return round(ctypes.windll.shcore.GetScaleFactorForDevice(0))
+        except Exception:
+            return 100
