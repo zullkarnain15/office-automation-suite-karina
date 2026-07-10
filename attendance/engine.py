@@ -472,6 +472,7 @@ class AttendanceHRISTXTWriter:
     """
 
     DEFAULT_MAX_ROWS_PER_FILE: int = 10000
+    MODULE_FOLDER_NAME: str = "Attendance"
 
     def write_txt_files(
         self,
@@ -495,10 +496,8 @@ class AttendanceHRISTXTWriter:
             job_id = self._create_job_id()
 
         output_folder = (
-            Path(output_root)
-            / workflow_label
+            self._run_folder(output_root, workflow_label, job_id)
             / "TXT"
-            / job_id
         )
 
         output_folder.mkdir(
@@ -543,6 +542,7 @@ class AttendanceHRISTXTWriter:
             file_name = self._create_txt_filename(
                 workflow_label,
                 file_index,
+                job_id,
             )
 
             file_path = output_folder / file_name
@@ -684,15 +684,63 @@ class AttendanceHRISTXTWriter:
     def _create_txt_filename(
         workflow_label: str,
         file_index: int,
+        job_id: str,
     ) -> str:
         """
         Create TXT filename.
 
         Example:
-        Attendance_HO_001.txt
-        Attendance_Branch_001.txt
+        Attendance_HO_001_153045.txt
+        Attendance_Branch_001_153045.txt
         """
-        return f"Attendance_{workflow_label}_{file_index:03d}.txt"
+        suffix = AttendanceHRISTXTWriter._job_id_time_suffix(job_id)
+        return f"Attendance_{workflow_label}_{file_index:03d}_{suffix}.txt"
+
+    @staticmethod
+    def _job_id_time_suffix(job_id: str) -> str:
+        """
+        Return HHMMSS suffix from a job ID when available.
+        """
+        parts = str(job_id).split("_")
+
+        if len(parts) >= 2 and parts[-1].isdigit():
+            return parts[-1]
+
+        return datetime.now().strftime("%H%M%S")
+
+    @classmethod
+    def _run_folder(
+        cls,
+        output_root: str | Path,
+        workflow_label: str,
+        job_id: str,
+    ) -> Path:
+        """
+        Return Attendance run folder: Attendance/Workflow/YYYY-MM-DD_XX.
+        """
+        return (
+            Path(output_root)
+            / cls.MODULE_FOLDER_NAME
+            / workflow_label
+            / cls._run_label(job_id)
+        )
+
+    @staticmethod
+    def _run_label(job_id: str) -> str:
+        """
+        Return run folder label from job ID.
+        """
+        parts = str(job_id).split("_")
+
+        if len(parts) >= 2 and len(parts[0]) == 8:
+            date_value = parts[0]
+            time_value = parts[-1]
+            return (
+                f"{date_value[0:4]}-{date_value[4:6]}-{date_value[6:8]}_"
+                f"{time_value[-2:] if time_value else '00'}"
+            )
+
+        return datetime.now().strftime("%Y-%m-%d_%S")
 
 class AttendanceExcelReportWriter:
     """
@@ -705,6 +753,7 @@ class AttendanceExcelReportWriter:
     4. Summary_Per_Hari
     5. Anomaly
     """
+    MODULE_FOLDER_NAME: str = "Attendance"
 
     def write_report(
         self,
@@ -728,10 +777,8 @@ class AttendanceExcelReportWriter:
 
         workflow_label = self._normalize_workflow(workflow)
         output_folder = (
-            Path(output_root)
-            / workflow_label
+            self._run_folder(output_root, workflow_label, job_id)
             / "Report"
-            / job_id
         )
 
         output_folder.mkdir(
@@ -740,7 +787,10 @@ class AttendanceExcelReportWriter:
         )
 
         if report_name is None:
-            report_name = f"Report_{job_id}.xlsx"
+            report_name = self._create_report_filename(
+                workflow_label=workflow_label,
+                job_id=job_id,
+            )
 
         report_path = output_folder / report_name
 
@@ -1137,6 +1187,63 @@ class AttendanceExcelReportWriter:
 
         raise ValueError("workflow must be 'HO' or 'Branch'.")
 
+    @staticmethod
+    def _create_report_filename(
+        workflow_label: str,
+        job_id: str,
+    ) -> str:
+        """
+        Create Excel report filename with HHMMSS suffix.
+        """
+        suffix = AttendanceExcelReportWriter._job_id_time_suffix(job_id)
+        return f"Export_Attendance_{workflow_label}_{suffix}.xlsx"
+
+    @staticmethod
+    def _job_id_time_suffix(job_id: str) -> str:
+        """
+        Return HHMMSS suffix from a job ID when available.
+        """
+        parts = str(job_id).split("_")
+
+        if len(parts) >= 2 and parts[-1].isdigit():
+            return parts[-1]
+
+        return datetime.now().strftime("%H%M%S")
+
+    @classmethod
+    def _run_folder(
+        cls,
+        output_root: str | Path,
+        workflow_label: str,
+        job_id: str,
+    ) -> Path:
+        """
+        Return Attendance run folder: Attendance/Workflow/YYYY-MM-DD_XX.
+        """
+        return (
+            Path(output_root)
+            / cls.MODULE_FOLDER_NAME
+            / workflow_label
+            / cls._run_label(job_id)
+        )
+
+    @staticmethod
+    def _run_label(job_id: str) -> str:
+        """
+        Return run folder label from job ID.
+        """
+        parts = str(job_id).split("_")
+
+        if len(parts) >= 2 and len(parts[0]) == 8:
+            date_value = parts[0]
+            time_value = parts[-1]
+            return (
+                f"{date_value[0:4]}-{date_value[4:6]}-{date_value[6:8]}_"
+                f"{time_value[-2:] if time_value else '00'}"
+            )
+
+        return datetime.now().strftime("%Y-%m-%d_%S")
+
 class AttendanceProcessEngine:
     """
     End-to-end Attendance process engine.
@@ -1385,8 +1492,9 @@ class AttendanceRunArtifactWriter:
     for each Attendance run.
 
     Output location:
-    output_root / workflow / Report / job_id
+    output_root / Attendance / workflow / YYYY-MM-DD_XX
     """
+    MODULE_FOLDER_NAME: str = "Attendance"
 
     def write_artifacts(
         self,
@@ -1400,11 +1508,10 @@ class AttendanceRunArtifactWriter:
         """
         workflow_label = self._normalize_workflow(workflow)
 
-        artifact_folder = (
-            Path(output_root)
-            / workflow_label
-            / "Report"
-            / job_id
+        artifact_folder = self._run_folder(
+            output_root,
+            workflow_label,
+            job_id,
         )
 
         artifact_folder.mkdir(
@@ -1412,8 +1519,8 @@ class AttendanceRunArtifactWriter:
             exist_ok=True,
         )
 
-        process_log_path = artifact_folder / f"Process_{job_id}.txt"
-        summary_json_path = artifact_folder / f"summary_{job_id}.json"
+        process_log_path = artifact_folder / "Process.log"
+        summary_json_path = artifact_folder / "summary.json"
 
         self._write_process_log(
             file_path=process_log_path,
@@ -1625,6 +1732,40 @@ class AttendanceRunArtifactWriter:
             return ""
 
         return str(value)
+
+    @classmethod
+    def _run_folder(
+        cls,
+        output_root: str | Path,
+        workflow_label: str,
+        job_id: str,
+    ) -> Path:
+        """
+        Return Attendance run folder: Attendance/Workflow/YYYY-MM-DD_XX.
+        """
+        return (
+            Path(output_root)
+            / cls.MODULE_FOLDER_NAME
+            / workflow_label
+            / cls._run_label(job_id)
+        )
+
+    @staticmethod
+    def _run_label(job_id: str) -> str:
+        """
+        Return run folder label from job ID.
+        """
+        parts = str(job_id).split("_")
+
+        if len(parts) >= 2 and len(parts[0]) == 8:
+            date_value = parts[0]
+            time_value = parts[-1]
+            return (
+                f"{date_value[0:4]}-{date_value[4:6]}-{date_value[6:8]}_"
+                f"{time_value[-2:] if time_value else '00'}"
+            )
+
+        return datetime.now().strftime("%Y-%m-%d_%S")
 
     @staticmethod
     def _normalize_workflow(workflow: str) -> str:
