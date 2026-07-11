@@ -14,7 +14,7 @@ Sprint 6.9:
 - Create HRIS job folder structure
 - Create Upload folder
 - Create Failed folder
-- Create Report/<JOB_ID> folder
+- Create Report/YYYYMMDD_HHMMSS folder
 - Create Upload_Process_<JOB_ID>.txt
 - Create Upload_Summary_<JOB_ID>.json
 
@@ -86,7 +86,7 @@ class HRISJobArtifactWriter:
         upload_folder = workflow_root / "Upload"
         failed_folder = workflow_root / "Failed"
         report_root = workflow_root / "Report"
-        job_report_folder = report_root / job_id
+        job_report_folder = report_root / self._job_folder_name(job_id)
 
         process_log_file = job_report_folder / f"Upload_Process_{job_id}.txt"
         summary_json_file = job_report_folder / f"Upload_Summary_{job_id}.json"
@@ -390,6 +390,23 @@ class HRISJobArtifactWriter:
             item_dict["txt_file_path"] = str(item_dict["txt_file_path"])
 
         return item_dict
+
+    @staticmethod
+    def _job_folder_name(job_id: str) -> str:
+        """Return timestamp-only folder name while preserving the full job ID."""
+        value = str(job_id).strip()
+        parts = value.split("_")
+
+        if (
+            len(parts) >= 2
+            and len(parts[-2]) == 8
+            and parts[-2].isdigit()
+            and len(parts[-1]) == 6
+            and parts[-1].isdigit()
+        ):
+            return f"{parts[-2]}_{parts[-1]}"
+
+        return value
 
     @staticmethod
     def _normalize_workflow(workflow: str) -> str:

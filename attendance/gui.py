@@ -69,6 +69,8 @@ APP_ACCENT_HOVER = "#123B63"
 APP_SUCCESS = "#43A58F"
 APP_SUCCESS_ACTIVE = "#2E8775"
 APP_SUCCESS_BORDER = "#247363"
+WORKFLOW_ACCENT = "#B45309"
+WORKFLOW_ACCENT_HOVER = "#92400E"
 APP_LOG_BG = "#24384C"
 APP_LOG_FG = "#F4F7FB"
 APP_SOFT_ACCENT = "#DDF3F3"
@@ -84,7 +86,7 @@ class AttendanceGUI:
     def __init__(self, master: tk.Toplevel) -> None:
         self.master = master
 
-        self.master.title("Attendance Module")
+        self.master.title("OAS-K | Attendance Module - by ZSH")
         self.master.geometry("1180x700")
         self.master.minsize(1000, 650)
         self.master.configure(bg=APP_BACKGROUND)
@@ -104,6 +106,7 @@ class AttendanceGUI:
         self._create_widgets()
         self._apply_widget_theme(self.master)
         self._style_primary_action()
+        self._update_workflow_selector()
 
     # =====================================================
     # GUI
@@ -380,33 +383,38 @@ class AttendanceGUI:
             padx=(0, 8),
         )
 
-        tk.Radiobutton(
-            workflow_frame,
-            text="Head Office (HO)",
-            variable=self.workflow_var,
-            value="HO",
-            font=DEFAULT_FONT,
-            command=self.update_workflow_status,
-        ).grid(
+        workflow_selector = tk.Frame(workflow_frame)
+        workflow_selector.grid(
             row=0,
             column=0,
-            sticky="w",
+            columnspan=2,
+            sticky="ew",
             padx=5,
         )
+        workflow_selector.columnconfigure(0, weight=1, uniform="workflow")
+        workflow_selector.columnconfigure(1, weight=1, uniform="workflow")
 
-        tk.Radiobutton(
-            workflow_frame,
-            text="Branch",
-            variable=self.workflow_var,
-            value="Branch",
-            font=DEFAULT_FONT,
-            command=self.update_workflow_status,
-        ).grid(
-            row=0,
-            column=1,
-            sticky="w",
-            padx=20,
-        )
+        self.workflow_buttons: dict[str, tk.Button] = {}
+
+        for column, (value, label) in enumerate(
+            (("HO", "Head Office (HO)"), ("Branch", "Branch"))
+        ):
+            button = tk.Button(
+                workflow_selector,
+                text=label,
+                font=BUTTON_FONT,
+                command=lambda selected=value: self._select_workflow(selected),
+                padx=8,
+                pady=2,
+                takefocus=True,
+            )
+            button.grid(
+                row=0,
+                column=column,
+                sticky="ew",
+                padx=(0, 4) if column == 0 else (4, 0),
+            )
+            self.workflow_buttons[value] = button
 
         self.workflow_status_label = tk.Label(
             workflow_frame,
@@ -801,8 +809,44 @@ class AttendanceGUI:
             text = "Selected Workflow : Branch"
 
         self.workflow_status_label.config(text=text)
+        self._update_workflow_selector()
 
         self.append_log(text)
+
+    def _select_workflow(self, workflow: str) -> None:
+        """Select a workflow from the compact card selector."""
+
+        self.workflow_var.set(workflow)
+        self.update_workflow_status()
+
+    def _update_workflow_selector(self) -> None:
+        """Refresh workflow button colors and selected marker."""
+
+        selected_workflow = self.workflow_var.get()
+        labels = {
+            "HO": "Head Office (HO)",
+            "Branch": "Branch",
+        }
+
+        for workflow, button in self.workflow_buttons.items():
+            selected = workflow == selected_workflow
+            button.config(
+                text=("\u2713 " if selected else "") + labels[workflow],
+                bg=WORKFLOW_ACCENT if selected else APP_INPUT,
+                fg="#FFFFFF" if selected else APP_TEXT,
+                activebackground=(
+                    WORKFLOW_ACCENT_HOVER if selected else APP_SOFT_ACCENT
+                ),
+                activeforeground="#FFFFFF" if selected else APP_TEXT,
+                relief="solid",
+                bd=1,
+                highlightthickness=1,
+                highlightbackground=(
+                    WORKFLOW_ACCENT if selected else APP_BORDER
+                ),
+                highlightcolor=WORKFLOW_ACCENT,
+                cursor="hand2",
+            )
 
     def generate(self) -> None:
         """Validate input and run Attendance Process Engine."""

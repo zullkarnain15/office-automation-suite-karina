@@ -107,7 +107,7 @@ class OutlookAttachmentParser:
             }
 
             for row_number, row in enumerate(rows[header_index + 1:], header_index + 2):
-                if not row or not any(self._to_text(value) for value in row):
+                if self._is_empty_ho_data_row(row, column_map):
                     continue
 
                 record = self._record_from_values(
@@ -130,6 +130,42 @@ class OutlookAttachmentParser:
                 pass
 
         return ParseResult(records, errors)
+
+    @classmethod
+    def _is_empty_ho_data_row(
+        cls,
+        row: tuple[Any, ...],
+        column_map: dict[str, int],
+    ) -> bool:
+        """Ignore unused template rows whose formulas evaluate to 0/00:00."""
+        if not row:
+            return True
+
+        values = [
+            cls._value_at(row, column_map[column])
+            for column in REQUIRED_HO_COLUMNS
+        ]
+        return all(cls._is_empty_template_value(value) for value in values)
+
+    @staticmethod
+    def _is_empty_template_value(value: Any) -> bool:
+        if value is None or not str(value).strip():
+            return True
+
+        if isinstance(value, (int, float)) and value == 0:
+            return True
+
+        if (
+            hasattr(value, "hour")
+            and hasattr(value, "minute")
+            and not isinstance(value, datetime)
+            and value.hour == 0
+            and value.minute == 0
+            and getattr(value, "second", 0) == 0
+        ):
+            return True
+
+        return False
 
     def parse_branch_txt(self, path: Path) -> ParseResult:
         """Parse Branch TXT attachment with six comma-separated columns."""
@@ -330,7 +366,8 @@ class OutlookTxtWriter:
         output_folder: str | Path,
         workflow: str,
         max_lines: int,
-        prefix: str = "Attendance_Revisi",
+        job_id: str,
+        prefix: str = "Outlook_Revisi",
     ) -> list[Path]:
         """Write records into one or more TXT files."""
         if not records:
@@ -340,12 +377,15 @@ class OutlookTxtWriter:
         output_path.mkdir(parents=True, exist_ok=True)
         workflow_label = OutlookAttachmentParser._normalize_workflow(workflow)
         safe_prefix = f"{prefix}_{workflow_label or workflow}"
+        date_suffix = str(job_id).split("_", maxsplit=1)[0]
         limit = max(max_lines, 1)
         files: list[Path] = []
 
         for chunk_index, start in enumerate(range(0, len(records), limit), 1):
             chunk = records[start:start + limit]
-            file_path = output_path / f"{safe_prefix}_{chunk_index:02d}.txt"
+            file_path = output_path / (
+                f"{safe_prefix}_{chunk_index:03d}_{date_suffix}.txt"
+            )
 
             with file_path.open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.writer(

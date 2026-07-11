@@ -358,8 +358,32 @@ ADD_ATTACHMENT_CLICK_SCRIPT = r"""
     return (value || "").replace(/\s+/g, " ").trim();
   }
 
+  const exactButton = document.querySelector(
+    'input#IDOT_UPLOAD_ATT_ATTACHADD, input[name="IDOT_UPLOAD_ATT_ATTACHADD"]'
+  );
+
+  if (isVisible(exactButton) && !exactButton.disabled) {
+    if (typeof window.submitAction_win0 === "function" && document.win0) {
+      window.submitAction_win0(
+        document.win0,
+        "IDOT_UPLOAD_ATT_ATTACHADD",
+        new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+        })
+      );
+      return true;
+    }
+
+    exactButton.click();
+    return true;
+  }
+
+  // Do not include wrapper a/span/div elements: PeopleSoft renders the
+  // button text inside wrappers that have no action ID.
   const candidates = Array.from(document.querySelectorAll(
-    'input, button, a, span, div'
+    'input[type="button"], input[type="submit"], button'
   )).filter(isVisible);
 
   const addButton = candidates.find((element) => {
@@ -379,8 +403,21 @@ ADD_ATTACHMENT_CLICK_SCRIPT = r"""
     return false;
   }
 
+  const actionId = addButton.id || addButton.name;
+  if (!actionId) {
+    return false;
+  }
+
   if (typeof window.submitAction_win0 === "function" && document.win0) {
-    window.submitAction_win0(document.win0, addButton.id || addButton.name, new Event("click"));
+    window.submitAction_win0(
+      document.win0,
+      actionId,
+      new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+      })
+    );
     return true;
   }
 
@@ -617,22 +654,58 @@ class HRISUploadPageHandler:
         if self._is_upload_form_ready():
             return
 
-        field = self._find_first_visible_locator(
-            [
+        exact_selectors = [
+            "#PRCSRUNCNTL_RUN_CNTL_ID",
+            "[name='PRCSRUNCNTL_RUN_CNTL_ID']",
+        ]
+
+        try:
+            field = self._find_first_visible_locator(
+                exact_selectors,
+                timeout=3_000,
+            )
+            logger.info(
+                "Run Control ID field found using exact PeopleSoft locator."
+            )
+        except Exception:
+            logger.info(
+                "Exact Run Control ID locator unavailable; using broad DOM fallback."
+            )
+            field = self._find_first_visible_locator(
+                [
                 "#PRCSRUNCNTL_RUN_CNTL_ID",
                 "[name='PRCSRUNCNTL_RUN_CNTL_ID']",
                 "input[id*='RUN_CNTL_ID']",
                 "input[name*='RUN_CNTL_ID']",
                 "#run_control_id",
-            ],
-            fallback_handle_script=RUN_CONTROL_TEXTBOX_SCRIPT,
-        )
+                ],
+                fallback_handle_script=RUN_CONTROL_TEXTBOX_SCRIPT,
+            )
+
         field.wait_for(state="visible", timeout=10_000)
         field.focus()
         field.fill(run_control_id)
+        self._assert_field_value(
+            field,
+            run_control_id,
+            "Run Control ID",
+        )
+        logger.info("Run Control ID filled and verified: %s", run_control_id)
 
         if self._is_upload_form_ready():
             return
+
+        # The real PeopleSoft field calls the Search button from its keydown
+        # handler. Enter is faster and avoids another broad button lookup.
+        field.press("Enter")
+        try:
+            self._wait_for_upload_form_ready(timeout=8_000)
+            logger.info("Run Control search submitted using Enter.")
+            return
+        except Exception:
+            logger.info(
+                "Run Control Enter did not open the upload form; using Search fallback."
+            )
 
         search_button = self._find_first_visible_locator(
             [
@@ -819,10 +892,12 @@ class HRISUploadPageHandler:
         Click Add Attachment and wait for the PeopleSoft attachment dialog.
         """
         click_attempts = [
+            # Re-find the exact input in every frame before using a possibly
+            # stale locator left behind by a PeopleSoft partial refresh.
+            lambda: self._click_add_attachment_with_script(timeout_seconds=5),
             lambda: self._click_visible_locator(add_attachment_button),
             lambda: add_attachment_button.click(force=True, timeout=5_000),
             lambda: self._click_visible_locator_by_mouse(add_attachment_button),
-            lambda: self._click_add_attachment_with_script(timeout_seconds=5),
         ]
 
         for click_attempt in click_attempts:

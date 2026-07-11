@@ -716,7 +716,7 @@ class AttendanceHRISTXTWriter:
         job_id: str,
     ) -> Path:
         """
-        Return Attendance run folder: Attendance/Workflow/YYYY-MM-DD_XX.
+        Return Attendance run folder: Attendance/Workflow/YYYYMMDD_HHMMSS.
         """
         return (
             Path(output_root)
@@ -730,17 +730,18 @@ class AttendanceHRISTXTWriter:
         """
         Return run folder label from job ID.
         """
-        parts = str(job_id).split("_")
+        parts = str(job_id).strip().split("_")
 
-        if len(parts) >= 2 and len(parts[0]) == 8:
-            date_value = parts[0]
-            time_value = parts[-1]
-            return (
-                f"{date_value[0:4]}-{date_value[4:6]}-{date_value[6:8]}_"
-                f"{time_value[-2:] if time_value else '00'}"
-            )
+        if (
+            len(parts) >= 2
+            and len(parts[0]) == 8
+            and parts[0].isdigit()
+            and len(parts[1]) == 6
+            and parts[1].isdigit()
+        ):
+            return f"{parts[0]}_{parts[1]}"
 
-        return datetime.now().strftime("%Y-%m-%d_%S")
+        return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 class AttendanceExcelReportWriter:
     """
@@ -1218,7 +1219,7 @@ class AttendanceExcelReportWriter:
         job_id: str,
     ) -> Path:
         """
-        Return Attendance run folder: Attendance/Workflow/YYYY-MM-DD_XX.
+        Return Attendance run folder: Attendance/Workflow/YYYYMMDD_HHMMSS.
         """
         return (
             Path(output_root)
@@ -1232,17 +1233,18 @@ class AttendanceExcelReportWriter:
         """
         Return run folder label from job ID.
         """
-        parts = str(job_id).split("_")
+        parts = str(job_id).strip().split("_")
 
-        if len(parts) >= 2 and len(parts[0]) == 8:
-            date_value = parts[0]
-            time_value = parts[-1]
-            return (
-                f"{date_value[0:4]}-{date_value[4:6]}-{date_value[6:8]}_"
-                f"{time_value[-2:] if time_value else '00'}"
-            )
+        if (
+            len(parts) >= 2
+            and len(parts[0]) == 8
+            and parts[0].isdigit()
+            and len(parts[1]) == 6
+            and parts[1].isdigit()
+        ):
+            return f"{parts[0]}_{parts[1]}"
 
-        return datetime.now().strftime("%Y-%m-%d_%S")
+        return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 class AttendanceProcessEngine:
     """
@@ -1492,7 +1494,7 @@ class AttendanceRunArtifactWriter:
     for each Attendance run.
 
     Output location:
-    output_root / Attendance / workflow / YYYY-MM-DD_XX
+    output_root / Attendance / workflow / YYYYMMDD_HHMMSS
     """
     MODULE_FOLDER_NAME: str = "Attendance"
 
@@ -1741,7 +1743,7 @@ class AttendanceRunArtifactWriter:
         job_id: str,
     ) -> Path:
         """
-        Return Attendance run folder: Attendance/Workflow/YYYY-MM-DD_XX.
+        Return Attendance run folder: Attendance/Workflow/YYYYMMDD_HHMMSS.
         """
         return (
             Path(output_root)
@@ -1755,17 +1757,18 @@ class AttendanceRunArtifactWriter:
         """
         Return run folder label from job ID.
         """
-        parts = str(job_id).split("_")
+        parts = str(job_id).strip().split("_")
 
-        if len(parts) >= 2 and len(parts[0]) == 8:
-            date_value = parts[0]
-            time_value = parts[-1]
-            return (
-                f"{date_value[0:4]}-{date_value[4:6]}-{date_value[6:8]}_"
-                f"{time_value[-2:] if time_value else '00'}"
-            )
+        if (
+            len(parts) >= 2
+            and len(parts[0]) == 8
+            and parts[0].isdigit()
+            and len(parts[1]) == 6
+            and parts[1].isdigit()
+        ):
+            return f"{parts[0]}_{parts[1]}"
 
-        return datetime.now().strftime("%Y-%m-%d_%S")
+        return datetime.now().strftime("%Y%m%d_%H%M%S")
 
     @staticmethod
     def _normalize_workflow(workflow: str) -> str:

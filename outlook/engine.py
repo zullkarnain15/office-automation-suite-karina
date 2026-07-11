@@ -37,6 +37,7 @@ class OutlookProcessMessageResult:
     status: str
     errors: list[str]
     output_files: list[Path]
+    reply_sent: bool
 
 
 @dataclass(slots=True)
@@ -48,6 +49,8 @@ class OutlookProcessResult:
     output_folder: Path
     report_folder: Path
     total_email: int
+    target_email: int
+    skipped_other_workflow: int
     success_email: int
     failed_email: int
     output_txt_count: int
@@ -62,11 +65,13 @@ class OutlookRevisiEngine:
     def __init__(
         self,
         configuration_file: str | Path,
+        workflow: str,
         dry_run: bool = True,
         message_limit: int | None = None,
         client: OutlookComClient | None = None,
     ) -> None:
         self.configuration_file = Path(configuration_file)
+        self.workflow = self._normalize_workflow(workflow)
         self.dry_run = dry_run
         self.message_limit = message_limit
         self.client = client
@@ -78,16 +83,17 @@ class OutlookRevisiEngine:
         configuration = OutlookRevisiConfigurationReader(
             self.configuration_file
         ).read()
-        job_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_root = configuration.get_output_root()
 
         if output_root is None:
             raise ValueError("Output_Root is required in Outlook configuration.")
 
-        attachments_folder = output_root / "_attachments" / job_id
-        report_folder = output_root / "Report" / job_id
-        report_folder.mkdir(parents=True, exist_ok=True)
-        attachments_folder.mkdir(parents=True, exist_ok=True)
+        job_id, job_folder = self._reserve_job_folder(output_root, self.workflow)
+        attachments_folder = job_folder / "Attachments"
+        txt_folder = job_folder / "TXT"
+        report_folder = job_folder / "Report"
+        for folder in (attachments_folder, txt_folder, report_folder):
+            folder.mkdir(exist_ok=False)
 
         client = self.client or OutlookComClient(
             mailbox_smtp=str(configuration.general.get("Mailbox_SMTP", "")),
@@ -101,8 +107,14 @@ class OutlookRevisiEngine:
         messages = client.fetch_messages(
             attachment_folder=attachments_folder,
             limit=self.message_limit,
+            message_filter=lambda message: bool(
+                self._detect_message_workflow(configuration, message)
+            ),
+            attachment_filter=lambda message: self._detect_message_workflow(
+                configuration, message
+            ) == self.workflow,
         )
-        history = self._load_history(output_root)
+        history = self._load_history(output_root, self.workflow)
         message_results: list[OutlookProcessMessageResult] = []
 
         for message in messages:
@@ -114,50 +126,101 @@ class OutlookRevisiEngine:
                 configuration=configuration,
                 client=client,
                 message=message,
-                output_root=output_root,
-                job_id=job_id,
+                job_folder=job_folder,
             )
             message_results.append(result)
 
-            if result.status == "SUCCESS":
+            if result.status == "SUCCESS" and result.reply_sent:
                 history.add(self._message_key(message))
 
-        self._save_history(output_root, history)
+        self._save_history(output_root, self.workflow, history)
 
         success_count = sum(1 for item in message_results if item.status == "SUCCESS")
-        failed_count = sum(1 for item in message_results if item.status != "SUCCESS")
+        failed_count = sum(1 for item in message_results if item.status == "FAILED")
+        skipped_count = sum(
+            1 for item in message_results
+            if item.status == "SKIPPED_OTHER_WORKFLOW"
+        )
         output_txt_count = sum(len(item.output_files) for item in message_results)
         result = OutlookProcessResult(
             success=failed_count == 0,
             job_id=job_id,
-            output_folder=output_root,
+            output_folder=job_folder,
             report_folder=report_folder,
             total_email=len(message_results),
+            target_email=len(message_results) - skipped_count,
+            skipped_other_workflow=skipped_count,
             success_email=success_count,
             failed_email=failed_count,
             output_txt_count=output_txt_count,
             message_results=message_results,
-            process_log=report_folder / f"Outlook_Revisi_Process_{job_id}.txt",
-            summary_json=report_folder / f"Outlook_Revisi_Summary_{job_id}.json",
+            process_log=job_folder / "Process.log",
+            summary_json=job_folder / "summary.json",
         )
 
         self._write_artifacts(result)
         self._send_summary(configuration, client, result)
         return result
 
+    @staticmethod
+    def _reserve_job_folder(
+        output_root: Path,
+        workflow: str,
+    ) -> tuple[str, Path]:
+        """Reserve Output_Root/workflow/YYYYMMDD_HHMMSS atomically."""
+        workflow_label = OutlookRevisiEngine._normalize_workflow(workflow)
+        base_job_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        workflow_root = output_root / workflow_label
+
+        for sequence in range(1, 1000):
+            job_id = (
+                base_job_id
+                if sequence == 1
+                else f"{base_job_id}_{sequence:02d}"
+            )
+            job_folder = workflow_root / job_id
+
+            try:
+                job_folder.mkdir(parents=True, exist_ok=False)
+            except FileExistsError:
+                continue
+
+            return job_id, job_folder
+
+        raise RuntimeError(
+            f"Unable to reserve a unique Outlook job folder in {workflow_root}"
+        )
+
     def _process_message(
         self,
         configuration: OutlookRevisiConfiguration,
         client: OutlookComClient,
         message: OutlookMessage,
-        output_root: Path,
-        job_id: str,
+        job_folder: Path,
     ) -> OutlookProcessMessageResult:
         errors: list[str] = []
-        workflow = ""
+        detected_workflow = self._detect_message_workflow(configuration, message)
         output_files: list[Path] = []
 
-        sender = self._match_sender(configuration, message.sender_email)
+        if detected_workflow != self.workflow:
+            logger.info(
+                "Skipped email: %s | Reason: Email belongs to %s workflow",
+                message.subject,
+                detected_workflow or "another",
+            )
+            return OutlookProcessMessageResult(
+                entry_id=message.entry_id,
+                subject=message.subject,
+                sender_email=message.sender_email,
+                workflow=detected_workflow,
+                status="SKIPPED_OTHER_WORKFLOW",
+                errors=["Email belongs to another workflow."],
+                output_files=[],
+                reply_sent=False,
+            )
+
+        workflow = self.workflow
+        sender = self._match_sender(configuration, message.sender_email, workflow)
         if sender is None:
             errors.append("Sender is not registered in sender master.")
         else:
@@ -166,8 +229,11 @@ class OutlookRevisiEngine:
         if sender is not None:
             missing_cc = self._missing_required_cc(sender.required_cc_email, message.cc)
             if missing_cc:
+                actual_cc = message.cc or "(none)"
                 errors.append(
-                    "Required CC email is missing: " + "; ".join(missing_cc)
+                    "Required CC email is missing: "
+                    + "; ".join(missing_cc)
+                    + f". Actual CC resolved: {actual_cc}"
                 )
 
         if sender is not None and not self._subject_matches(
@@ -196,16 +262,16 @@ class OutlookRevisiEngine:
                 errors.append("No valid attendance rows found in attachment.")
 
         if not errors:
-            output_folder = self._workflow_output_folder(output_root, workflow, job_id)
             max_lines = self._to_int(
                 configuration.general.get("TXT_Max_Lines"),
                 default=10000,
             )
             output_files = self.writer.write(
                 records=records,
-                output_folder=output_folder,
+                output_folder=job_folder / "TXT",
                 workflow=workflow,
                 max_lines=max_lines,
+                job_id=job_folder.name,
             )
 
         status = "SUCCESS" if not errors else "FAILED"
@@ -217,11 +283,14 @@ class OutlookRevisiEngine:
             status=status,
             errors=errors,
             output_files=output_files,
+            reply_sent=False,
         )
 
-        self._send_message_reply(configuration, client, message, result)
+        result.reply_sent = self._send_message_reply(
+            configuration, client, message, result
+        )
 
-        if status == "SUCCESS" and not self.dry_run:
+        if status == "SUCCESS" and result.reply_sent:
             processed_folder = str(
                 configuration.general.get("Processed_Folder", "Deleted Items")
             )
@@ -233,16 +302,46 @@ class OutlookRevisiEngine:
         self,
         configuration: OutlookRevisiConfiguration,
         sender_email: str,
+        workflow: str,
     ) -> OutlookSenderConfig | None:
         sender_email_lower = sender_email.strip().lower()
+        senders = (
+            configuration.ho_senders
+            if workflow == "HO"
+            else configuration.branch_senders
+        )
 
-        for sender in configuration.ho_senders + configuration.branch_senders:
+        for sender in senders:
             if not sender.sender_email:
                 continue
             if sender.sender_email.strip().lower() == sender_email_lower:
                 return sender
 
         return None
+
+    def _detect_message_workflow(
+        self,
+        configuration: OutlookRevisiConfiguration,
+        message: OutlookMessage,
+    ) -> str:
+        """Classify before validation so other workflows can be safely skipped."""
+        for workflow, senders in (
+            ("HO", configuration.ho_senders),
+            ("Branch", configuration.branch_senders),
+        ):
+            if any(
+                self._subject_matches(
+                    configuration, workflow, message.subject, sender
+                )
+                for sender in senders
+            ):
+                return workflow
+
+        for workflow in ("HO", "Branch"):
+            if self._match_sender(configuration, message.sender_email, workflow):
+                return workflow
+
+        return ""
 
     def _missing_required_cc(
         self,
@@ -331,14 +430,14 @@ class OutlookRevisiEngine:
         client: OutlookComClient,
         message: OutlookMessage,
         result: OutlookProcessMessageResult,
-    ) -> None:
+    ) -> bool:
         if self._to_bool(configuration.general.get("Auto_Reply_Enabled")) is False:
-            return
+            return False
 
         template = self._select_reply_template(configuration, result)
         if template is None:
             logger.warning("Reply template not found for result: %s", result.status)
-            return
+            return False
 
         values = self._template_values(configuration, message, result)
         subject = self._render_template(template.subject_template, values)
@@ -347,7 +446,7 @@ class OutlookRevisiEngine:
 
         if self.dry_run:
             logger.info("Dry-run reply skipped: %s", subject)
-            return
+            return False
 
         client.send_reply(
             message=message,
@@ -355,6 +454,7 @@ class OutlookRevisiEngine:
             body=body,
             send_mode=send_mode,
         )
+        return send_mode.strip().upper() == "SEND"
 
     def _send_summary(
         self,
@@ -425,11 +525,20 @@ class OutlookRevisiEngine:
         message: OutlookMessage,
         result: OutlookProcessMessageResult,
     ) -> dict[str, str]:
+        sender = (
+            self._match_sender(
+                configuration,
+                message.sender_email,
+                result.workflow,
+            )
+            if result.workflow in ("HO", "Branch")
+            else None
+        )
         return {
             "SENDER_NAME": message.sender_name,
             "PERIOD": str(configuration.general.get("Payroll_Period", "")),
             "ORIGINAL_SUBJECT": message.subject,
-            "REQUIRED_CC_EMAIL": "",
+            "REQUIRED_CC_EMAIL": sender.required_cc_email if sender else "",
             "RESUBMIT_DEADLINE": str(
                 configuration.general.get("Resubmit_Deadline", "")
             ),
@@ -445,6 +554,8 @@ class OutlookRevisiEngine:
             f"Job ID       : {result.job_id}",
             f"Output Folder: {result.output_folder}",
             f"Total Email  : {result.total_email}",
+            f"Target Email : {result.target_email}",
+            f"Skipped Other: {result.skipped_other_workflow}",
             f"Success      : {result.success_email}",
             f"Failed       : {result.failed_email}",
             "",
@@ -467,6 +578,8 @@ class OutlookRevisiEngine:
                     "output_folder": str(result.output_folder),
                     "report_folder": str(result.report_folder),
                     "total_email": result.total_email,
+                    "target_email": result.target_email,
+                    "skipped_other_workflow": result.skipped_other_workflow,
                     "success_email": result.success_email,
                     "failed_email": result.failed_email,
                     "output_txt_count": result.output_txt_count,
@@ -482,6 +595,7 @@ class OutlookRevisiEngine:
                                 str(output_file)
                                 for output_file in item.output_files
                             ],
+                            "reply_sent": item.reply_sent,
                         }
                         for item in result.message_results
                     ],
@@ -490,16 +604,6 @@ class OutlookRevisiEngine:
             ),
             encoding="utf-8",
         )
-
-    def _workflow_output_folder(
-        self,
-        output_root: Path,
-        workflow: str,
-        job_id: str,
-    ) -> Path:
-        date_label = datetime.now().strftime("%Y-%m-%d")
-        suffix = job_id[-2:]
-        return output_root / workflow / f"{date_label}_{suffix}"
 
     def _message_key(self, message: OutlookMessage) -> str:
         if message.entry_id:
@@ -515,8 +619,8 @@ class OutlookRevisiEngine:
             ]
         )
 
-    def _load_history(self, output_root: Path) -> set[str]:
-        path = self._history_path(output_root)
+    def _load_history(self, output_root: Path, workflow: str) -> set[str]:
+        path = self._history_path(output_root, workflow)
         if not path.exists():
             return set()
 
@@ -527,8 +631,13 @@ class OutlookRevisiEngine:
             logger.warning("Runtime history could not be read: %s", path)
             return set()
 
-    def _save_history(self, output_root: Path, history: set[str]) -> None:
-        path = self._history_path(output_root)
+    def _save_history(
+        self,
+        output_root: Path,
+        workflow: str,
+        history: set[str],
+    ) -> None:
+        path = self._history_path(output_root, workflow)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(
@@ -539,8 +648,18 @@ class OutlookRevisiEngine:
         )
 
     @staticmethod
-    def _history_path(output_root: Path) -> Path:
-        return output_root / "Report" / "runtime_history.json"
+    def _history_path(output_root: Path, workflow: str) -> Path:
+        workflow_label = OutlookRevisiEngine._normalize_workflow(workflow)
+        return output_root / workflow_label / "runtime_history.json"
+
+    @staticmethod
+    def _normalize_workflow(workflow: str) -> str:
+        normalized = str(workflow or "").strip().lower()
+        if normalized == "ho":
+            return "HO"
+        if normalized == "branch":
+            return "Branch"
+        raise ValueError("workflow must be 'HO' or 'Branch'.")
 
     @staticmethod
     def _attachment_rule(
@@ -561,7 +680,7 @@ class OutlookRevisiEngine:
             escaped = escaped.replace(placeholder, re.escape(value))
 
         escaped = re.sub(r"\\\{[A-Z_]+\\\}", r".+", escaped)
-        return escaped
+        return rf"^\s*{escaped}\s*$"
 
     @staticmethod
     def _render_template(template: str, values: dict[str, str]) -> str:

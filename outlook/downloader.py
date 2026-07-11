@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from typing import Callable
 
 from shared.logger import get_logger
 
@@ -64,16 +65,41 @@ class OutlookComClient:
                 "Install dependency first: py -m pip install pywin32"
             ) from error
 
-        self._outlook = win32com.client.Dispatch("Outlook.Application")
-        self._namespace = self._outlook.GetNamespace("MAPI")
+        try:
+            self._outlook = win32com.client.Dispatch("Outlook.Application")
+            self._namespace = self._outlook.GetNamespace("MAPI")
+        except Exception as error:
+            error_code = getattr(error, "hresult", None)
+            if error_code is None and getattr(error, "args", None):
+                error_code = error.args[0]
+
+            # REGDB_E_CLASSNOTREG. This commonly happens when only New Outlook
+            # is available, or when an Outlook Classic installation has lost
+            # its COM registration.
+            if error_code == -2147221005:
+                raise RuntimeError(
+                    "Outlook Classic tidak terdaftar untuk COM automation. "
+                    "New Outlook tidak mendukung fitur ini. Pastikan Outlook "
+                    "Classic terpasang, lalu jalankan Repair Microsoft 365 "
+                    "atau daftarkan ulang Outlook Classic, dan buka Outlook "
+                    "sekali sebelum mencoba kembali."
+                ) from error
+
+            raise RuntimeError(
+                "Tidak dapat membuka Outlook Classic melalui COM automation. "
+                "Pastikan Outlook Classic sudah terbuka dan profil email "
+                "dapat diakses. Detail: " + str(error)
+            ) from error
         logger.info("Connected to Outlook COM.")
 
     def fetch_messages(
         self,
         attachment_folder: str | Path,
         limit: int | None = None,
+        message_filter: Callable[[OutlookMessage], bool] | None = None,
+        attachment_filter: Callable[[OutlookMessage], bool] | None = None,
     ) -> list[OutlookMessage]:
-        """Fetch messages from configured mailbox/folder and save attachments."""
+        """Fetch candidate messages and save only selected attachments."""
         if self._namespace is None:
             self.connect()
 
@@ -96,24 +122,27 @@ class OutlookComClient:
             if getattr(item, "Class", None) != 43:
                 continue
 
-            attachments = self._save_attachments(item, output_folder)
-            messages.append(
-                OutlookMessage(
-                    entry_id=str(getattr(item, "EntryID", "") or ""),
-                    store_id=str(getattr(item, "Parent", "").StoreID)
-                    if getattr(item, "Parent", None) is not None
-                    else "",
-                    subject=str(getattr(item, "Subject", "") or ""),
-                    sender_name=str(getattr(item, "SenderName", "") or ""),
-                    sender_email=self._get_sender_email(item),
-                    cc=str(getattr(item, "CC", "") or ""),
-                    received_time=self._safe_datetime(
-                        getattr(item, "ReceivedTime", None)
-                    ),
-                    attachments=attachments,
-                    raw_item=item,
-                )
+            message = OutlookMessage(
+                entry_id=str(getattr(item, "EntryID", "") or ""),
+                store_id=str(getattr(item, "Parent", "").StoreID)
+                if getattr(item, "Parent", None) is not None
+                else "",
+                subject=str(getattr(item, "Subject", "") or ""),
+                sender_name=str(getattr(item, "SenderName", "") or ""),
+                sender_email=self._get_sender_email(item),
+                cc=self._get_cc_emails(item),
+                received_time=self._safe_datetime(
+                    getattr(item, "ReceivedTime", None)
+                ),
+                attachments=[],
+                raw_item=item,
             )
+            if message_filter is not None and not message_filter(message):
+                continue
+
+            if attachment_filter is None or attachment_filter(message):
+                message.attachments = self._save_attachments(item, output_folder)
+            messages.append(message)
             count += 1
 
         return messages
@@ -142,8 +171,12 @@ class OutlookComClient:
             reply.CC = cc
 
         account = self._find_account(self.reply_from_smtp)
-        if account is not None:
-            reply.SendUsingAccount = account
+        if account is None:
+            raise RuntimeError(
+                "Reply account not found in Outlook profile: "
+                f"{self.reply_from_smtp}"
+            )
+        reply.SendUsingAccount = account
 
         if send_mode.strip().upper() == "DRAFT":
             reply.Save()
@@ -169,8 +202,12 @@ class OutlookComClient:
         mail.Body = body
 
         account = self._find_account(self.reply_from_smtp)
-        if account is not None:
-            mail.SendUsingAccount = account
+        if account is None:
+            raise RuntimeError(
+                "Reply account not found in Outlook profile: "
+                f"{self.reply_from_smtp}"
+            )
+        mail.SendUsingAccount = account
 
         if send_mode.strip().upper() == "DRAFT":
             mail.Save()
@@ -261,6 +298,73 @@ class OutlookComClient:
 
         value = str(getattr(item, "SenderEmailAddress", "") or "")
         return value.strip().lower()
+
+    def _get_cc_emails(self, item: Any) -> str:
+        """Resolve CC recipients to SMTP addresses instead of display names."""
+        emails: list[str] = []
+
+        try:
+            recipients = item.Recipients
+            count = int(getattr(recipients, "Count", 0) or 0)
+            for index in range(1, count + 1):
+                recipient = recipients.Item(index)
+                if int(getattr(recipient, "Type", 0) or 0) != 2:
+                    continue
+
+                email = self._recipient_smtp_address(recipient)
+                if email and email not in emails:
+                    emails.append(email)
+        except Exception:
+            logger.warning(
+                "Unable to resolve Outlook CC recipients; using display value."
+            )
+
+        if emails:
+            return "; ".join(emails)
+
+        return str(getattr(item, "CC", "") or "").strip().lower()
+
+    @staticmethod
+    def _recipient_smtp_address(recipient: Any) -> str:
+        """Return a recipient's SMTP address across SMTP and Exchange types."""
+        direct_address = str(getattr(recipient, "Address", "") or "").strip()
+        if "@" in direct_address:
+            return direct_address.lower()
+
+        address_entry = getattr(recipient, "AddressEntry", None)
+        if address_entry is None:
+            return ""
+
+        try:
+            exchange_user = address_entry.GetExchangeUser()
+            if exchange_user is not None:
+                value = str(
+                    getattr(exchange_user, "PrimarySmtpAddress", "") or ""
+                ).strip()
+                if value:
+                    return value.lower()
+        except Exception:
+            pass
+
+        entry_address = str(
+            getattr(address_entry, "Address", "") or ""
+        ).strip()
+        if "@" in entry_address:
+            return entry_address.lower()
+
+        try:
+            value = str(
+                address_entry.PropertyAccessor.GetProperty(
+                    "http://schemas.microsoft.com/mapi/proptag/0x39FE001E"
+                )
+                or ""
+            ).strip()
+            if value:
+                return value.lower()
+        except Exception:
+            pass
+
+        return ""
 
     def _find_account(self, smtp: str) -> Any:
         if self._namespace is None:

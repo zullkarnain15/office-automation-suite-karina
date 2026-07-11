@@ -27,7 +27,7 @@ def test_txt_output_uses_attendance_folder_and_time_suffix(tmp_path: Path) -> No
     output_folder = Path(result["output_folder"])
     generated_file = Path(result["generated_files"][0]["file_path"])
 
-    assert output_folder == tmp_path / "Attendance" / "HO" / "2026-07-10_45" / "TXT"
+    assert output_folder == tmp_path / "Attendance" / "HO" / "20260710_153045" / "TXT"
     assert generated_file.name == "Attendance_HO_001_153045.txt"
     assert generated_file.exists()
 
@@ -51,7 +51,7 @@ def test_report_output_uses_attendance_folder_and_time_suffix(tmp_path: Path) ->
         tmp_path
         / "Attendance"
         / "Branch"
-        / "2026-07-10_45"
+        / "20260710_153045"
         / "Report"
     )
     assert report_file.name == "Export_Attendance_Branch_153045.xlsx"
@@ -78,7 +78,7 @@ def test_artifacts_are_written_in_attendance_run_folder(tmp_path: Path) -> None:
 
     artifact_folder = Path(result["artifact_folder"])
 
-    assert artifact_folder == tmp_path / "Attendance" / "HO" / "2026-07-10_45"
+    assert artifact_folder == tmp_path / "Attendance" / "HO" / "20260710_153045"
     assert Path(result["process_log"]).name == "Process.log"
     assert Path(result["summary_json"]).name == "summary.json"
     assert Path(result["process_log"]).exists()

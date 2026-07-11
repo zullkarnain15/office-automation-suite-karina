@@ -31,6 +31,8 @@ APP_MUTED_TEXT = "#60758A"
 APP_ACCENT = "#198FA3"
 APP_ACCENT_HOVER = "#123B63"
 APP_SUCCESS = "#43A58F"
+WORKFLOW_ACCENT = "#B45309"
+WORKFLOW_ACCENT_HOVER = "#92400E"
 APP_LOG_BG = "#24384C"
 APP_LOG_FG = "#F4F7FB"
 APP_TITLE_FONT = ("Segoe UI", 24, "bold")
@@ -44,7 +46,7 @@ class OutlookRevisiGUI:
 
     def __init__(self, root: tk.Tk | tk.Toplevel) -> None:
         self.root = root
-        self.root.title("OAS-K | Outlook - Revisi")
+        self.root.title("OAS-K | Outlook - Revisi - by ZSH")
         self.root.geometry("1120x700")
         self.root.minsize(1000, 640)
         self.root.configure(bg=APP_BACKGROUND)
@@ -60,6 +62,7 @@ class OutlookRevisiGUI:
         self.mailbox_var = tk.StringVar(value="-")
         self.output_root_var = tk.StringVar(value="-")
         self.period_var = tk.StringVar(value="-")
+        self.workflow_var = tk.StringVar(value="")
         self.dry_run_var = tk.BooleanVar(value=True)
         self.message_limit_var = tk.StringVar(value="25")
         self.status_var = tk.StringVar(value="Ready.")
@@ -68,6 +71,8 @@ class OutlookRevisiGUI:
         self.failed_email_var = tk.StringVar(value="0")
         self.output_txt_var = tk.StringVar(value="0")
         self.report_folder_var = tk.StringVar(value="-")
+        self.workflow_buttons: dict[str, tk.Button] = {}
+        self.workflow_button_labels: dict[str, str] = {}
 
         self._configure_ttk_style()
         self._create_widgets()
@@ -138,6 +143,31 @@ class OutlookRevisiGUI:
         )
         control_frame.pack(fill="x", padx=18, pady=(0, 8))
 
+        tk.Label(
+            control_frame,
+            text="Processing Workflow",
+            font=DEFAULT_FONT,
+            bg=APP_PANEL,
+            fg=APP_TEXT,
+        ).grid(row=0, column=0, sticky="w")
+
+        self._add_workflow_button(
+            control_frame,
+            label="Head Office",
+            value="HO",
+            column=1,
+            padx=(12, 0),
+        )
+        self._add_workflow_button(
+            control_frame,
+            label="Branch",
+            value="Branch",
+            column=2,
+            padx=(8, 24),
+        )
+        self.workflow_var.trace_add("write", self._refresh_workflow_buttons)
+        self._refresh_workflow_buttons()
+
         tk.Checkbutton(
             control_frame,
             text="Dry Run (no reply, no move email)",
@@ -146,7 +176,7 @@ class OutlookRevisiGUI:
             bg=APP_PANEL,
             fg=APP_TEXT,
             activebackground=APP_PANEL,
-        ).grid(row=0, column=0, sticky="w")
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         tk.Label(
             control_frame,
@@ -154,7 +184,7 @@ class OutlookRevisiGUI:
             font=DEFAULT_FONT,
             bg=APP_PANEL,
             fg=APP_TEXT,
-        ).grid(row=0, column=1, padx=(24, 6), sticky="e")
+        ).grid(row=1, column=2, padx=(24, 6), pady=(8, 0), sticky="e")
 
         tk.Entry(
             control_frame,
@@ -164,7 +194,7 @@ class OutlookRevisiGUI:
             bg=APP_INPUT,
             relief="solid",
             bd=1,
-        ).grid(row=0, column=2, sticky="w")
+        ).grid(row=1, column=3, pady=(8, 0), sticky="w")
 
         self.run_button = tk.Button(
             control_frame,
@@ -174,7 +204,7 @@ class OutlookRevisiGUI:
             fg="white",
             command=self._start_process,
         )
-        self.run_button.grid(row=0, column=3, padx=(24, 0))
+        self.run_button.grid(row=1, column=4, padx=(24, 0), pady=(8, 0))
 
         result_frame = tk.LabelFrame(
             self.root,
@@ -232,6 +262,54 @@ class OutlookRevisiGUI:
             padx=10,
         )
         status_bar.pack(fill="x")
+
+    def _add_workflow_button(
+        self,
+        parent: tk.Misc,
+        *,
+        label: str,
+        value: str,
+        column: int,
+        padx: tuple[int, int],
+    ) -> None:
+        """Add a compact, full-area workflow selector button."""
+        button = tk.Button(
+            parent,
+            text=label,
+            font=BUTTON_FONT,
+            width=len(label) + 3,
+            padx=10,
+            pady=2,
+            bd=1,
+            relief="solid",
+            cursor="hand2",
+            takefocus=True,
+            command=lambda selected=value: self.workflow_var.set(selected),
+        )
+        button.grid(row=0, column=column, padx=padx, sticky="w")
+        self.workflow_buttons[value] = button
+        self.workflow_button_labels[value] = label
+
+    def _refresh_workflow_buttons(self, *_args: object) -> None:
+        """Show the selected workflow with color and a check mark."""
+        selected_workflow = self.workflow_var.get().strip()
+        for value, button in self.workflow_buttons.items():
+            is_selected = value == selected_workflow
+            label = self.workflow_button_labels[value]
+            button.configure(
+                text=f"\u2713  {label}" if is_selected else label,
+                bg=WORKFLOW_ACCENT if is_selected else APP_INPUT,
+                fg="white" if is_selected else APP_TEXT,
+                activebackground=(
+                    WORKFLOW_ACCENT_HOVER if is_selected else APP_BORDER
+                ),
+                activeforeground="white" if is_selected else APP_TEXT,
+                highlightthickness=1,
+                highlightbackground=(
+                    WORKFLOW_ACCENT if is_selected else APP_BORDER
+                ),
+                highlightcolor=WORKFLOW_ACCENT_HOVER,
+            )
 
     def _add_info(
         self,
@@ -313,6 +391,15 @@ class OutlookRevisiGUI:
             self.status_var.set("Configuration not ready.")
 
     def _start_process(self) -> None:
+        workflow = self.workflow_var.get().strip()
+        if workflow not in ("HO", "Branch"):
+            messagebox.showwarning(
+                "Outlook - Revisi",
+                "Please select HO or Branch workflow before starting the process.",
+                parent=self.root,
+            )
+            return
+
         if not Path(self.config_file_var.get()).exists():
             messagebox.showerror(
                 "Outlook - Revisi",
@@ -326,24 +413,58 @@ class OutlookRevisiGUI:
         self.status_var.set("Running Outlook - Revisi...")
         self._append_log("Starting Outlook - Revisi process.")
 
+        configuration_file = self.config_file_var.get()
+        dry_run = self.dry_run_var.get()
+        message_limit = self._message_limit()
+        self._append_log(f"Configuration: {configuration_file}")
+        self._append_log(f"Selected Workflow: {workflow}")
+        self._append_log(f"Mailbox: {self.mailbox_var.get()}")
+        self._append_log(f"Dry Run: {dry_run}")
+
         worker = threading.Thread(
             target=self._run_process_worker,
+            args=(configuration_file, workflow, dry_run, message_limit),
             daemon=True,
         )
         worker.start()
 
-    def _run_process_worker(self) -> None:
+    def _run_process_worker(
+        self,
+        configuration_file: str,
+        workflow: str,
+        dry_run: bool,
+        message_limit: int | None,
+    ) -> None:
+        com_initialized = False
         try:
+            import pythoncom  # type: ignore[import-not-found]
+
+            pythoncom.CoInitialize()
+            com_initialized = True
             engine = OutlookRevisiEngine(
-                configuration_file=self.config_file_var.get(),
-                dry_run=self.dry_run_var.get(),
-                message_limit=self._message_limit(),
+                configuration_file=configuration_file,
+                workflow=workflow,
+                dry_run=dry_run,
+                message_limit=message_limit,
             )
             result = engine.run()
-            self.root.after(0, lambda: self._handle_result(result))
+            self.root.after(
+                0,
+                lambda completed_result=result: self._handle_result(
+                    completed_result
+                ),
+            )
         except Exception as error:
             logger.exception("Outlook - Revisi process failed.")
-            self.root.after(0, lambda: self._handle_error(error))
+            self.root.after(
+                0,
+                lambda captured_error=error: self._handle_error(
+                    captured_error
+                ),
+            )
+        finally:
+            if com_initialized:
+                pythoncom.CoUninitialize()
 
     def _message_limit(self) -> int | None:
         value = self.message_limit_var.get().strip()
@@ -363,7 +484,11 @@ class OutlookRevisiGUI:
         self.failed_email_var.set(str(result.failed_email))
         self.output_txt_var.set(str(result.output_txt_count))
         self.report_folder_var.set(str(result.report_folder))
-        self.status_var.set("Process finished.")
+        self.status_var.set(
+            "Process finished."
+            if result.failed_email == 0
+            else "Process finished with validation errors."
+        )
 
         self._append_log(f"Job ID: {result.job_id}")
         self._append_log(f"Total Email: {result.total_email}")
@@ -371,13 +496,41 @@ class OutlookRevisiGUI:
         self._append_log(f"Failed: {result.failed_email}")
         self._append_log(f"TXT Output: {result.output_txt_count}")
         self._append_log(f"Report Folder: {result.report_folder}")
+        for item in result.message_results:
+            if item.status == "SUCCESS":
+                continue
+            self._append_log(
+                f"[{item.status}] {item.sender_email} | {item.subject}"
+            )
+            for error in item.errors:
+                self._append_log(f"- {error}")
+
+        failure_details = []
+        for item in result.message_results:
+            if item.status != "FAILED":
+                continue
+            reason = "; ".join(item.errors) or "Unknown validation error."
+            failure_details.append(
+                f"- {item.sender_email or '(unknown sender)'}: {reason}"
+            )
+            if len(failure_details) == 3:
+                break
+
+        detail_text = ""
+        if failure_details:
+            detail_text = (
+                "\n\nValidation details:\n"
+                + "\n".join(failure_details)
+                + f"\n\nFull log: {result.process_log}"
+            )
 
         messagebox.showinfo(
             "Outlook - Revisi",
             "Process finished.\n\n"
             f"Success: {result.success_email}\n"
             f"Failed: {result.failed_email}\n"
-            f"TXT Output: {result.output_txt_count}",
+            f"TXT Output: {result.output_txt_count}"
+            f"{detail_text}",
             parent=self.root,
         )
 
