@@ -1,10 +1,11 @@
 from pathlib import Path
+import json
 import re
 import shutil
 
 import pytest
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 import outlook.engine as outlook_engine
 from outlook.downloader import OutlookAttachment
@@ -259,6 +260,29 @@ def test_engine_writes_split_txt_in_dry_run(tmp_path: Path) -> None:
     assert {path.name for path in result.output_folder.iterdir()} == {
         "Attachments", "TXT", "Report", "Process.log", "summary.json"
     }
+    assert result.report_status == "CREATED"
+    assert result.report_file is not None and result.report_file.exists()
+    report = load_workbook(result.report_file, data_only=True)
+    assert report.sheetnames == [
+        "Dashboard", "Email_Result", "Attachment_Result", "Valid_Data",
+        "Data_Anomaly", "Output_Summary",
+    ]
+    assert report["Valid_Data"].max_row == 3
+    assert report["Valid_Data"]["E2"].value == "123456789"
+    assert report["Email_Result"]["Q2"].value == "SUCCESS"
+    assert report["Email_Result"]["J2"].value == "ATT_REV 06-2026"
+    for sheet_name in (
+        "Email_Result", "Attachment_Result", "Valid_Data", "Data_Anomaly"
+    ):
+        headers = [cell.value for cell in report[sheet_name][1]]
+        assert "Email_ID" not in headers
+    assert report["Dashboard"]["B8"].value == "06-2026"
+    assert report["Dashboard"]["B9"].value == "karina.hr.1@oto.co.id"
+    output_types = {
+        row[2].value for row in report["Output_Summary"].iter_rows(min_row=2)
+    }
+    assert {"HRIS_TXT", "EXCEL_REPORT", "PROCESS_LOG", "SUMMARY_JSON"} <= output_types
+    report.close()
     assert [path.name for path in result.message_results[0].output_files] == [
         f"Outlook_Revisi_HO_001_{result.output_folder.name[:8]}.txt",
         f"Outlook_Revisi_HO_002_{result.output_folder.name[:8]}.txt",
@@ -312,6 +336,11 @@ def test_branch_run_creates_only_branch_job_folder(tmp_path: Path) -> None:
     assert {path.name for path in result.output_folder.iterdir()} == {
         "Attachments", "TXT", "Report", "Process.log", "summary.json"
     }
+    assert result.report_file is not None
+    assert result.report_file.name == (
+        f"Outlook_Process_Report_Branch_{result.job_id}.xlsx"
+    )
+    assert result.report_file.exists()
     assert not (output_root / "HO").exists()
 
 
@@ -353,6 +382,17 @@ def test_other_workflow_is_skipped_without_saving_attachment(
     assert list((result.output_folder / "Attachments").iterdir()) == []
     assert list((result.output_folder / "TXT").iterdir()) == []
     assert client.replies == []
+    assert result.report_file is not None
+    report = load_workbook(result.report_file, data_only=True)
+    assert report["Email_Result"].max_row == 1
+    dashboard_values = {
+        cell.value
+        for row in report["Dashboard"].iter_rows()
+        for cell in row
+    }
+    assert "Email_Skipped_Other_Workflow" not in dashboard_values
+    assert "SKIPPED" not in dashboard_values
+    report.close()
 
 
 def test_message_limit_counts_workflow_candidates_not_unrelated_email(
@@ -469,6 +509,12 @@ def test_missing_cc_error_reports_required_and_resolved_values(
         "Required CC email is missing: cc@example.com. "
         "Actual CC resolved: (none)"
     ]
+    report = load_workbook(result.report_file, data_only=True)
+    assert report["Email_Result"]["M2"].value == "FAIL"
+    assert report["Email_Result"]["Q2"].value == "FAILED"
+    assert report["Email_Result"]["R2"].value == "CC_INVALID"
+    assert report["Attachment_Result"].max_row == 1
+    report.close()
 
 
 def test_draft_reply_does_not_move_or_mark_message_processed(
@@ -505,3 +551,140 @@ def test_draft_reply_does_not_move_or_mark_message_processed(
     assert client.moves == []
     history = OutlookRevisiEngine._history_path(output_root, "HO")
     assert "draft-entry" not in history.read_text(encoding="utf-8")
+
+
+def test_invalid_data_is_written_as_structured_anomaly(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.xlsx"
+    output_root = tmp_path / "output" / "Outlook-Revisi"
+    attachment = tmp_path / "invalid.xlsx"
+    _configuration(config_path, output_root)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["NIK", "DATE IN", "TIME IN", "DATE OUT", "TIMEOUT"])
+    sheet.append([None, "06/01/2026", "08:00", "06/01/2026", "17:00"])
+    workbook.save(attachment)
+    message = OutlookMessage(
+        entry_id="invalid-data",
+        store_id="store",
+        subject="ATT_REV 06-2026",
+        sender_name="HO User",
+        sender_email="ho@example.com",
+        cc="cc@example.com",
+        received_time=None,
+        attachments=[OutlookAttachment(attachment.name, attachment)],
+    )
+
+    result = OutlookRevisiEngine(
+        config_path, "HO", dry_run=True, client=FakeClient([message])
+    ).run()
+
+    assert result.failed_email == 1
+    assert result.valid_row_count == 0
+    assert result.anomaly_row_count == 1
+    assert result.message_results[0].failure_code == "NIK_REQUIRED"
+    report = load_workbook(result.report_file, data_only=True)
+    assert report["Data_Anomaly"]["J2"].value == "NIK_REQUIRED"
+    assert report["Valid_Data"].max_row == 1
+    report.close()
+
+
+def test_massive_empty_rows_are_aggregated_not_expanded(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.xlsx"
+    output_root = tmp_path / "output" / "Outlook-Revisi"
+    attachment = tmp_path / "branch.txt"
+    _configuration(config_path, output_root)
+    attachment.write_text(
+        ('"","","","","",""\n' * 2000)
+        + '"06/01/2026","001234567","06/01/2026","08:00","06/01/2026","17:00"\n',
+        encoding="utf-8",
+    )
+    message = OutlookMessage(
+        entry_id="empty-rows",
+        store_id="store",
+        subject="[OTO-AMU] Attendance 06-2026",
+        sender_name="Branch User",
+        sender_email="branch@example.com",
+        cc="branchcc@example.com",
+        received_time=None,
+        attachments=[OutlookAttachment(attachment.name, attachment)],
+    )
+
+    result = OutlookRevisiEngine(
+        config_path, "Branch", dry_run=True, client=FakeClient([message])
+    ).run()
+
+    assert result.success_email == 1
+    assert result.anomaly_row_count == 2000
+    report = load_workbook(result.report_file, data_only=True)
+    assert report["Attachment_Result"]["L2"].value == 2000
+    assert report["Data_Anomaly"].max_row == 1
+    assert report["Valid_Data"].max_row == 2
+    report.close()
+
+
+def test_report_failure_keeps_txt_and_updates_summary(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "config.xlsx"
+    output_root = tmp_path / "output" / "Outlook-Revisi"
+    attachment = tmp_path / "attendance.xlsx"
+    _configuration(config_path, output_root)
+    _ho_attachment(attachment)
+    message = OutlookMessage(
+        entry_id="report-failure",
+        store_id="store",
+        subject="ATT_REV 06-2026",
+        sender_name="HO User",
+        sender_email="ho@example.com",
+        cc="cc@example.com",
+        received_time=None,
+        attachments=[OutlookAttachment(attachment.name, attachment)],
+    )
+    monkeypatch.setattr(
+        outlook_engine.OutlookProcessReportWriter,
+        "write",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("write denied")),
+    )
+
+    result = OutlookRevisiEngine(
+        config_path, "HO", dry_run=True, client=FakeClient([message])
+    ).run()
+
+    assert result.report_status == "FAILED"
+    assert result.final_status == "COMPLETED WITH WARNING"
+    assert all(path.exists() for path in result.message_results[0].output_files)
+    summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
+    assert summary["report_status"] == "FAILED"
+    assert "Report generation failed" in result.process_log.read_text(encoding="utf-8")
+
+
+def test_reconciliation_mismatch_marks_warning(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.xlsx"
+    output_root = tmp_path / "output" / "Outlook-Revisi"
+    attachment = tmp_path / "attendance.xlsx"
+    _configuration(config_path, output_root)
+    _ho_attachment(attachment)
+    message = OutlookMessage(
+        entry_id="reconcile",
+        store_id="store",
+        subject="ATT_REV 06-2026",
+        sender_name="HO User",
+        sender_email="ho@example.com",
+        cc="cc@example.com",
+        received_time=None,
+        attachments=[OutlookAttachment(attachment.name, attachment)],
+    )
+    engine = OutlookRevisiEngine(
+        config_path, "HO", dry_run=True, client=FakeClient([message])
+    )
+    result = engine.run()
+    result.message_results[0].valid_records[0].output_file = None
+
+    engine._reconcile(result)
+
+    assert result.reconciliation_status == "WARNING"
+    assert result.final_status == "COMPLETED WITH WARNING"
+    assert result.reconciliation_issues == [
+        "Valid row count does not match exported record count."
+    ]

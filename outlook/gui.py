@@ -70,7 +70,7 @@ class OutlookRevisiGUI:
         self.success_email_var = tk.StringVar(value="0")
         self.failed_email_var = tk.StringVar(value="0")
         self.output_txt_var = tk.StringVar(value="0")
-        self.report_folder_var = tk.StringVar(value="-")
+        self.report_file_var = tk.StringVar(value="-")
         self.workflow_buttons: dict[str, tk.Button] = {}
         self.workflow_button_labels: dict[str, str] = {}
 
@@ -221,7 +221,7 @@ class OutlookRevisiGUI:
         self._add_info(result_frame, 1, "Success", self.success_email_var)
         self._add_info(result_frame, 2, "Failed", self.failed_email_var)
         self._add_info(result_frame, 3, "TXT Output", self.output_txt_var)
-        self._add_info(result_frame, 4, "Report", self.report_folder_var)
+        self._add_info(result_frame, 4, "Report File", self.report_file_var)
 
         self.progress = ttk.Progressbar(
             self.root,
@@ -348,7 +348,14 @@ class OutlookRevisiGUI:
             / file_name
         )
         if not getattr(sys, "frozen", False):
-            return bundled_path
+            if bundled_path.exists():
+                return bundled_path
+            candidates = sorted(
+                bundled_path.parent.glob(
+                    "OAS-K_Outlook-Revisi_Configuration*.xlsx"
+                )
+            )
+            return candidates[0] if candidates else bundled_path
 
         external_path = (
             Path(sys.executable).resolve().parent
@@ -483,11 +490,11 @@ class OutlookRevisiGUI:
         self.success_email_var.set(str(result.success_email))
         self.failed_email_var.set(str(result.failed_email))
         self.output_txt_var.set(str(result.output_txt_count))
-        self.report_folder_var.set(str(result.report_folder))
+        self.report_file_var.set(str(result.report_file or "-"))
         self.status_var.set(
-            "Process finished."
-            if result.failed_email == 0
-            else "Process finished with validation errors."
+            "Process finished with warnings."
+            if result.final_status == "COMPLETED WITH WARNING"
+            else "Process finished."
         )
 
         self._append_log(f"Job ID: {result.job_id}")
@@ -495,7 +502,8 @@ class OutlookRevisiGUI:
         self._append_log(f"Success: {result.success_email}")
         self._append_log(f"Failed: {result.failed_email}")
         self._append_log(f"TXT Output: {result.output_txt_count}")
-        self._append_log(f"Report Folder: {result.report_folder}")
+        self._append_log(f"Report Status: {result.report_status}")
+        self._append_log(f"Report File: {result.report_file or '-'}")
         for item in result.message_results:
             if item.status == "SUCCESS":
                 continue

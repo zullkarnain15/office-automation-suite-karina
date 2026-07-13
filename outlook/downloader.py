@@ -36,6 +36,7 @@ class OutlookMessage:
     received_time: datetime | None
     attachments: list[OutlookAttachment]
     raw_item: Any = None
+    attachment_count: int = 0
 
 
 class OutlookComClient:
@@ -136,6 +137,9 @@ class OutlookComClient:
                 ),
                 attachments=[],
                 raw_item=item,
+                attachment_count=int(
+                    getattr(getattr(item, "Attachments", None), "Count", 0) or 0
+                ),
             )
             if message_filter is not None and not message_filter(message):
                 continue

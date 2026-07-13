@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,7 +15,9 @@ from outlook.downloader import OutlookComClient
 from outlook.downloader import OutlookMessage
 from outlook.parser import AttendanceRevisionRecord
 from outlook.parser import OutlookAttachmentParser
+from outlook.parser import OutlookDataAnomaly
 from outlook.parser import OutlookTxtWriter
+from outlook.report_writer import OutlookProcessReportWriter
 from shared.config_manager import OutlookAttachmentRule
 from shared.config_manager import OutlookReplyTemplate
 from shared.config_manager import OutlookRevisiConfiguration
@@ -24,6 +26,25 @@ from shared.config_manager import OutlookSenderConfig
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass(slots=True)
+class OutlookAttachmentProcessResult:
+    """Report metadata for one saved Outlook attachment."""
+
+    original_file_name: str
+    saved_file_name: str
+    path: Path
+    file_extension: str
+    file_size_kb: float
+    file_status: str
+    row_read: int = 0
+    row_valid: int = 0
+    row_anomaly: int = 0
+    duplicate_row: int = 0
+    empty_row_dropped: int = 0
+    output_txt: list[Path] = field(default_factory=list)
+    error_message: str = ""
 
 
 @dataclass(slots=True)
@@ -38,6 +59,28 @@ class OutlookProcessMessageResult:
     errors: list[str]
     output_files: list[Path]
     reply_sent: bool
+    received_time: datetime | None = None
+    sender_name: str = ""
+    actual_cc: str = ""
+    required_cc: str = ""
+    expected_subject: str = ""
+    detected_workflow: str = ""
+    validation_sender: str = "NOT_CHECKED"
+    validation_cc: str = "NOT_CHECKED"
+    validation_subject: str = "NOT_CHECKED"
+    validation_attachment: str = "NOT_CHECKED"
+    validation_data: str = "NOT_CHECKED"
+    failure_code: str = ""
+    reply_result: str = "NOT_ATTEMPTED"
+    reply_from: str = ""
+    move_result: str = "NOT_REQUIRED"
+    processed_time: datetime | None = None
+    attachment_results: list[OutlookAttachmentProcessResult] = field(
+        default_factory=list
+    )
+    attachment_count: int = 0
+    valid_records: list[AttendanceRevisionRecord] = field(default_factory=list)
+    anomalies: list[OutlookDataAnomaly] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -47,7 +90,6 @@ class OutlookProcessResult:
     success: bool
     job_id: str
     output_folder: Path
-    report_folder: Path
     total_email: int
     target_email: int
     skipped_other_workflow: int
@@ -57,6 +99,17 @@ class OutlookProcessResult:
     message_results: list[OutlookProcessMessageResult]
     process_log: Path
     summary_json: Path
+    workflow: str = ""
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    report_folder: Path | None = None
+    report_file: Path | None = None
+    report_status: str = "NOT_ATTEMPTED"
+    final_status: str = "COMPLETED"
+    valid_row_count: int = 0
+    anomaly_row_count: int = 0
+    reconciliation_status: str = "PASS"
+    reconciliation_issues: list[str] = field(default_factory=list)
 
 
 class OutlookRevisiEngine:
@@ -77,9 +130,11 @@ class OutlookRevisiEngine:
         self.client = client
         self.parser = OutlookAttachmentParser()
         self.writer = OutlookTxtWriter()
+        self.report_writer = OutlookProcessReportWriter()
 
     def run(self) -> OutlookProcessResult:
         """Run Outlook - Revisi processing."""
+        start_time = datetime.now()
         configuration = OutlookRevisiConfigurationReader(
             self.configuration_file
         ).read()
@@ -146,7 +201,6 @@ class OutlookRevisiEngine:
             success=failed_count == 0,
             job_id=job_id,
             output_folder=job_folder,
-            report_folder=report_folder,
             total_email=len(message_results),
             target_email=len(message_results) - skipped_count,
             skipped_other_workflow=skipped_count,
@@ -156,8 +210,46 @@ class OutlookRevisiEngine:
             message_results=message_results,
             process_log=job_folder / "Process.log",
             summary_json=job_folder / "summary.json",
+            workflow=self.workflow,
+            start_time=start_time,
+            end_time=datetime.now(),
+            report_folder=report_folder,
+            report_file=(
+                report_folder
+                / f"Outlook_Process_Report_{self.workflow}_{job_id}.xlsx"
+            ),
         )
-
+        result.valid_row_count = sum(
+            len(item.valid_records) for item in message_results
+        )
+        result.anomaly_row_count = sum(
+            len(item.anomalies) + sum(
+                attachment.empty_row_dropped
+                for attachment in item.attachment_results
+            )
+            for item in message_results
+        )
+        result.final_status = (
+            "COMPLETED WITH WARNING"
+            if failed_count or result.anomaly_row_count
+            else "COMPLETED"
+        )
+        self._reconcile(result)
+        self._write_artifacts(result)
+        logger.info(
+            "Outlook report generation started: %s", result.report_file
+        )
+        try:
+            result.report_file = self.report_writer.write(result, configuration)
+            result.report_status = "CREATED"
+            logger.info("Outlook report generation succeeded: %s", result.report_file)
+        except Exception as error:
+            result.report_status = "FAILED"
+            result.final_status = "COMPLETED WITH WARNING"
+            result.reconciliation_issues.append(
+                f"Report generation failed: {error}"
+            )
+            logger.exception("Outlook report generation failed; TXT output retained.")
         self._write_artifacts(result)
         self._send_summary(configuration, client, result)
         return result
@@ -201,6 +293,7 @@ class OutlookRevisiEngine:
         errors: list[str] = []
         detected_workflow = self._detect_message_workflow(configuration, message)
         output_files: list[Path] = []
+        processed_time = datetime.now()
 
         if detected_workflow != self.workflow:
             logger.info(
@@ -217,12 +310,34 @@ class OutlookRevisiEngine:
                 errors=["Email belongs to another workflow."],
                 output_files=[],
                 reply_sent=False,
+                received_time=message.received_time,
+                sender_name=message.sender_name,
+                actual_cc=message.cc,
+                detected_workflow=detected_workflow,
+                validation_sender="NOT_APPLICABLE",
+                validation_cc="NOT_APPLICABLE",
+                validation_subject="NOT_APPLICABLE",
+                validation_attachment="NOT_APPLICABLE",
+                validation_data="NOT_APPLICABLE",
+                failure_code="OTHER_WORKFLOW",
+                reply_result="NOT_REQUIRED",
+                move_result="NOT_MOVED",
+                processed_time=processed_time,
+                attachment_count=(
+                    message.attachment_count or len(message.attachments)
+                ),
             )
 
         workflow = self.workflow
         sender = self._match_sender(configuration, message.sender_email, workflow)
+        validation_sender = "PASS"
+        validation_cc = "NOT_CHECKED"
+        validation_subject = "NOT_CHECKED"
+        failure_code = ""
         if sender is None:
             errors.append("Sender is not registered in sender master.")
+            validation_sender = "FAIL"
+            failure_code = "SENDER_NOT_REGISTERED"
         else:
             workflow = sender.workflow
 
@@ -235,6 +350,10 @@ class OutlookRevisiEngine:
                     + "; ".join(missing_cc)
                     + f". Actual CC resolved: {actual_cc}"
                 )
+                validation_cc = "FAIL"
+                failure_code = failure_code or "CC_INVALID"
+            else:
+                validation_cc = "PASS"
 
         if sender is not None and not self._subject_matches(
             configuration,
@@ -243,6 +362,10 @@ class OutlookRevisiEngine:
             sender,
         ):
             errors.append("Subject does not match configured subject rule.")
+            validation_subject = "FAIL"
+            failure_code = failure_code or "SUBJECT_INVALID"
+        elif sender is not None:
+            validation_subject = "PASS"
 
         attachment_paths = self._valid_attachment_paths(
             configuration,
@@ -250,16 +373,62 @@ class OutlookRevisiEngine:
             message,
             errors,
         )
+        allowed_path_set = {path.resolve() for path in attachment_paths}
+        attachment_results = [
+            OutlookAttachmentProcessResult(
+                original_file_name=attachment.file_name,
+                saved_file_name=attachment.path.name,
+                path=attachment.path,
+                file_extension=attachment.path.suffix.lower(),
+                file_size_kb=(
+                    round(attachment.path.stat().st_size / 1024, 2)
+                    if attachment.path.exists()
+                    else 0
+                ),
+                file_status=(
+                    "ACCEPTED"
+                    if attachment.path.resolve() in allowed_path_set
+                    else "REJECTED"
+                ),
+            )
+            for attachment in message.attachments
+        ]
+        validation_attachment = "PASS" if attachment_paths else "FAIL"
+        if not attachment_paths:
+            failure_code = failure_code or "ATTACHMENT_INVALID"
 
         records: list[AttendanceRevisionRecord] = []
-        if not errors:
+        anomalies: list[OutlookDataAnomaly] = []
+        parse_attempted = not errors
+        if parse_attempted:
             for attachment_path in attachment_paths:
                 parse_result = self.parser.parse(attachment_path, workflow)
                 records.extend(parse_result.records)
                 errors.extend(parse_result.errors)
+                anomalies.extend(parse_result.anomalies)
+                attachment_result = next(
+                    (
+                        item for item in attachment_results
+                        if item.path.resolve() == attachment_path.resolve()
+                    ),
+                    None,
+                )
+                if attachment_result is not None:
+                    attachment_result.row_read = parse_result.row_read
+                    attachment_result.row_valid = len(parse_result.records)
+                    attachment_result.row_anomaly = len(parse_result.anomalies)
+                    attachment_result.empty_row_dropped = (
+                        parse_result.empty_row_dropped
+                    )
+                    if parse_result.errors:
+                        attachment_result.file_status = "FAILED"
+                        attachment_result.error_message = "\n".join(
+                            parse_result.errors
+                        )
 
             if not records and not errors:
                 errors.append("No valid attendance rows found in attachment.")
+                failure_code = failure_code or "NO_VALID_DATA"
 
         if not errors:
             max_lines = self._to_int(
@@ -273,6 +442,32 @@ class OutlookRevisiEngine:
                 max_lines=max_lines,
                 job_id=job_folder.name,
             )
+            for attachment_result in attachment_results:
+                attachment_result.output_txt = sorted(
+                    {
+                        record.output_file
+                        for record in records
+                        if record.source_file.resolve()
+                        == attachment_result.path.resolve()
+                        and record.output_file is not None
+                    },
+                    key=str,
+                )
+
+        else:
+            for attachment_result in attachment_results:
+                if attachment_result.file_status == "ACCEPTED":
+                    attachment_result.file_status = "SKIPPED"
+                    attachment_result.error_message = (
+                        "Attachment processing was not attempted because email "
+                        "validation failed."
+                    )
+
+        validation_data = (
+            "PASS" if not errors and records else "FAIL"
+        ) if parse_attempted else "NOT_CHECKED"
+        if errors and not failure_code:
+            failure_code = anomalies[0].code if anomalies else "VALIDATION_FAILED"
 
         status = "SUCCESS" if not errors else "FAILED"
         result = OutlookProcessMessageResult(
@@ -284,17 +479,70 @@ class OutlookRevisiEngine:
             errors=errors,
             output_files=output_files,
             reply_sent=False,
+            received_time=message.received_time,
+            sender_name=message.sender_name,
+            actual_cc=message.cc,
+            required_cc=sender.required_cc_email if sender else "",
+            expected_subject=self._expected_subject(
+                configuration, workflow, sender
+            ) if sender else "",
+            detected_workflow=detected_workflow,
+            validation_sender=validation_sender,
+            validation_cc=validation_cc,
+            validation_subject=validation_subject,
+            validation_attachment=validation_attachment,
+            validation_data=validation_data,
+            failure_code=failure_code,
+            reply_from=str(
+                configuration.general.get("Reply_From_SMTP", "")
+            ),
+            processed_time=processed_time,
+            attachment_results=attachment_results,
+            valid_records=records if status == "SUCCESS" else [],
+            anomalies=anomalies,
+            attachment_count=(
+                message.attachment_count or len(message.attachments)
+            ),
         )
 
-        result.reply_sent = self._send_message_reply(
-            configuration, client, message, result
+        auto_reply = self._to_bool(
+            configuration.general.get("Auto_Reply_Enabled")
         )
+        send_mode = str(configuration.general.get("Send_Mode", "SEND")).upper()
+        try:
+            result.reply_sent = self._send_message_reply(
+                configuration, client, message, result
+            )
+            if not auto_reply:
+                result.reply_result = "NOT_REQUIRED"
+            elif self.dry_run:
+                result.reply_result = "NOT_ATTEMPTED"
+            elif send_mode == "DRAFT":
+                result.reply_result = "DRAFTED"
+            elif result.reply_sent:
+                result.reply_result = "SENT"
+        except Exception as error:
+            result.reply_result = "FAILED"
+            result.status = "FAILED"
+            result.failure_code = result.failure_code or "REPLY_FAILED"
+            result.errors.append(f"Reply failed: {error}")
+            logger.exception("Outlook reply failed for: %s", message.subject)
 
-        if status == "SUCCESS" and result.reply_sent:
+        if result.status == "SUCCESS" and result.reply_sent:
             processed_folder = str(
                 configuration.general.get("Processed_Folder", "Deleted Items")
             )
-            client.move_to_folder(message, processed_folder)
+            try:
+                client.move_to_folder(message, processed_folder)
+                result.move_result = "MOVED"
+            except Exception as error:
+                result.move_result = "FAILED"
+                result.status = "FAILED"
+                result.failure_code = result.failure_code or "MOVE_FAILED"
+                result.errors.append(f"Move failed: {error}")
+                logger.exception("Outlook move failed for: %s", message.subject)
+        elif result.reply_result in {"DRAFTED", "NOT_ATTEMPTED"}:
+            result.move_result = "NOT_MOVED"
 
         return result
 
@@ -362,6 +610,63 @@ class OutlookRevisiEngine:
             for email in sorted(required)
             if email not in actual
         ]
+
+    def _expected_subject(
+        self,
+        configuration: OutlookRevisiConfiguration,
+        workflow: str,
+        sender: OutlookSenderConfig,
+    ) -> str:
+        rule = next(
+            (
+                item for item in configuration.subject_rules
+                if item.workflow == workflow
+            ),
+            None,
+        )
+        if rule is None:
+            return ""
+        return self._render_template(
+            rule.subject_pattern,
+            {
+                "PERIOD": str(configuration.general.get("Payroll_Period", "")),
+                "COMPANY": sender.company,
+                "BRANCH_CODE": sender.branch_code,
+            },
+        )
+
+    @staticmethod
+    def _reconcile(result: OutlookProcessResult) -> None:
+        issues: list[str] = []
+        if result.total_email != result.target_email + result.skipped_other_workflow:
+            issues.append("Email total does not match target plus skipped count.")
+        if result.target_email != result.success_email + result.failed_email:
+            issues.append("Target email does not match success plus failed count.")
+
+        exported_records = sum(
+            1
+            for item in result.message_results
+            for record in item.valid_records
+            if record.output_file is not None
+        )
+        if result.valid_row_count != exported_records:
+            issues.append("Valid row count does not match exported record count.")
+
+        reply_sent = sum(
+            1 for item in result.message_results if item.reply_result == "SENT"
+        )
+        moved = sum(
+            1 for item in result.message_results if item.move_result == "MOVED"
+        )
+        if reply_sent > result.success_email + result.failed_email:
+            issues.append("Reply sent count exceeds processed target email count.")
+        if moved > reply_sent:
+            issues.append("Moved email count exceeds sent reply count.")
+
+        result.reconciliation_issues = issues
+        result.reconciliation_status = "WARNING" if issues else "PASS"
+        if issues:
+            result.final_status = "COMPLETED WITH WARNING"
 
     def _subject_matches(
         self,
@@ -558,8 +863,29 @@ class OutlookRevisiEngine:
             f"Skipped Other: {result.skipped_other_workflow}",
             f"Success      : {result.success_email}",
             f"Failed       : {result.failed_email}",
+            f"Valid Rows   : {result.valid_row_count}",
+            f"Anomaly Rows : {result.anomaly_row_count}",
+            f"Report       : {result.report_status}",
+            f"Report Path  : {result.report_file or ''}",
+            f"Reconcile    : {result.reconciliation_status}",
+            "",
+            "REPORT GENERATION",
+            f"- Started: {result.report_file or ''}",
+            f"- Workflow: {result.workflow}",
+            f"- Email results: {result.total_email}",
+            f"- Attachment results: {sum(len(item.attachment_results) for item in result.message_results)}",
+            f"- Valid rows: {result.valid_row_count}",
+            f"- Anomaly rows: {result.anomaly_row_count}",
+            f"- Output artifacts: {result.output_txt_count + 3}",
+            f"- Reconciliation: {result.reconciliation_status}",
+            f"- Result: {result.report_status}",
             "",
         ]
+
+        if result.reconciliation_issues:
+            lines.append("RECONCILIATION ISSUES")
+            lines.extend(f"- {issue}" for issue in result.reconciliation_issues)
+            lines.append("")
 
         for item in result.message_results:
             lines.append(f"[{item.status}] {item.sender_email} | {item.subject}")
@@ -576,13 +902,18 @@ class OutlookRevisiEngine:
                 {
                     "job_id": result.job_id,
                     "output_folder": str(result.output_folder),
-                    "report_folder": str(result.report_folder),
                     "total_email": result.total_email,
                     "target_email": result.target_email,
                     "skipped_other_workflow": result.skipped_other_workflow,
                     "success_email": result.success_email,
                     "failed_email": result.failed_email,
                     "output_txt_count": result.output_txt_count,
+                    "report_file": str(result.report_file or ""),
+                    "report_status": result.report_status,
+                    "valid_row_count": result.valid_row_count,
+                    "anomaly_row_count": result.anomaly_row_count,
+                    "reconciliation_status": result.reconciliation_status,
+                    "final_status": result.final_status,
                     "messages": [
                         {
                             "entry_id": item.entry_id,
@@ -596,6 +927,9 @@ class OutlookRevisiEngine:
                                 for output_file in item.output_files
                             ],
                             "reply_sent": item.reply_sent,
+                            "reply_result": item.reply_result,
+                            "move_result": item.move_result,
+                            "failure_code": item.failure_code,
                         }
                         for item in result.message_results
                     ],

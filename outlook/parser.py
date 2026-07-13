@@ -5,7 +5,7 @@ Outlook - Revisi attachment parsing and TXT output helpers.
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +34,7 @@ class AttendanceRevisionRecord:
     time_out: str
     source_file: Path
     source_row: int
+    output_file: Path | None = None
 
     def to_txt_row(self) -> list[str]:
         """Return HRIS-ready quoted TXT row values."""
@@ -48,11 +49,30 @@ class AttendanceRevisionRecord:
 
 
 @dataclass(slots=True)
+class OutlookDataAnomaly:
+    """Structured invalid source row retained for the process report."""
+
+    source_file: Path
+    source_row: int
+    nik: str
+    date_in: str
+    time_in: str
+    date_out: str
+    time_out: str
+    code: str
+    reason: str
+    raw_value: str = ""
+
+
+@dataclass(slots=True)
 class ParseResult:
     """Attachment parse result."""
 
     records: list[AttendanceRevisionRecord]
     errors: list[str]
+    anomalies: list[OutlookDataAnomaly] = field(default_factory=list)
+    row_read: int = 0
+    empty_row_dropped: int = 0
 
     @property
     def valid(self) -> bool:
@@ -82,20 +102,44 @@ class OutlookAttachmentParser:
     def parse_ho_excel(self, path: Path) -> ParseResult:
         """Parse HO Excel attachment."""
         errors: list[str] = []
+        anomalies: list[OutlookDataAnomaly] = []
         records: list[AttendanceRevisionRecord] = []
+        row_read = 0
+        empty_row_dropped = 0
 
         try:
             workbook = load_workbook(path, data_only=True, read_only=True)
             sheet = workbook.active
             rows = list(sheet.iter_rows(values_only=True))
         except Exception as error:
-            return ParseResult([], [f"Failed to read Excel attachment: {error}"])
+            reason = f"Failed to read Excel attachment: {error}"
+            return ParseResult(
+                [], [reason],
+                [OutlookDataAnomaly(path, 0, "", "", "", "", "", "FILE_READ_FAILED", reason)],
+            )
 
         try:
             if not rows:
-                return ParseResult([], ["Excel attachment is empty."])
+                reason = "Excel attachment is empty."
+                return ParseResult(
+                    [], [reason],
+                    [OutlookDataAnomaly(path, 0, "", "", "", "", "", "ATTACHMENT_STRUCTURE_INVALID", reason)],
+                )
 
-            header_index = self._find_header_index(rows, REQUIRED_HO_COLUMNS)
+            try:
+                header_index = self._find_header_index(rows, REQUIRED_HO_COLUMNS)
+            except ValueError as error:
+                reason = str(error)
+                return ParseResult(
+                    [],
+                    [reason],
+                    [
+                        OutlookDataAnomaly(
+                            path, 0, "", "", "", "", "",
+                            "MISSING_REQUIRED_COLUMN", reason,
+                        )
+                    ],
+                )
             headers = [
                 self._normalize_header(value)
                 for value in rows[header_index]
@@ -107,7 +151,9 @@ class OutlookAttachmentParser:
             }
 
             for row_number, row in enumerate(rows[header_index + 1:], header_index + 2):
+                row_read += 1
                 if self._is_empty_ho_data_row(row, column_map):
+                    empty_row_dropped += 1
                     continue
 
                 record = self._record_from_values(
@@ -119,6 +165,7 @@ class OutlookAttachmentParser:
                     source_file=path,
                     source_row=row_number,
                     errors=errors,
+                    anomalies=anomalies,
                 )
 
                 if record is not None:
@@ -129,7 +176,7 @@ class OutlookAttachmentParser:
             except Exception:
                 pass
 
-        return ParseResult(records, errors)
+        return ParseResult(records, errors, anomalies, row_read, empty_row_dropped)
 
     @classmethod
     def _is_empty_ho_data_row(
@@ -170,7 +217,10 @@ class OutlookAttachmentParser:
     def parse_branch_txt(self, path: Path) -> ParseResult:
         """Parse Branch TXT attachment with six comma-separated columns."""
         errors: list[str] = []
+        anomalies: list[OutlookDataAnomaly] = []
         records: list[AttendanceRevisionRecord] = []
+        row_read = 0
+        empty_row_dropped = 0
 
         try:
             with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -179,7 +229,9 @@ class OutlookAttachmentParser:
                 delimiter = "\t" if "\t" in sample and "," not in sample else ","
                 reader = csv.reader(handle, delimiter=delimiter)
                 for row_number, row in enumerate(reader, 1):
+                    row_read += 1
                     if not row or not any(value.strip() for value in row):
+                        empty_row_dropped += 1
                         continue
 
                     values = [value.strip().strip('"') for value in row]
@@ -187,9 +239,16 @@ class OutlookAttachmentParser:
                         continue
 
                     if len(values) != 6:
-                        errors.append(
+                        reason = (
                             f"{path.name} row {row_number}: expected 6 columns, "
                             f"got {len(values)}."
+                        )
+                        errors.append(reason)
+                        anomalies.append(
+                            OutlookDataAnomaly(
+                                path, row_number, "", "", "", "", "",
+                                "COLUMN_COUNT", reason, self._raw_value(values),
+                            )
                         )
                         continue
 
@@ -202,14 +261,21 @@ class OutlookAttachmentParser:
                         source_file=path,
                         source_row=row_number,
                         errors=errors,
+                        anomalies=anomalies,
                     )
 
                     if record is not None:
                         records.append(record)
         except Exception as error:
-            return ParseResult([], [f"Failed to read TXT attachment: {error}"])
+            reason = f"Failed to read TXT attachment: {error}"
+            return ParseResult(
+                [], [reason],
+                [OutlookDataAnomaly(path, 0, "", "", "", "", "", "FILE_READ_FAILED", reason)],
+                row_read,
+                empty_row_dropped,
+            )
 
-        return ParseResult(records, errors)
+        return ParseResult(records, errors, anomalies, row_read, empty_row_dropped)
 
     def _record_from_values(
         self,
@@ -221,6 +287,7 @@ class OutlookAttachmentParser:
         source_file: Path,
         source_row: int,
         errors: list[str],
+        anomalies: list[OutlookDataAnomaly],
     ) -> AttendanceRevisionRecord | None:
         nik_text = self._to_text(nik)
         date_in_value = self._parse_date(date_in)
@@ -229,24 +296,37 @@ class OutlookAttachmentParser:
         time_out_text = self._parse_time(time_out)
         prefix = f"{source_file.name} row {source_row}"
 
+        failure: tuple[str, str] | None = None
         if not nik_text:
-            errors.append(f"{prefix}: NIK is required.")
-            return None
+            failure = ("NIK_REQUIRED", f"{prefix}: NIK is required.")
+        elif date_in_value is None:
+            failure = ("DATE_FORMAT", f"{prefix}: DATE IN is invalid.")
+        elif date_out_value is None:
+            failure = ("DATE_FORMAT", f"{prefix}: DATE OUT is invalid.")
+        elif time_in_text is None:
+            failure = ("TIME_FORMAT", f"{prefix}: TIME IN is invalid.")
+        elif time_out_text is None:
+            failure = ("TIME_FORMAT", f"{prefix}: TIMEOUT is invalid.")
 
-        if date_in_value is None:
-            errors.append(f"{prefix}: DATE IN is invalid.")
-            return None
-
-        if date_out_value is None:
-            errors.append(f"{prefix}: DATE OUT is invalid.")
-            return None
-
-        if time_in_text is None:
-            errors.append(f"{prefix}: TIME IN is invalid.")
-            return None
-
-        if time_out_text is None:
-            errors.append(f"{prefix}: TIMEOUT is invalid.")
+        if failure is not None:
+            code, reason = failure
+            errors.append(reason)
+            anomalies.append(
+                OutlookDataAnomaly(
+                    source_file=source_file,
+                    source_row=source_row,
+                    nik=nik_text,
+                    date_in=self._to_text(date_in),
+                    time_in=self._to_text(time_in),
+                    date_out=self._to_text(date_out),
+                    time_out=self._to_text(time_out),
+                    code=code,
+                    reason=reason,
+                    raw_value=self._raw_value(
+                        [date_in, nik, date_in, time_in, date_out, time_out]
+                    ),
+                )
+            )
             return None
 
         return AttendanceRevisionRecord(
@@ -258,6 +338,11 @@ class OutlookAttachmentParser:
             source_file=source_file,
             source_row=source_row,
         )
+
+    @staticmethod
+    def _raw_value(values: list[Any]) -> str:
+        """Return a compact audit value without retaining binary content."""
+        return " | ".join(str(value or "") for value in values)[:1000]
 
     @classmethod
     def _find_header_index(
@@ -395,6 +480,7 @@ class OutlookTxtWriter:
                 )
                 for record in chunk:
                     writer.writerow(record.to_txt_row())
+                    record.output_file = file_path
 
             files.append(file_path)
 
