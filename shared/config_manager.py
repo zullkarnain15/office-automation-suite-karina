@@ -1067,10 +1067,26 @@ DEFAULT_HRIS_ASSISTED_STEPS: tuple[tuple[Any, ...], ...] = (
     ("Y", 9, "ok_after_run", "click", "NONE", "coordinate", True, 1, "Click OK after Run"),
 )
 HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES = (
+    "upload",
     "ok_after_upload",
     "run",
     "ok_after_run",
 )
+
+
+def resolve_hris_macro_steps(
+    steps: list[HRISAssistedStepConfig],
+) -> list[HRISAssistedStepConfig]:
+    """Resolve canonical macro steps while supporting legacy four-step configs."""
+    steps_by_name = {step.step_name: step for step in steps}
+    canonical_steps = [
+        steps_by_name[name]
+        for name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
+        if name in steps_by_name
+    ]
+    return canonical_steps or list(steps)
+
+
 HRIS_ASSISTED_ACTIONS = {
     "click", "click_type", "type", "press",
     "attach_file", "wait", "manual_continue",

@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from hris.assisted_verifier import HRISAssistedResultVerifier
+from hris.engine import HRISFullUploadEngine
 from shared.config_manager import HRISConfiguration
 
 
@@ -87,3 +88,16 @@ def test_unknown_uses_operator_decision() -> None:
         SimpleNamespace(txt_file_name="one.txt", run_control_id="RC1")
     )
     assert result.status == "SUBMITTED"
+
+
+def test_verified_process_instance_is_persisted_to_plan_item() -> None:
+    item = SimpleNamespace(verification_status="", process_instance="")
+    verification = SimpleNamespace(
+        status="SUBMITTED",
+        process_instance="1808729",
+    )
+
+    HRISFullUploadEngine._record_assisted_verification(item, verification)
+
+    assert item.verification_status == "SUBMITTED"
+    assert item.process_instance == "1808729"

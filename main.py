@@ -39,6 +39,7 @@ from config.ui_config import (
     WINDOW_WIDTH,
 )
 from hris.gui import HRISUploadGUI
+from outlook.gui import OutlookRevisiGUI
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
@@ -93,6 +94,18 @@ def open_attendance_module(root: tk.Tk) -> None:
     AttendanceGUI(attendance_window)
     attendance_window.lift()
     attendance_window.focus_force()
+
+
+def open_outlook_module(root: tk.Tk) -> None:
+    """Open Outlook - Revisi module."""
+
+    logger.info("Outlook - Revisi module opened.")
+
+    outlook_window = tk.Toplevel(root)
+    outlook_window.transient(root)
+    OutlookRevisiGUI(outlook_window)
+    outlook_window.lift()
+    outlook_window.focus_force()
 
 
 # =========================================================
@@ -229,8 +242,8 @@ def main() -> None:
         (
             "Outlook",
             "outlook.png",
-            "Email automation module.",
-            False,
+            "Process attendance revision emails and prepare HRIS TXT output.",
+            True,
         ),
         (
             "HRIS",
@@ -322,6 +335,8 @@ def main() -> None:
 
         if module_name == "Attendance":
             button_command = lambda r=root: open_attendance_module(r)
+        elif module_name == "Outlook":
+            button_command = lambda r=root: open_outlook_module(r)
         elif module_name == "HRIS":
             button_command = lambda r=root: open_hris_module(r)
         else:

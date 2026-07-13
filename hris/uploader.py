@@ -309,14 +309,34 @@ FILENAME_POPULATED_SCRIPT = r"""
     return (value || "").replace(/\s+/g, " ").trim();
   }
 
-  const filenameLabels = Array.from(document.querySelectorAll("label, span, div, td"))
-    .filter((element) => /Filename/i.test(cleanText(element.innerText || element.textContent)));
+  const filenameInputs = Array.from(document.querySelectorAll("input"))
+    .filter(isVisible)
+    .filter((input) => (input.type || "").toLowerCase() !== "file")
+    .filter((input) => {
+      const identity = `${input.id || ""} ${input.name || ""}`;
+      return /FILE_?NAME/i.test(identity) && !/ICOrigFileName/i.test(identity);
+    });
+
+  if (filenameInputs.some((input) => cleanText(input.value))) {
+    return true;
+  }
+
+  // Match only the actual Filename label. Broad ancestor elements such as the
+  // page container also contain the word "Filename" and previously caused a
+  // populated date field to be mistaken for an uploaded file.
+  const filenameLabels = Array.from(document.querySelectorAll("label, span, td"))
+    .filter((element) => /^Filename\s*:?$/i.test(
+      cleanText(element.innerText || element.textContent)
+    ));
 
   for (const label of filenameLabels) {
     const labelRect = label.getBoundingClientRect();
     const nearbyInputs = Array.from(document.querySelectorAll("input"))
       .filter(isVisible)
       .filter((input) => (input.type || "").toLowerCase() !== "file")
+      .filter((input) => !["button", "submit", "hidden"].includes(
+        (input.type || "").toLowerCase()
+      ))
       .filter((input) => !/ICOrigFileName/i.test(input.id || ""))
       .filter((input) => !/ICOrigFileName/i.test(input.name || ""))
       .map((input) => {
@@ -328,10 +348,15 @@ FILENAME_POPULATED_SCRIPT = r"""
           horizontalDistance: Math.abs(rect.left - labelRect.right),
         };
       })
-      .filter((item) => item.rect.left >= labelRect.left && item.verticalDistance <= 80)
+      .filter((item) => {
+        const horizontalGap = item.rect.left - labelRect.right;
+        return horizontalGap >= -10
+          && horizontalGap <= 600
+          && item.verticalDistance <= 30;
+      })
       .sort((a, b) => (a.verticalDistance + a.horizontalDistance) - (b.verticalDistance + b.horizontalDistance));
 
-    if (nearbyInputs.some((item) => cleanText(item.input.value))) {
+    if (nearbyInputs.length > 0 && cleanText(nearbyInputs[0].input.value)) {
       return true;
     }
   }
@@ -480,6 +505,7 @@ class HRISUploadPageHandler:
         )
 
         self._reset_item_state()
+        completion_message = "Process Scheduler OK confirmed."
 
         txt_file_path = Path(plan_item.txt_file_path)
 
@@ -523,17 +549,8 @@ class HRISUploadPageHandler:
                     "terbuka, lalu klik OK untuk mencoba lanjut otomatis."
                 ),
             )
-            self._run_step_with_manual_checkpoint(
-                "Klik Upload attachment",
-                self._click_upload,
-                (
-                    "Automation belum bisa menekan tombol Upload di popup attachment.\n\n"
-                    "Silakan pastikan file sudah dipilih dan tombol Upload siap, "
-                    "lalu klik OK untuk mencoba lanjut otomatis."
-                ),
-            )
             if self.post_upload_recorder_callback is not None:
-                self._wait_for_post_upload_macro_ready(timeout=10_000)
+                self._wait_for_upload_macro_ready(timeout=10_000)
                 recorder_result = self.post_upload_recorder_callback(
                     plan_item,
                     start_date,
@@ -552,7 +569,21 @@ class HRISUploadPageHandler:
                 self._upload_ok_confirmed = True
                 self._run_requested = True
                 self._scheduler_ok_confirmed = True
+                self._real_process_submitted = True
+                completion_message = str(
+                    getattr(recorder_result, "message", "") or completion_message
+                )
             else:
+                self._run_step_with_manual_checkpoint(
+                    "Klik Upload attachment",
+                    self._click_upload,
+                    (
+                        "Automation belum bisa menekan tombol Upload di popup "
+                        "attachment.\n\nSilakan pastikan file sudah dipilih dan "
+                        "tombol Upload siap, lalu klik OK untuk mencoba lanjut "
+                        "otomatis."
+                    ),
+                )
                 self._run_playwright_post_upload_steps()
 
             if not self._verify_success():
@@ -573,7 +604,7 @@ class HRISUploadPageHandler:
 
             return HRISUploadItemResult(
                 success=True,
-                message="Process Scheduler OK confirmed.",
+                message=completion_message,
                 txt_file_name=plan_item.txt_file_name,
                 run_control_id=plan_item.run_control_id,
             )
@@ -602,29 +633,6 @@ class HRISUploadPageHandler:
                 "klik OK di aplikasi ini untuk mencoba lanjut otomatis."
             ),
         )
-
-    def _wait_for_post_upload_macro_ready(
-        self,
-        timeout: int = 10_000,
-    ) -> None:
-        """
-        Wait briefly for the post-upload OK surface before coordinate replay.
-        """
-        try:
-            self._wait_for_any_visible(
-                [
-                    "input[name='#ICOK']",
-                    "input[id='#ICOK']",
-                    "input[value='OK']",
-                    "button:has-text('OK')",
-                    "#upload_ok_button",
-                ],
-                timeout=timeout,
-            )
-        except Exception:
-            logger.info(
-                "Post-upload OK was not detected before macro replay; continuing."
-            )
         self._run_step_with_manual_checkpoint(
             "Klik Run",
             self._click_run,
@@ -642,6 +650,24 @@ class HRISUploadPageHandler:
                 "Jika dialog Process Scheduler Request sudah muncul, biarkan "
                 "terbuka lalu klik OK di aplikasi ini untuk mencoba lanjut otomatis."
             ),
+        )
+
+    def _wait_for_upload_macro_ready(
+        self,
+        timeout: int = 10_000,
+    ) -> None:
+        """Wait until Choose File is complete and the macro can click Upload."""
+        self._wait_for_any_visible(
+            [
+                "#Upload",
+                "[name='Upload']",
+                "input[id='Upload']",
+                "input[name='Upload']",
+                "input[value='Upload']",
+                "button:has-text('Upload')",
+                "a:has-text('Upload')",
+            ],
+            timeout=timeout,
         )
 
     def _fill_run_control_id(
@@ -988,7 +1014,6 @@ class HRISUploadPageHandler:
         if self._is_add_attachment_success_visible() or self._is_any_visible(
             [
                 "#upload_ok_button",
-                *RUN_BUTTON_SELECTORS,
                 "input[name='#ICSave']",
             ]
         ):

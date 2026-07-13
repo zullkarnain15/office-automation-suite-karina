@@ -45,7 +45,7 @@ from hris.engine import HRISFullUploadEngine
 from hris.click_profile import HRISClickProfileManager
 from shared.config_manager import (
     HRISConfigurationReader,
-    HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES,
+    resolve_hris_macro_steps,
 )
 from shared.logger import get_logger
 
@@ -1014,11 +1014,9 @@ class HRISUploadGUI:
                 (int(screen.width), int(screen.height)),
                 configuration.upload,
                 current_scale_percent=self._get_display_scale_percent(),
-                required_steps=[
-                    step
-                    for step in configuration.assisted_steps
-                    if step.step_name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
-                ],
+                required_steps=resolve_hris_macro_steps(
+                    configuration.assisted_steps
+                ),
             )
             return f"Click Profile Status: {validation.message}"
         except Exception as error:

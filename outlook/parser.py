@@ -184,7 +184,7 @@ class OutlookAttachmentParser:
         row: tuple[Any, ...],
         column_map: dict[str, int],
     ) -> bool:
-        """Ignore unused template rows whose formulas evaluate to 0/00:00."""
+        """Ignore unused template rows with at most one meaningful value."""
         if not row:
             return True
 
@@ -192,7 +192,11 @@ class OutlookAttachmentParser:
             cls._value_at(row, column_map[column])
             for column in REQUIRED_HO_COLUMNS
         ]
-        return all(cls._is_empty_template_value(value) for value in values)
+        populated_count = sum(
+            not cls._is_empty_template_value(value)
+            for value in values
+        )
+        return populated_count <= 1
 
     @staticmethod
     def _is_empty_template_value(value: Any) -> bool:
@@ -465,23 +469,68 @@ class OutlookTxtWriter:
         date_suffix = str(job_id).split("_", maxsplit=1)[0]
         limit = max(max_lines, 1)
         files: list[Path] = []
+        remaining = list(records)
+        existing_files = sorted(
+            output_path.glob(f"{safe_prefix}_*_{date_suffix}.txt")
+        )
 
-        for chunk_index, start in enumerate(range(0, len(records), limit), 1):
-            chunk = records[start:start + limit]
+        if existing_files:
+            current_file = existing_files[-1]
+            current_count = self._line_count(current_file)
+            available = max(limit - current_count, 0)
+            if available:
+                chunk = remaining[:available]
+                self._write_chunk(current_file, chunk, mode="a")
+                files.append(current_file)
+                remaining = remaining[len(chunk):]
+
+        file_index = self._next_output_index(
+            output_path,
+            safe_prefix,
+            date_suffix,
+        )
+        for start in range(0, len(remaining), limit):
+            chunk = remaining[start:start + limit]
             file_path = output_path / (
-                f"{safe_prefix}_{chunk_index:03d}_{date_suffix}.txt"
+                f"{safe_prefix}_{file_index:03d}_{date_suffix}.txt"
             )
-
-            with file_path.open("w", encoding="utf-8", newline="") as handle:
-                writer = csv.writer(
-                    handle,
-                    quoting=csv.QUOTE_ALL,
-                    lineterminator="\n",
-                )
-                for record in chunk:
-                    writer.writerow(record.to_txt_row())
-                    record.output_file = file_path
-
+            self._write_chunk(file_path, chunk, mode="w")
             files.append(file_path)
+            file_index += 1
 
         return files
+
+    @staticmethod
+    def _write_chunk(
+        file_path: Path,
+        records: list[AttendanceRevisionRecord],
+        mode: str,
+    ) -> None:
+        with file_path.open(mode, encoding="utf-8", newline="") as handle:
+            writer = csv.writer(
+                handle,
+                quoting=csv.QUOTE_ALL,
+                lineterminator="\n",
+            )
+            for record in records:
+                writer.writerow(record.to_txt_row())
+                record.output_file = file_path
+
+    @staticmethod
+    def _line_count(path: Path) -> int:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            return sum(1 for _line in handle)
+
+    @staticmethod
+    def _next_output_index(
+        output_path: Path,
+        safe_prefix: str,
+        date_suffix: str,
+    ) -> int:
+        """Return the next free job-wide TXT sequence number."""
+        index = 1
+        while (
+            output_path / f"{safe_prefix}_{index:03d}_{date_suffix}.txt"
+        ).exists():
+            index += 1
+        return index

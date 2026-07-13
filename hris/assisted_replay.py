@@ -10,9 +10,9 @@ from typing import Any, Callable
 
 from hris.click_profile import HRISClickProfileManager
 from shared.config_manager import (
-    HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES,
     HRISConfiguration,
     HRISAssistedStepConfig,
+    resolve_hris_macro_steps,
 )
 from shared.logger import get_logger
 
@@ -54,15 +54,7 @@ class HRISAssistedReplayEngine:
         start_date: str,
         end_date: str,
     ) -> HRISAssistedReplayResult:
-        steps_by_name = {
-            step.step_name: step for step in self.configuration.assisted_steps
-        }
-        post_upload_steps = [
-            steps_by_name[name]
-            for name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
-            if name in steps_by_name
-        ]
-        steps = post_upload_steps or self.configuration.assisted_steps
+        steps = resolve_hris_macro_steps(self.configuration.assisted_steps)
         for step in steps:
             self.last_context = {
                 "current_step": step.step_name,

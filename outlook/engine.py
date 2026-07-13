@@ -157,6 +157,16 @@ class OutlookRevisiEngine:
                 configuration.general.get("Reply_From_SMTP", "")
                 or configuration.general.get("Mailbox_SMTP", "")
             ),
+            send_transport=str(
+                configuration.general.get("Send_Transport", "OUTLOOK")
+            ),
+            smtp_server=str(configuration.general.get("SMTP_Server", "")),
+            smtp_port=self._to_int(
+                configuration.general.get("SMTP_Port"), default=25
+            ),
+            smtp_timeout=self._to_int(
+                configuration.general.get("SMTP_Timeout_Seconds"), default=30
+            ),
         )
 
         messages = client.fetch_messages(
@@ -196,7 +206,13 @@ class OutlookRevisiEngine:
             1 for item in message_results
             if item.status == "SKIPPED_OTHER_WORKFLOW"
         )
-        output_txt_count = sum(len(item.output_files) for item in message_results)
+        output_txt_count = len(
+            {
+                path.resolve()
+                for item in message_results
+                for path in item.output_files
+            }
+        )
         result = OutlookProcessResult(
             success=failed_count == 0,
             job_id=job_id,
@@ -399,13 +415,15 @@ class OutlookRevisiEngine:
 
         records: list[AttendanceRevisionRecord] = []
         anomalies: list[OutlookDataAnomaly] = []
+        data_warnings: list[str] = []
+        parse_issues: list[str] = []
         parse_attempted = not errors
         if parse_attempted:
             for attachment_path in attachment_paths:
                 parse_result = self.parser.parse(attachment_path, workflow)
                 records.extend(parse_result.records)
-                errors.extend(parse_result.errors)
                 anomalies.extend(parse_result.anomalies)
+                parse_issues.extend(parse_result.errors)
                 attachment_result = next(
                     (
                         item for item in attachment_results
@@ -421,16 +439,23 @@ class OutlookRevisiEngine:
                         parse_result.empty_row_dropped
                     )
                     if parse_result.errors:
-                        attachment_result.file_status = "FAILED"
+                        attachment_result.file_status = (
+                            "WARNING" if parse_result.records else "FAILED"
+                        )
                         attachment_result.error_message = "\n".join(
                             parse_result.errors
                         )
+
+            if records:
+                data_warnings.extend(parse_issues)
+            else:
+                errors.extend(parse_issues)
 
             if not records and not errors:
                 errors.append("No valid attendance rows found in attachment.")
                 failure_code = failure_code or "NO_VALID_DATA"
 
-        if not errors:
+        if parse_attempted and records:
             max_lines = self._to_int(
                 configuration.general.get("TXT_Max_Lines"),
                 default=10000,
@@ -454,7 +479,7 @@ class OutlookRevisiEngine:
                     key=str,
                 )
 
-        else:
+        elif not parse_attempted:
             for attachment_result in attachment_results:
                 if attachment_result.file_status == "ACCEPTED":
                     attachment_result.file_status = "SKIPPED"
@@ -463,20 +488,27 @@ class OutlookRevisiEngine:
                         "validation failed."
                     )
 
-        validation_data = (
-            "PASS" if not errors and records else "FAIL"
-        ) if parse_attempted else "NOT_CHECKED"
+        if not parse_attempted:
+            validation_data = "NOT_CHECKED"
+        elif errors or not records:
+            validation_data = "FAIL"
+        elif data_warnings:
+            validation_data = "WARNING"
+        else:
+            validation_data = "PASS"
+
         if errors and not failure_code:
             failure_code = anomalies[0].code if anomalies else "VALIDATION_FAILED"
 
         status = "SUCCESS" if not errors else "FAILED"
+        result_issues = [*errors, *data_warnings]
         result = OutlookProcessMessageResult(
             entry_id=message.entry_id,
             subject=message.subject,
             sender_email=message.sender_email,
             workflow=workflow,
             status=status,
-            errors=errors,
+            errors=result_issues,
             output_files=output_files,
             reply_sent=False,
             received_time=message.received_time,
@@ -492,13 +524,16 @@ class OutlookRevisiEngine:
             validation_subject=validation_subject,
             validation_attachment=validation_attachment,
             validation_data=validation_data,
-            failure_code=failure_code,
+            failure_code=(
+                failure_code
+                or ("DATA_ANOMALY" if data_warnings else "")
+            ),
             reply_from=str(
                 configuration.general.get("Reply_From_SMTP", "")
             ),
             processed_time=processed_time,
             attachment_results=attachment_results,
-            valid_records=records if status == "SUCCESS" else [],
+            valid_records=records if output_files else [],
             anomalies=anomalies,
             attachment_count=(
                 message.attachment_count or len(message.attachments)

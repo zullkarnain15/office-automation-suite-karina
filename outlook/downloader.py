@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from email.message import EmailMessage
 from pathlib import Path
+import smtplib
 from typing import Any
 from typing import Callable
 
@@ -43,16 +45,30 @@ class OutlookComClient:
     """Thin wrapper around Microsoft Outlook COM automation."""
 
     OL_FOLDER_INBOX = 6
+    OL_FOLDER_DELETED_ITEMS = 3
 
     def __init__(
         self,
         mailbox_smtp: str,
         source_folder: str = "Inbox",
         reply_from_smtp: str | None = None,
+        send_transport: str = "OUTLOOK",
+        smtp_server: str = "",
+        smtp_port: int = 25,
+        smtp_timeout: int = 30,
     ) -> None:
         self.mailbox_smtp = mailbox_smtp.strip().lower()
         self.source_folder = source_folder.strip() or "Inbox"
         self.reply_from_smtp = (reply_from_smtp or mailbox_smtp).strip().lower()
+        self.send_transport = send_transport.strip().upper() or "OUTLOOK"
+        if self.send_transport not in {"OUTLOOK", "SMTP"}:
+            raise ValueError(
+                "Send_Transport must be OUTLOOK or SMTP, got: "
+                f"{send_transport}"
+            )
+        self.smtp_server = smtp_server.strip()
+        self.smtp_port = int(smtp_port)
+        self.smtp_timeout = int(smtp_timeout)
         self._outlook = None
         self._namespace = None
 
@@ -165,6 +181,24 @@ class OutlookComClient:
             logger.warning("Reply skipped because raw Outlook item is missing.")
             return
 
+        if self.send_transport == "SMTP":
+            headers: dict[str, str] = {}
+            internet_message_id = str(
+                getattr(message.raw_item, "InternetMessageID", "") or ""
+            ).strip()
+            if internet_message_id:
+                headers["In-Reply-To"] = internet_message_id
+                headers["References"] = internet_message_id
+            self._send_smtp(
+                to=[to or message.sender_email],
+                cc=self._split_addresses(cc),
+                subject=subject,
+                body=body,
+                send_mode=send_mode,
+                headers=headers,
+            )
+            return
+
         reply = message.raw_item.Reply()
         reply.Subject = subject
         reply.Body = body
@@ -196,6 +230,10 @@ class OutlookComClient:
         send_mode: str = "SEND",
     ) -> None:
         """Send or draft a new mail."""
+        if self.send_transport == "SMTP":
+            self._send_smtp(to, cc, subject, body, send_mode)
+            return
+
         if self._outlook is None:
             self.connect()
 
@@ -218,26 +256,133 @@ class OutlookComClient:
         else:
             mail.Send()
 
+    def _send_smtp(
+        self,
+        to: list[str],
+        cc: list[str],
+        subject: str,
+        body: str,
+        send_mode: str,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        """Send mail through the trusted internal SMTP relay."""
+        if send_mode.strip().upper() == "DRAFT":
+            raise RuntimeError(
+                "Send_Mode DRAFT is not supported when Send_Transport is SMTP."
+            )
+        if not self.smtp_server:
+            raise RuntimeError("SMTP_Server is required for SMTP transport.")
+        if not self.reply_from_smtp or "@" not in self.reply_from_smtp:
+            raise RuntimeError("Reply_From_SMTP must be a valid email address.")
+
+        recipients = [item.strip() for item in [*to, *cc] if item.strip()]
+        if not recipients:
+            raise RuntimeError("SMTP message has no recipients.")
+
+        mail = EmailMessage()
+        mail["From"] = self.reply_from_smtp
+        mail["To"] = "; ".join(item.strip() for item in to if item.strip())
+        if cc:
+            mail["Cc"] = "; ".join(item.strip() for item in cc if item.strip())
+        mail["Subject"] = subject
+        for name, value in (headers or {}).items():
+            if value:
+                mail[name] = value
+        mail.set_content(body)
+
+        with smtplib.SMTP(
+            self.smtp_server,
+            self.smtp_port,
+            timeout=self.smtp_timeout,
+        ) as smtp:
+            smtp.send_message(mail, to_addrs=recipients)
+
+        logger.info(
+            "Email sent through SMTP relay %s:%s from %s.",
+            self.smtp_server,
+            self.smtp_port,
+            self.reply_from_smtp,
+        )
+
+    @staticmethod
+    def _split_addresses(value: str | None) -> list[str]:
+        if not value:
+            return []
+        return [item.strip() for item in value.replace(",", ";").split(";") if item.strip()]
+
     def move_to_folder(self, message: OutlookMessage, folder_name: str) -> None:
-        """Move original message after reply has been sent/drafted."""
+        """Mark a processed message read, then move it to its source store."""
         if message.raw_item is None:
             logger.warning("Move skipped because raw Outlook item is missing.")
             return
 
-        destination = self._get_mailbox_folder(folder_name)
-        message.raw_item.Move(destination)
+        target = folder_name.strip().lower()
+        destination = None
+        if target in {"deleted", "deleted items"}:
+            parent = getattr(message.raw_item, "Parent", None)
+            source_store = getattr(parent, "Store", None)
+            if source_store is not None:
+                try:
+                    destination = source_store.GetDefaultFolder(
+                        self.OL_FOLDER_DELETED_ITEMS
+                    )
+                except Exception:
+                    logger.warning(
+                        "Could not resolve Deleted Items from the source store; "
+                        "using shared mailbox lookup."
+                    )
+
+        if destination is None:
+            destination = self._get_mailbox_folder(folder_name)
+
+        was_unread = bool(getattr(message.raw_item, "UnRead", False))
+        if was_unread:
+            message.raw_item.UnRead = False
+            message.raw_item.Save()
+
+        try:
+            moved_item = message.raw_item.Move(destination)
+        except Exception:
+            if was_unread:
+                message.raw_item.UnRead = True
+                message.raw_item.Save()
+            raise
+
+        if moved_item is not None and bool(
+            getattr(moved_item, "UnRead", False)
+        ):
+            moved_item.UnRead = False
+            moved_item.Save()
+        logger.info(
+            "Marked Outlook message read and moved it to %s in its source mailbox.",
+            folder_name,
+        )
 
     def _get_source_folder(self) -> Any:
         if self.source_folder.lower() == "inbox":
-            store = self._get_mailbox_store()
-            return store.GetDefaultFolder(self.OL_FOLDER_INBOX)
+            try:
+                store = self._get_mailbox_store()
+                return store.GetDefaultFolder(self.OL_FOLDER_INBOX)
+            except RuntimeError:
+                return self._get_shared_default_folder(self.OL_FOLDER_INBOX)
 
         return self._get_mailbox_folder(self.source_folder)
 
     def _get_mailbox_folder(self, folder_name: str) -> Any:
-        store = self._get_mailbox_store()
-        root = store.GetRootFolder()
         target = folder_name.strip().lower()
+        if target in {"deleted", "deleted items"}:
+            try:
+                store = self._get_mailbox_store()
+                return store.GetDefaultFolder(self.OL_FOLDER_DELETED_ITEMS)
+            except RuntimeError:
+                return self._get_shared_default_folder(
+                    self.OL_FOLDER_DELETED_ITEMS
+                )
+
+        try:
+            root = self._get_mailbox_store().GetRootFolder()
+        except RuntimeError:
+            root = self._get_shared_default_folder(self.OL_FOLDER_INBOX).Parent
 
         for folder in root.Folders:
             if str(folder.Name).strip().lower() == target:
@@ -261,6 +406,27 @@ class OutlookComClient:
         raise RuntimeError(
             f"Mailbox SMTP not found in Outlook profile: {self.mailbox_smtp}"
         )
+
+    def _get_shared_default_folder(self, folder_type: int) -> Any:
+        if self._namespace is None:
+            raise RuntimeError("Outlook namespace is not connected.")
+
+        recipient = self._namespace.CreateRecipient(self.mailbox_smtp)
+        if not recipient.Resolve():
+            raise RuntimeError(
+                "Shared mailbox address could not be resolved in Outlook: "
+                f"{self.mailbox_smtp}"
+            )
+        try:
+            return self._namespace.GetSharedDefaultFolder(
+                recipient,
+                folder_type,
+            )
+        except Exception as error:
+            raise RuntimeError(
+                "Shared mailbox folder cannot be accessed: "
+                f"{self.mailbox_smtp}. Check Full Access permission."
+            ) from error
 
     def _store_smtp(self, store: Any) -> str:
         try:
