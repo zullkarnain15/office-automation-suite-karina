@@ -46,6 +46,7 @@ class OutlookComClient:
 
     OL_FOLDER_INBOX = 6
     OL_FOLDER_DELETED_ITEMS = 3
+    OL_FOLDER_SENT_MAIL = 5
 
     def __init__(
         self,
@@ -56,6 +57,7 @@ class OutlookComClient:
         smtp_server: str = "",
         smtp_port: int = 25,
         smtp_timeout: int = 30,
+        save_smtp_copy_to_sent: bool = True,
     ) -> None:
         self.mailbox_smtp = mailbox_smtp.strip().lower()
         self.source_folder = source_folder.strip() or "Inbox"
@@ -69,6 +71,7 @@ class OutlookComClient:
         self.smtp_server = smtp_server.strip()
         self.smtp_port = int(smtp_port)
         self.smtp_timeout = int(smtp_timeout)
+        self.save_smtp_copy_to_sent = bool(save_smtp_copy_to_sent)
         self._outlook = None
         self._namespace = None
 
@@ -303,6 +306,70 @@ class OutlookComClient:
             self.smtp_port,
             self.reply_from_smtp,
         )
+
+        if self.save_smtp_copy_to_sent:
+            self._save_smtp_sent_copy(
+                to=to,
+                cc=cc,
+                subject=subject,
+                body=body,
+            )
+
+    def _save_smtp_sent_copy(
+        self,
+        to: list[str],
+        cc: list[str],
+        subject: str,
+        body: str,
+    ) -> None:
+        """Archive a best-effort copy of an SMTP message in Outlook Sent Items."""
+        try:
+            if self._outlook is None or self._namespace is None:
+                self.connect()
+
+            destination = self._get_sent_items_folder()
+            copy = self._outlook.CreateItem(0)
+            copy.To = "; ".join(item.strip() for item in to if item.strip())
+            copy.CC = "; ".join(item.strip() for item in cc if item.strip())
+            copy.Subject = subject
+            copy.Body = body
+            copy.Save()
+            copy.Move(destination)
+            logger.info(
+                "SMTP sent copy archived in Outlook Sent Items for mailbox %s.",
+                self.mailbox_smtp,
+            )
+        except Exception:
+            # SMTP delivery has already succeeded. Archiving must never cause a
+            # retry because that could send a duplicate reply.
+            logger.exception(
+                "SMTP delivery succeeded, but its Outlook Sent Items copy "
+                "could not be archived."
+            )
+
+    def _get_sent_items_folder(self) -> Any:
+        """Resolve shared-mailbox Sent Items, then fall back to profile default."""
+        try:
+            return self._get_mailbox_store().GetDefaultFolder(
+                self.OL_FOLDER_SENT_MAIL
+            )
+        except Exception:
+            logger.warning(
+                "Could not resolve shared mailbox Sent Items from its store; "
+                "trying shared-folder access."
+            )
+
+        try:
+            return self._get_shared_default_folder(self.OL_FOLDER_SENT_MAIL)
+        except Exception:
+            logger.warning(
+                "Could not access shared mailbox Sent Items; using the "
+                "default Outlook profile Sent Items folder."
+            )
+
+        if self._namespace is None:
+            raise RuntimeError("Outlook namespace is not connected.")
+        return self._namespace.GetDefaultFolder(self.OL_FOLDER_SENT_MAIL)
 
     @staticmethod
     def _split_addresses(value: str | None) -> list[str]:

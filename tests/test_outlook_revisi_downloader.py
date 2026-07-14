@@ -54,6 +54,7 @@ def test_smtp_reply_uses_configured_from_and_thread_headers() -> None:
         send_transport="SMTP",
         smtp_server="mail.oto.co.id",
         smtp_port=25,
+        save_smtp_copy_to_sent=False,
     )
 
     with patch("outlook.downloader.smtplib.SMTP") as smtp_class:
@@ -76,6 +77,57 @@ def test_smtp_reply_uses_configured_from_and_thread_headers() -> None:
         "pic@example.com",
         "supervisor@example.com",
     ]
+
+
+def test_smtp_success_archives_copy_in_shared_sent_items() -> None:
+    sent_items = SimpleNamespace(Name="Sent Items")
+    moved_to = []
+    archived = SimpleNamespace()
+    archived.Save = lambda: None
+    archived.Move = lambda destination: moved_to.append(destination)
+    outlook = SimpleNamespace(CreateItem=lambda _item_type: archived)
+    store = SimpleNamespace(
+        GetDefaultFolder=lambda folder_type: (
+            sent_items if folder_type == 5 else None
+        )
+    )
+    client = OutlookComClient(
+        "karina.hr.1@oto.co.id",
+        send_transport="SMTP",
+        smtp_server="mail.oto.co.id",
+    )
+    client._outlook = outlook
+    client._namespace = SimpleNamespace()
+    client._get_mailbox_store = lambda: store
+
+    with patch("outlook.downloader.smtplib.SMTP"):
+        client.send_mail(
+            ["sender@example.com"],
+            ["cc@example.com"],
+            "Reply subject",
+            "Reply body",
+        )
+
+    assert archived.To == "sender@example.com"
+    assert archived.CC == "cc@example.com"
+    assert archived.Subject == "Reply subject"
+    assert archived.Body == "Reply body"
+    assert moved_to == [sent_items]
+
+
+def test_sent_copy_failure_does_not_resend_or_fail_smtp_delivery() -> None:
+    client = OutlookComClient(
+        "karina.hr.1@oto.co.id",
+        send_transport="SMTP",
+        smtp_server="mail.oto.co.id",
+    )
+    client.connect = lambda: (_ for _ in ()).throw(RuntimeError("COM failed"))
+
+    with patch("outlook.downloader.smtplib.SMTP") as smtp_class:
+        client.send_mail(["sender@example.com"], [], "Subject", "Body")
+
+    smtp = smtp_class.return_value.__enter__.return_value
+    smtp.send_message.assert_called_once()
 
 
 def test_smtp_transport_rejects_draft_mode() -> None:

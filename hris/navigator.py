@@ -29,6 +29,15 @@ logger = get_logger(__name__)
 
 OVERTIME_UPLOAD_COMPONENT_PATH = (
     "/psp/HPROD/EMPLOYEE/HRMS/c/IDOT_ATTENDANCE.IDOT_UPLOAD_ATT.GBL"
+    "?FolderPath=PORTAL_ROOT_OBJECT.IDOT_TRANSACTION.IDOT_UPLOAD_ATT_GBL"
+    "&IsFolder=false"
+    "&IgnoreParamTempl=FolderPath%2CIsFolder"
+)
+OVERTIME_UPLOAD_LINK_SELECTORS = (
+    "#crefli_IDOT_UPLOAD_ATT_GBL > a",
+    "li#crefli_IDOT_UPLOAD_ATT_GBL a",
+    "a[role='menuitem'][href*='IDOT_ATTENDANCE.IDOT_UPLOAD_ATT.GBL']",
+    "a[href*='IDOT_ATTENDANCE.IDOT_UPLOAD_ATT.GBL']",
 )
 
 
@@ -79,7 +88,15 @@ class HRISNavigator:
         logger.info(
             "Clicking Overtime Upload Attendance for the next batch item."
         )
-        self._click_overtime_upload_attendance_link()
+        try:
+            self._click_overtime_upload_attendance_link()
+        except RuntimeError:
+            logger.warning(
+                "Overtime Upload Attendance sidebar link was unavailable; "
+                "opening the component URL directly.",
+                exc_info=True,
+            )
+            self._open_overtime_upload_attendance_url()
 
         if not self.verify_run_control_search_opened():
             raise RuntimeError(
@@ -93,6 +110,21 @@ class HRISNavigator:
         """Click the sidebar link, excluding the identical page-title text."""
         last_error: Exception | None = None
 
+        # PeopleSoft exposes a stable component reference ID on the sidebar
+        # entry. Prefer it over accessible text because the component page has
+        # an identical title and some portal states omit the link role.
+        for scope in self._locator_scopes():
+            for selector in OVERTIME_UPLOAD_LINK_SELECTORS:
+                candidate = scope.locator(selector).first
+                try:
+                    candidate.wait_for(state="visible", timeout=1_000)
+                    candidate.click()
+                    self._wait_after_navigation_action()
+                    return
+                except Exception as error:
+                    last_error = error
+
+        # Retain the role-based locator for older portal markup.
         for scope in self._locator_scopes():
             locator = scope.get_by_role(
                 "link",

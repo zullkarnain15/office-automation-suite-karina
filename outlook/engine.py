@@ -167,6 +167,9 @@ class OutlookRevisiEngine:
             smtp_timeout=self._to_int(
                 configuration.general.get("SMTP_Timeout_Seconds"), default=30
             ),
+            save_smtp_copy_to_sent=self._to_bool_default_true(
+                configuration.general.get("Save_SMTP_Copy_To_Sent")
+            ),
         )
 
         messages = client.fetch_messages(
@@ -1061,6 +1064,12 @@ class OutlookRevisiEngine:
     @staticmethod
     def _to_bool(value: Any) -> bool:
         return str(value or "").strip().lower() in {"y", "yes", "true", "1", "active"}
+
+    @staticmethod
+    def _to_bool_default_true(value: Any) -> bool:
+        if value is None or not str(value).strip():
+            return True
+        return OutlookRevisiEngine._to_bool(value)
 
     @staticmethod
     def _to_int(value: Any, default: int) -> int:
