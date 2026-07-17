@@ -482,7 +482,7 @@ class HRISFullUploadEngine:
                 failed_count=batch_result.failed_count,
                 diagnostic_folder=diagnostic_folder,
                 diagnostic_zip_file=(
-                    diagnostic_folder.parent / "Diagnostic.zip"
+                    diagnostic_folder.with_suffix(".zip")
                     if diagnostic_folder is not None
                     else None
                 ),
@@ -533,7 +533,7 @@ class HRISFullUploadEngine:
                 failed_count=0,
                 diagnostic_folder=diagnostic_folder,
                 diagnostic_zip_file=(
-                    diagnostic_folder.parent / "Diagnostic.zip"
+                    diagnostic_folder.with_suffix(".zip")
                     if diagnostic_folder is not None
                     else None
                 ),

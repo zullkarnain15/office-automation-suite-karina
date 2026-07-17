@@ -1221,6 +1221,10 @@ class AttendanceGUI:
             f"Valid record count  : {result['valid_record_count']}"
         )
         self.append_log(
+            f"Duplicate removed   : "
+            f"{result.get('duplicate_removed_count', 0)}"
+        )
+        self.append_log(
             f"Anomaly count       : {result['anomaly_record_count']}"
         )
 

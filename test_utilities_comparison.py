@@ -1,15 +1,13 @@
-"""Run Comparison-Attendance Reconciliation directly from the project root."""
+"""Run the Utilities Hub directly from the project root."""
 
 import tkinter as tk
 
-from utilities.attendance_reconciliation.gui import (
-    AttendanceReconciliationGUI,
-)
+from utilities.gui import UtilitiesGUI
 
 
 def main() -> None:
     root = tk.Tk()
-    AttendanceReconciliationGUI(root)
+    UtilitiesGUI(root)
     root.mainloop()
 
 

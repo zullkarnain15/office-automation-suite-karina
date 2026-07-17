@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 
 class OutlookProcessReportWriter:
-    """Write the six-sheet audit report from engine result data only."""
+    """Write the seven-sheet audit report from engine result data only."""
 
     TABLE_FILL = PatternFill("solid", fgColor="2F75B5")
     TITLE_FILL = PatternFill("solid", fgColor="1F4E78")
@@ -40,6 +40,9 @@ class OutlookProcessReportWriter:
             workbook.create_sheet("Attachment_Result"), result
         )
         self._write_valid_data(workbook.create_sheet("Valid_Data"), result)
+        self._write_employee_summary(
+            workbook.create_sheet("Summary_Per_Karyawan"), result
+        )
         self._write_anomalies(workbook.create_sheet("Data_Anomaly"), result)
         self._write_output_summary(
             workbook.create_sheet("Output_Summary"), result
@@ -69,6 +72,18 @@ class OutlookProcessReportWriter:
         moved = sum(1 for item in messages if item.move_result == "MOVED")
         not_moved = sum(
             1 for item in messages if item.move_result in {"NOT_MOVED", "FAILED"}
+        )
+        sent_copy_moved = sum(
+            1 for item in messages
+            if item.sent_copy_status == "MOVED_TO_SENT"
+        )
+        sent_copy_pending = sum(
+            1 for item in messages
+            if item.sent_copy_status == "COPY_PENDING"
+        )
+        sent_copy_failed = sum(
+            1 for item in messages
+            if item.sent_copy_status in {"BCC_REJECTED", "MOVE_FAILED"}
         )
 
         sheet["A1"] = str(
@@ -107,6 +122,9 @@ class OutlookProcessReportWriter:
             ("Reply_Failed_Count", reply_failed),
             ("Email_Moved_Count", moved),
             ("Email_Not_Moved_Count", not_moved),
+            ("Sent_Copy_Moved_Count", sent_copy_moved),
+            ("Sent_Copy_Pending_Count", sent_copy_pending),
+            ("Sent_Copy_Failed_Count", sent_copy_failed),
             ("Reconciliation_Status", result.reconciliation_status),
             ("Reconciliation_Issue", "\n".join(result.reconciliation_issues)),
         ]
@@ -128,7 +146,8 @@ class OutlookProcessReportWriter:
             "Validation_Sender", "Validation_CC", "Validation_Subject",
             "Validation_Attachment", "Validation_Data", "Final_Result",
             "Failure_Code", "Failure_Reason", "Reply_Result", "Reply_From",
-            "Move_Result", "Processed_Time", "Output_Folder",
+            "Move_Result", "Processed_Time", "Output_Folder", "Sent_Copy_ID",
+            "Sent_Copy_Status", "Sent_Copy_Detail",
         ]
         rows = []
         for number, item in enumerate(self._report_messages(result), 1):
@@ -142,9 +161,15 @@ class OutlookProcessReportWriter:
                 item.validation_data, item.status, item.failure_code,
                 "\n".join(item.errors), item.reply_result, item.reply_from,
                 item.move_result, self._datetime(item.processed_time),
-                str(result.output_folder),
+                str(result.output_folder), item.sent_copy_id,
+                item.sent_copy_status, item.sent_copy_detail,
             ])
-        self._write_table(sheet, headers, rows, status_columns=(17, 20, 22))
+        self._write_table(
+            sheet,
+            headers,
+            rows,
+            status_columns=(17, 20, 22, 26),
+        )
 
     def _write_attachment_result(self, sheet: Any, result: Any) -> None:
         headers = [
@@ -213,6 +238,80 @@ class OutlookProcessReportWriter:
         self._write_table(sheet, headers, rows)
         for cell in sheet["E"][1:]:
             cell.number_format = "@"
+
+    def _write_employee_summary(self, sheet: Any, result: Any) -> None:
+        """Write revision totals grouped by employee NIK."""
+        headers = [
+            "NIK",
+            "Total Hari Revisi",
+            "Valid For TXT",
+            "Anomaly",
+            "Total File Sumber",
+            "Status",
+        ]
+        summary: dict[str, dict[str, Any]] = {}
+
+        def employee_item(nik: Any) -> dict[str, Any]:
+            employee_nik = str(nik or "").strip() or "(EMPTY)"
+            return summary.setdefault(
+                employee_nik,
+                {
+                    "dates": set(),
+                    "valid": 0,
+                    "anomaly": 0,
+                    "source_files": set(),
+                },
+            )
+
+        for message in self._report_messages(result):
+            for record in message.valid_records:
+                item = employee_item(record.nik)
+                date_key = self._revision_date_key(record.date_in)
+                if date_key:
+                    item["dates"].add(date_key)
+                item["valid"] += 1
+                item["source_files"].add(str(record.source_file))
+
+            for anomaly in message.anomalies:
+                item = employee_item(anomaly.nik)
+                date_key = self._revision_date_key(anomaly.date_in)
+                if date_key:
+                    item["dates"].add(date_key)
+                item["anomaly"] += 1
+                item["source_files"].add(str(anomaly.source_file))
+
+        rows = []
+        for nik, item in sorted(summary.items()):
+            valid_count = item["valid"]
+            anomaly_count = item["anomaly"]
+            if valid_count and anomaly_count:
+                status = "PARTIAL"
+            elif valid_count:
+                status = "VALID"
+            else:
+                status = "ANOMALY"
+            rows.append(
+                [
+                    nik,
+                    len(item["dates"]),
+                    valid_count,
+                    anomaly_count,
+                    len(item["source_files"]),
+                    status,
+                ]
+            )
+
+        self._write_table(sheet, headers, rows, status_columns=(6,))
+        for cell in sheet["A"][1:]:
+            cell.number_format = "@"
+        for row in sheet.iter_rows(
+            min_row=2,
+            min_col=2,
+            max_col=5,
+        ):
+            for cell in row:
+                cell.number_format = "#,##0"
+                cell.alignment = Alignment(horizontal="right", vertical="top")
 
     def _write_output_summary(self, sheet: Any, result: Any) -> None:
         headers = [
@@ -308,11 +407,19 @@ class OutlookProcessReportWriter:
 
     def _status_fill(self, value: str) -> PatternFill:
         normalized = value.upper()
-        if normalized in {"SUCCESS", "SENT", "MOVED", "PASS", "CREATED", "COMPLETED"}:
+        if normalized in {
+            "SUCCESS", "SENT", "MOVED", "MOVED_TO_SENT", "PASS",
+            "CREATED", "COMPLETED", "VALID",
+        }:
             return self.SUCCESS_FILL
-        if normalized in {"FAILED", "FAIL"}:
+        if normalized in {
+            "FAILED", "FAIL", "BCC_REJECTED", "MOVE_FAILED", "ANOMALY",
+        }:
             return self.FAILED_FILL
-        if "WARNING" in normalized:
+        if (
+            "WARNING" in normalized
+            or normalized in {"COPY_PENDING", "PARTIAL"}
+        ):
             return self.WARNING_FILL
         return self.NEUTRAL_FILL
 
@@ -332,3 +439,30 @@ class OutlookProcessReportWriter:
         if hasattr(value, "strftime"):
             return value.strftime("%Y-%m-%d %H:%M:%S")
         return str(value)
+
+    @staticmethod
+    def _revision_date_key(value: Any) -> str | None:
+        """Return a canonical DATE IN value for unique-day aggregation."""
+        if value is None:
+            return None
+        if hasattr(value, "strftime"):
+            return value.strftime("%Y-%m-%d")
+
+        value_text = str(value).strip()
+        if not value_text:
+            return None
+
+        for date_format in (
+            "%m/%d/%Y",
+            "%d/%m/%Y",
+            "%Y-%m-%d",
+            "%d-%m-%Y",
+            "%Y-%m-%d %H:%M:%S",
+        ):
+            try:
+                return datetime.strptime(value_text, date_format).strftime(
+                    "%Y-%m-%d"
+                )
+            except ValueError:
+                continue
+        return None

@@ -504,7 +504,33 @@ class OutlookRevisiGUI:
         self._append_log(f"TXT Output: {result.output_txt_count}")
         self._append_log(f"Report Status: {result.report_status}")
         self._append_log(f"Report File: {result.report_file or '-'}")
+        sent_copy_moved = sum(
+            1 for item in result.message_results
+            if item.sent_copy_status == "MOVED_TO_SENT"
+        )
+        sent_copy_pending = sum(
+            1 for item in result.message_results
+            if item.sent_copy_status == "COPY_PENDING"
+        )
+        sent_copy_failed = sum(
+            1 for item in result.message_results
+            if item.sent_copy_status in {"BCC_REJECTED", "MOVE_FAILED"}
+        )
+        self._append_log(f"Sent Copy Moved: {sent_copy_moved}")
+        self._append_log(f"Sent Copy Pending: {sent_copy_pending}")
+        self._append_log(f"Sent Copy Failed: {sent_copy_failed}")
         for item in result.message_results:
+            if item.sent_copy_status in {
+                "BCC_REJECTED",
+                "COPY_PENDING",
+                "MOVE_FAILED",
+            }:
+                self._append_log(
+                    f"[SENT COPY {item.sent_copy_status}] "
+                    f"{item.sent_copy_id or item.subject}"
+                )
+                if item.sent_copy_detail:
+                    self._append_log(f"- {item.sent_copy_detail}")
             if item.status == "SUCCESS":
                 continue
             self._append_log(
@@ -537,7 +563,10 @@ class OutlookRevisiGUI:
             "Process finished.\n\n"
             f"Success: {result.success_email}\n"
             f"Failed: {result.failed_email}\n"
-            f"TXT Output: {result.output_txt_count}"
+            f"TXT Output: {result.output_txt_count}\n"
+            f"Sent Copy Moved: {sent_copy_moved}\n"
+            f"Sent Copy Pending/Failed: "
+            f"{sent_copy_pending + sent_copy_failed}"
             f"{detail_text}",
             parent=self.root,
         )

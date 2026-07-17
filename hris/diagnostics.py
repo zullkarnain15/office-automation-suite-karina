@@ -59,7 +59,10 @@ class HRISDiagnosticPackWriter:
         """
         Write diagnostic files and return the diagnostic folder path.
         """
-        diagnostic_folder = artifacts.job_report_folder / "Diagnostic"
+        diagnostic_folder = (
+            artifacts.job_report_folder
+            / f"Diagnostic_{artifacts.job_id}"
+        )
         diagnostic_folder.mkdir(
             parents=True,
             exist_ok=True,
@@ -261,9 +264,9 @@ class HRISDiagnosticPackWriter:
         diagnostic_folder: Path,
     ) -> None:
         """
-        Create ZIP archive next to Diagnostic folder.
+        Create a job-specific ZIP archive next to the diagnostic folder.
         """
-        zip_base = diagnostic_folder.parent / "Diagnostic"
+        zip_base = diagnostic_folder.parent / diagnostic_folder.name
 
         shutil.make_archive(
             base_name=str(zip_base),

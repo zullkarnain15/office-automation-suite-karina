@@ -1,7 +1,9 @@
+from datetime import date
 from pathlib import Path
 import json
 import re
 import shutil
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,7 +13,11 @@ import outlook.engine as outlook_engine
 from outlook.downloader import OutlookAttachment
 from outlook.downloader import OutlookMessage
 from outlook.engine import OutlookRevisiEngine
+from outlook.parser import AttendanceRevisionRecord
 from outlook.parser import OutlookAttachmentParser
+from outlook.parser import OutlookDataAnomaly
+from outlook.parser import OutlookTxtWriter
+from outlook.report_writer import OutlookProcessReportWriter
 from shared.config_manager import OutlookRevisiConfigurationReader
 
 
@@ -239,6 +245,169 @@ def test_parse_ho_still_rejects_partially_filled_row_without_nik(
     assert result.errors == ["partial.xlsx row 2: NIK is required."]
 
 
+def test_parse_branch_accepts_windows_1252_non_breaking_space(
+    tmp_path: Path,
+) -> None:
+    attachment = tmp_path / "branch-ansi.txt"
+    attachment.write_bytes(
+        (
+            "06/01/2026,123456789\N{NO-BREAK SPACE},06/01/2026,"
+            "08:00,06/01/2026,17:00\n"
+        ).encode("cp1252")
+    )
+
+    result = OutlookAttachmentParser().parse_branch_txt(attachment)
+
+    assert result.valid
+    assert len(result.records) == 1
+    assert result.records[0].to_txt_row() == [
+        "06/01/2026",
+        "123456789",
+        "06/01/2026",
+        "08:00",
+        "06/01/2026",
+        "17:00",
+    ]
+
+
+def test_parse_branch_accepts_utf16_tab_delimited_attachment(
+    tmp_path: Path,
+) -> None:
+    attachment = tmp_path / "branch-unicode.txt"
+    attachment.write_text(
+        "06/01/2026\t123456789\t06/01/2026\t08:00\t"
+        "06/01/2026\t17:00\n",
+        encoding="utf-16",
+    )
+
+    result = OutlookAttachmentParser().parse_branch_txt(attachment)
+
+    assert result.valid
+    assert len(result.records) == 1
+    assert result.records[0].nik == "123456789"
+
+
+def test_parse_branch_rejects_bytes_unknown_to_supported_encodings(
+    tmp_path: Path,
+) -> None:
+    attachment = tmp_path / "branch-invalid.txt"
+    attachment.write_bytes(b"\x81")
+
+    result = OutlookAttachmentParser().parse_branch_txt(attachment)
+
+    assert not result.valid
+    assert result.records == []
+    assert result.anomalies[0].code == "FILE_READ_FAILED"
+    assert "utf-8-sig" in result.errors[0]
+    assert "cp1252" in result.errors[0]
+
+
+def test_outlook_txt_random_suffix_is_unique_with_collision_retry(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    random_values = iter((7, 7, 42))
+    monkeypatch.setattr(
+        "outlook.parser.secrets.randbelow",
+        lambda _limit: next(random_values),
+    )
+    records = [
+        AttendanceRevisionRecord(
+            f"{index:09d}",
+            date(2026, 7, 1),
+            "08:00",
+            date(2026, 7, 1),
+            "17:00",
+            tmp_path / "source.xlsx",
+            index + 2,
+        )
+        for index in range(2)
+    ]
+
+    files = OutlookTxtWriter().write(
+        records=records,
+        output_folder=tmp_path / "TXT",
+        workflow="HO",
+        max_lines=1,
+        job_id="20260710_153045",
+    )
+
+    assert [path.name for path in files] == [
+        "Outlook_Revisi_HO_001_20260710_007.txt",
+        "Outlook_Revisi_HO_002_20260710_042.txt",
+    ]
+
+
+def test_employee_summary_groups_unique_days_and_statuses(
+    tmp_path: Path,
+) -> None:
+    source_a = tmp_path / "source-a.xlsx"
+    source_b = tmp_path / "source-b.xlsx"
+    valid_records = [
+        AttendanceRevisionRecord(
+            "123", date(2026, 6, 1), "08:00", date(2026, 6, 1),
+            "17:00", source_a, 2,
+        ),
+        AttendanceRevisionRecord(
+            "123", date(2026, 6, 1), "09:00", date(2026, 6, 1),
+            "18:00", source_a, 3,
+        ),
+        AttendanceRevisionRecord(
+            "123", date(2026, 6, 2), "08:00", date(2026, 6, 2),
+            "17:00", source_b, 2,
+        ),
+        AttendanceRevisionRecord(
+            "456", date(2026, 6, 3), "08:00", date(2026, 6, 3),
+            "17:00", source_a, 4,
+        ),
+    ]
+    anomalies = [
+        OutlookDataAnomaly(
+            source_a, 5, "123", "06/02/2026", "bad", "06/02/2026",
+            "17:00", "TIME_FORMAT", "Invalid TIME IN.",
+        ),
+        OutlookDataAnomaly(
+            source_b, 6, "789", "not-a-date", "08:00", "06/03/2026",
+            "17:00", "DATE_FORMAT", "Invalid DATE IN.",
+        ),
+        OutlookDataAnomaly(
+            source_b, 7, "", "06/04/2026", "08:00", "06/04/2026",
+            "17:00", "NIK_REQUIRED", "NIK is required.",
+        ),
+    ]
+    result = SimpleNamespace(
+        message_results=[
+            SimpleNamespace(
+                status="SUCCESS",
+                valid_records=valid_records,
+                anomalies=anomalies,
+            )
+        ]
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Summary_Per_Karyawan"
+
+    OutlookProcessReportWriter()._write_employee_summary(sheet, result)
+
+    assert list(sheet.values) == [
+        (
+            "NIK", "Total Hari Revisi", "Valid For TXT", "Anomaly",
+            "Total File Sumber", "Status",
+        ),
+        ("(EMPTY)", 1, 0, 1, 1, "ANOMALY"),
+        ("123", 2, 3, 1, 2, "PARTIAL"),
+        ("456", 1, 1, 0, 1, "VALID"),
+        ("789", 0, 0, 1, 1, "ANOMALY"),
+    ]
+    assert sheet["A2"].number_format == "@"
+    assert sheet["B2"].number_format == "#,##0"
+    assert sheet["F2"].fill == OutlookProcessReportWriter.FAILED_FILL
+    assert sheet["F3"].fill == OutlookProcessReportWriter.WARNING_FILL
+    assert sheet["F4"].fill == OutlookProcessReportWriter.SUCCESS_FILL
+    workbook.close()
+
+
 def test_engine_writes_split_txt_in_dry_run(tmp_path: Path) -> None:
     config_path = tmp_path / "config.xlsx"
     output_root = tmp_path / "output" / "Outlook-Revisi"
@@ -273,20 +442,30 @@ def test_engine_writes_split_txt_in_dry_run(tmp_path: Path) -> None:
     assert result.success_email == 1
     assert result.output_txt_count == 2
     assert all(path.exists() for path in result.message_results[0].output_files)
-    assert result.output_folder.parent == output_root / "HO"
+    month_label = f"{result.job_id[:4]}-{result.job_id[4:6]}"
+    assert result.output_folder.parent == output_root / "HO" / month_label
     assert re.fullmatch(r"\d{8}_\d{6}", result.output_folder.name)
     assert {path.name for path in result.output_folder.iterdir()} == {
-        "Attachments", "TXT", "Report", "Process.log", "summary.json"
+        "TXT", "Report", "Process.log", "summary.json"
     }
+    assert not (result.output_folder / "Attachments").exists()
     assert result.report_status == "CREATED"
     assert result.report_file is not None and result.report_file.exists()
     report = load_workbook(result.report_file, data_only=True)
     assert report.sheetnames == [
         "Dashboard", "Email_Result", "Attachment_Result", "Valid_Data",
-        "Data_Anomaly", "Output_Summary",
+        "Summary_Per_Karyawan", "Data_Anomaly", "Output_Summary",
     ]
     assert report["Valid_Data"].max_row == 3
     assert report["Valid_Data"]["E2"].value == "123456789"
+    assert list(report["Summary_Per_Karyawan"].values) == [
+        (
+            "NIK", "Total Hari Revisi", "Valid For TXT", "Anomaly",
+            "Total File Sumber", "Status",
+        ),
+        ("123456789", 1, 1, 0, 1, "VALID"),
+        ("987654321", 1, 1, 0, 1, "VALID"),
+    ]
     assert report["Email_Result"]["Q2"].value == "SUCCESS"
     assert report["Email_Result"]["J2"].value == "ATT_REV 06-2026"
     for sheet_name in (
@@ -301,10 +480,18 @@ def test_engine_writes_split_txt_in_dry_run(tmp_path: Path) -> None:
     }
     assert {"HRIS_TXT", "EXCEL_REPORT", "PROCESS_LOG", "SUMMARY_JSON"} <= output_types
     report.close()
-    assert [path.name for path in result.message_results[0].output_files] == [
-        f"Outlook_Revisi_HO_001_{result.output_folder.name[:8]}.txt",
-        f"Outlook_Revisi_HO_002_{result.output_folder.name[:8]}.txt",
+    output_names = [
+        path.name for path in result.message_results[0].output_files
     ]
+    assert re.fullmatch(
+        rf"Outlook_Revisi_HO_001_{result.output_folder.name[:8]}_\d{{3}}\.txt",
+        output_names[0],
+    )
+    assert re.fullmatch(
+        rf"Outlook_Revisi_HO_002_{result.output_folder.name[:8]}_\d{{3}}\.txt",
+        output_names[1],
+    )
+    assert output_names[0].rsplit("_", 1)[-1] != output_names[1].rsplit("_", 1)[-1]
     assert not (output_root / "Branch").exists()
     assert client.replies == []
     history = OutlookRevisiEngine._history_path(output_root, "HO")
@@ -332,6 +519,8 @@ def test_job_folder_reservation_uses_timestamp_and_safe_collision_suffix(
     assert first_folder != second_folder
     assert first_folder.name == "20260706_092245"
     assert second_folder.name == "20260706_092245_02"
+    assert first_folder.parent == tmp_path / "Branch" / "2026-07"
+    assert second_folder.parent == first_folder.parent
     assert first_folder.is_dir()
     assert second_folder.is_dir()
     assert not (tmp_path / "HO").exists()
@@ -350,16 +539,87 @@ def test_branch_run_creates_only_branch_job_folder(tmp_path: Path) -> None:
         client=client,
     ).run()
 
-    assert result.output_folder.parent == output_root / "Branch"
+    month_label = f"{result.job_id[:4]}-{result.job_id[4:6]}"
+    assert result.output_folder.parent == output_root / "Branch" / month_label
     assert {path.name for path in result.output_folder.iterdir()} == {
-        "Attachments", "TXT", "Report", "Process.log", "summary.json"
+        "TXT", "Report", "Process.log", "summary.json"
     }
+    assert not (result.output_folder / "Attachments").exists()
     assert result.report_file is not None
     assert result.report_file.name == (
         f"Outlook_Process_Report_Branch_{result.job_id}.xlsx"
     )
     assert result.report_file.exists()
     assert not (output_root / "HO").exists()
+
+
+def test_same_sender_can_process_two_different_branch_configurations(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.xlsx"
+    output_root = tmp_path / "output" / "Outlook-Revisi"
+    _configuration(config_path, output_root)
+    workbook = load_workbook(config_path)
+    workbook["Branch_Sender_Master"].append(
+        [
+            "Y",
+            "OTO",
+            "BKS",
+            "Branch User",
+            "branch@example.com",
+            "bkscc@example.com",
+        ]
+    )
+    workbook.save(config_path)
+    workbook.close()
+
+    messages: list[OutlookMessage] = []
+    for entry_id, branch_code, required_cc in (
+        ("branch-amu", "AMU", "branchcc@example.com"),
+        ("branch-bks", "BKS", "bkscc@example.com"),
+    ):
+        attachment = tmp_path / f"{branch_code}.txt"
+        attachment.write_text(
+            "06/01/2026,123456789,06/01/2026,08:00,"
+            "06/01/2026,17:00\n",
+            encoding="utf-8",
+        )
+        messages.append(
+            OutlookMessage(
+                entry_id=entry_id,
+                store_id="store",
+                subject=f"[OTO-{branch_code}] Attendance 06-2026",
+                sender_name="Branch User",
+                sender_email="branch@example.com",
+                cc=required_cc,
+                received_time=None,
+                attachments=[OutlookAttachment(attachment.name, attachment)],
+            )
+        )
+
+    result = OutlookRevisiEngine(
+        configuration_file=config_path,
+        workflow="Branch",
+        dry_run=True,
+        client=FakeClient(messages),
+    ).run()
+
+    assert result.success_email == 2
+    assert result.failed_email == 0
+    assert result.valid_row_count == 2
+    assert [item.required_cc for item in result.message_results] == [
+        "branchcc@example.com",
+        "bkscc@example.com",
+    ]
+    assert [item.expected_subject for item in result.message_results] == [
+        "[OTO-AMU] Attendance 06-2026",
+        "[OTO-BKS] Attendance 06-2026",
+    ]
+    assert all(
+        item.validation_subject == "PASS"
+        and item.validation_cc == "PASS"
+        for item in result.message_results
+    )
 
 
 def test_other_workflow_is_skipped_without_saving_attachment(
@@ -397,7 +657,7 @@ def test_other_workflow_is_skipped_without_saving_attachment(
     assert result.skipped_other_workflow == 1
     assert result.failed_email == 0
     assert result.message_results[0].status == "SKIPPED_OTHER_WORKFLOW"
-    assert list((result.output_folder / "Attachments").iterdir()) == []
+    assert not (result.output_folder / "Attachments").exists()
     assert list((result.output_folder / "TXT").iterdir()) == []
     assert client.replies == []
     assert result.report_file is not None
@@ -571,6 +831,53 @@ def test_draft_reply_does_not_move_or_mark_message_processed(
     assert "draft-entry" not in history.read_text(encoding="utf-8")
 
 
+def test_failed_subject_reply_can_render_expected_subject(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.xlsx"
+    output_root = tmp_path / "output" / "Outlook-Revisi"
+    attachment = tmp_path / "attendance.xlsx"
+    _configuration(config_path, output_root)
+    _ho_attachment(attachment)
+    workbook = load_workbook(config_path)
+    workbook["General"]["B12"] = "SEND"
+    workbook["Reply_Templates"]["F7"] = (
+        "Received: {ORIGINAL_SUBJECT}\nExpected: {EXPECTED_SUBJECT}"
+    )
+    workbook.save(config_path)
+    workbook.close()
+    message = OutlookMessage(
+        entry_id="wrong-subject",
+        store_id="store",
+        subject="WRONG SUBJECT",
+        sender_name="HO User",
+        sender_email="ho@example.com",
+        cc="cc@example.com",
+        received_time=None,
+        attachments=[OutlookAttachment(attachment.name, attachment)],
+    )
+    client = FakeClient([message])
+
+    result = OutlookRevisiEngine(
+        configuration_file=config_path,
+        workflow="HO",
+        dry_run=False,
+        client=client,
+    ).run()
+
+    message_result = result.message_results[0]
+    assert message_result.failure_code == "SUBJECT_INVALID"
+    assert message_result.expected_subject == "ATT_REV 06-2026"
+    assert len(client.replies) == 1
+    assert client.replies[0]["body"] == (
+        "Received: WRONG SUBJECT\nExpected: ATT_REV 06-2026"
+    )
+    assert client.moves == [(message, "Deleted Items")]
+    assert message_result.move_result == "MOVED"
+    history = OutlookRevisiEngine._history_path(output_root, "HO")
+    assert "wrong-subject" in history.read_text(encoding="utf-8")
+
+
 def test_invalid_data_is_written_as_structured_anomaly(tmp_path: Path) -> None:
     config_path = tmp_path / "config.xlsx"
     output_root = tmp_path / "output" / "Outlook-Revisi"
@@ -600,6 +907,11 @@ def test_invalid_data_is_written_as_structured_anomaly(tmp_path: Path) -> None:
     assert result.valid_row_count == 0
     assert result.anomaly_row_count == 1
     assert result.message_results[0].failure_code == "NIK_REQUIRED"
+    retained_attachments = result.output_folder / "Attachments"
+    assert retained_attachments.is_dir()
+    assert [path.name for path in retained_attachments.iterdir()] == [
+        "invalid.xlsx"
+    ]
     report = load_workbook(result.report_file, data_only=True)
     assert report["Data_Anomaly"]["J2"].value == "NIK_REQUIRED"
     assert report["Valid_Data"].max_row == 1
@@ -808,11 +1120,17 @@ def test_multiple_branch_emails_share_txt_until_split_limit(
     assert result.success_email == 3
     assert result.valid_row_count == 3
     assert len(output_files) == 3
-    assert [path.name for path in output_files] == [
-        f"Outlook_Revisi_Branch_001_{result.job_id[:8]}.txt",
-        f"Outlook_Revisi_Branch_001_{result.job_id[:8]}.txt",
-        f"Outlook_Revisi_Branch_002_{result.job_id[:8]}.txt",
-    ]
+    output_names = [path.name for path in output_files]
+    assert output_names[0] == output_names[1]
+    assert re.fullmatch(
+        rf"Outlook_Revisi_Branch_001_{result.job_id[:8]}_\d{{3}}\.txt",
+        output_names[0],
+    )
+    assert re.fullmatch(
+        rf"Outlook_Revisi_Branch_002_{result.job_id[:8]}_\d{{3}}\.txt",
+        output_names[2],
+    )
+    assert output_names[0].rsplit("_", 1)[-1] != output_names[2].rsplit("_", 1)[-1]
     unique_output_files = sorted(
         {path.resolve() for path in output_files},
         key=str,
@@ -871,6 +1189,9 @@ def test_report_failure_keeps_txt_and_updates_summary(
     assert result.report_status == "FAILED"
     assert result.final_status == "COMPLETED WITH WARNING"
     assert all(path.exists() for path in result.message_results[0].output_files)
+    assert (
+        result.output_folder / "Attachments" / "attendance.xlsx"
+    ).exists()
     summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
     assert summary["report_status"] == "FAILED"
     assert "Report generation failed" in result.process_log.read_text(encoding="utf-8")

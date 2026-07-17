@@ -45,14 +45,14 @@ def test_launcher_opens_all_three_module_guis(monkeypatch) -> None:
         window.focus_force.assert_called_once_with()
 
 
-def test_launcher_lazy_imports_and_opens_reconciliation(monkeypatch) -> None:
+def test_launcher_lazy_imports_and_opens_utilities_hub(monkeypatch) -> None:
     root = object()
     window = Mock()
     opened = []
-    fake_gui = ModuleType("utilities.attendance_reconciliation.gui")
-    fake_gui.AttendanceReconciliationGUI = lambda target: opened.append(target)
+    fake_gui = ModuleType("utilities.gui")
+    fake_gui.UtilitiesGUI = lambda target: opened.append(target)
     monkeypatch.setitem(
-        sys.modules, "utilities.attendance_reconciliation.gui", fake_gui
+        sys.modules, "utilities.gui", fake_gui
     )
     monkeypatch.setattr(main.tk, "Toplevel", lambda parent: window)
 

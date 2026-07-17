@@ -74,6 +74,9 @@ class OutlookProcessMessageResult:
     reply_result: str = "NOT_ATTEMPTED"
     reply_from: str = ""
     move_result: str = "NOT_REQUIRED"
+    sent_copy_id: str = ""
+    sent_copy_status: str = "NOT_REQUESTED"
+    sent_copy_detail: str = ""
     processed_time: datetime | None = None
     attachment_results: list[OutlookAttachmentProcessResult] = field(
         default_factory=list
@@ -172,6 +175,15 @@ class OutlookRevisiEngine:
             ),
         )
 
+        previous_pending = self._load_pending_sent_copies(
+            output_root,
+            self.workflow,
+        )
+        previous_pending = self._recover_pending_sent_copies(
+            client,
+            previous_pending,
+        )
+
         messages = client.fetch_messages(
             attachment_folder=attachments_folder,
             limit=self.message_limit,
@@ -198,10 +210,27 @@ class OutlookRevisiEngine:
             )
             message_results.append(result)
 
-            if result.status == "SUCCESS" and result.reply_sent:
+            if result.reply_sent and result.move_result == "MOVED":
                 history.add(self._message_key(message))
 
         self._save_history(output_root, self.workflow, history)
+        current_pending = self._collect_smtp_sent_copies(
+            client,
+            message_results,
+        )
+        try:
+            self._save_pending_sent_copies(
+                output_root,
+                self.workflow,
+                {**previous_pending, **current_pending},
+            )
+        except Exception:
+            # Replies have already been delivered. State persistence must not
+            # make the job retry SMTP and create duplicate replies.
+            logger.exception(
+                "SMTP sent-copy pending state could not be saved; tagged BCC "
+                "messages will remain protected from normal Inbox processing."
+            )
 
         success_count = sum(1 for item in message_results if item.status == "SUCCESS")
         failed_count = sum(1 for item in message_results if item.status == "FAILED")
@@ -270,18 +299,71 @@ class OutlookRevisiEngine:
             )
             logger.exception("Outlook report generation failed; TXT output retained.")
         self._write_artifacts(result)
+        if result.report_status == "CREATED":
+            self._cleanup_successful_attachments(
+                attachments_folder,
+                message_results,
+            )
         self._send_summary(configuration, client, result)
         return result
+
+    @staticmethod
+    def _cleanup_successful_attachments(
+        attachments_folder: Path,
+        message_results: list[OutlookProcessMessageResult],
+    ) -> None:
+        """Remove successful-email attachments after report creation."""
+        attachment_root = attachments_folder.resolve()
+        for item in message_results:
+            if item.status != "SUCCESS":
+                continue
+            for attachment in item.attachment_results:
+                path = attachment.path
+                try:
+                    resolved_path = path.resolve()
+                    if resolved_path.parent != attachment_root:
+                        logger.warning(
+                            "Attachment cleanup skipped outside job folder: %s",
+                            path,
+                        )
+                        continue
+                    if resolved_path.exists():
+                        resolved_path.unlink()
+                        logger.info(
+                            "Successful-email attachment removed: %s",
+                            resolved_path,
+                        )
+                except OSError as error:
+                    logger.warning(
+                        "Successful-email attachment could not be removed: "
+                        "%s | %s",
+                        path,
+                        error,
+                    )
+
+        try:
+            if attachments_folder.exists() and not any(
+                attachments_folder.iterdir()
+            ):
+                attachments_folder.rmdir()
+                logger.info("Empty Attachments folder removed: %s", attachments_folder)
+        except OSError as error:
+            logger.warning(
+                "Empty Attachments folder could not be removed: %s | %s",
+                attachments_folder,
+                error,
+            )
 
     @staticmethod
     def _reserve_job_folder(
         output_root: Path,
         workflow: str,
     ) -> tuple[str, Path]:
-        """Reserve Output_Root/workflow/YYYYMMDD_HHMMSS atomically."""
+        """Reserve Output_Root/workflow/YYYY-MM/run ID atomically."""
         workflow_label = OutlookRevisiEngine._normalize_workflow(workflow)
         base_job_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        workflow_root = output_root / workflow_label
+        month_label = f"{base_job_id[:4]}-{base_job_id[4:6]}"
+        workflow_root = output_root / workflow_label / month_label
 
         for sequence in range(1, 1000):
             job_id = (
@@ -348,7 +430,13 @@ class OutlookRevisiEngine:
             )
 
         workflow = self.workflow
-        sender = self._match_sender(configuration, message.sender_email, workflow)
+        sender = self._match_sender(
+            configuration,
+            message.sender_email,
+            workflow,
+            subject=message.subject,
+            actual_cc=message.cc,
+        )
         validation_sender = "PASS"
         validation_cc = "NOT_CHECKED"
         validation_subject = "NOT_CHECKED"
@@ -548,9 +636,20 @@ class OutlookRevisiEngine:
         )
         send_mode = str(configuration.general.get("Send_Mode", "SEND")).upper()
         try:
-            result.reply_sent = self._send_message_reply(
+            result.reply_sent, sent_copy = self._send_message_reply(
                 configuration, client, message, result
             )
+            if sent_copy is not None:
+                result.sent_copy_id = str(
+                    getattr(sent_copy, "copy_id", "") or ""
+                )
+                result.sent_copy_status = str(
+                    getattr(sent_copy, "status", "BCC_ACCEPTED")
+                    or "BCC_ACCEPTED"
+                )
+                result.sent_copy_detail = str(
+                    getattr(sent_copy, "detail", "") or ""
+                )
             if not auto_reply:
                 result.reply_result = "NOT_REQUIRED"
             elif self.dry_run:
@@ -566,7 +665,10 @@ class OutlookRevisiEngine:
             result.errors.append(f"Reply failed: {error}")
             logger.exception("Outlook reply failed for: %s", message.subject)
 
-        if result.status == "SUCCESS" and result.reply_sent:
+        # A validation/data failure is still fully processed once its failure
+        # reply has been sent. Move it just like a successful email so it does
+        # not remain in the Inbox and get processed again.
+        if result.reply_sent:
             processed_folder = str(
                 configuration.general.get("Processed_Folder", "Deleted Items")
             )
@@ -589,21 +691,54 @@ class OutlookRevisiEngine:
         configuration: OutlookRevisiConfiguration,
         sender_email: str,
         workflow: str,
+        subject: str = "",
+        actual_cc: str = "",
     ) -> OutlookSenderConfig | None:
+        """Resolve one sender row without relying on Excel row order."""
         sender_email_lower = sender_email.strip().lower()
         senders = (
             configuration.ho_senders
             if workflow == "HO"
             else configuration.branch_senders
         )
+        candidates = [
+            sender
+            for sender in senders
+            if sender.sender_email
+            and sender.sender_email.strip().lower() == sender_email_lower
+        ]
 
-        for sender in senders:
-            if not sender.sender_email:
-                continue
-            if sender.sender_email.strip().lower() == sender_email_lower:
-                return sender
+        if not candidates:
+            return None
 
-        return None
+        if subject:
+            subject_matches = [
+                sender
+                for sender in candidates
+                if self._subject_matches(
+                    configuration,
+                    workflow,
+                    subject,
+                    sender,
+                )
+            ]
+            if subject_matches:
+                candidates = subject_matches
+
+        if len(candidates) > 1 and actual_cc:
+            cc_matches = [
+                sender
+                for sender in candidates
+                if sender.required_cc_email
+                and not self._missing_required_cc(
+                    sender.required_cc_email,
+                    actual_cc,
+                )
+            ]
+            if cc_matches:
+                candidates = cc_matches
+
+        return candidates[0]
 
     def _detect_message_workflow(
         self,
@@ -624,7 +759,13 @@ class OutlookRevisiEngine:
                 return workflow
 
         for workflow in ("HO", "Branch"):
-            if self._match_sender(configuration, message.sender_email, workflow):
+            if self._match_sender(
+                configuration,
+                message.sender_email,
+                workflow,
+                subject=message.subject,
+                actual_cc=message.cc,
+            ):
                 return workflow
 
         return ""
@@ -701,6 +842,17 @@ class OutlookRevisiEngine:
         if moved > reply_sent:
             issues.append("Moved email count exceeds sent reply count.")
 
+        for item in result.message_results:
+            if item.sent_copy_status in {
+                "BCC_REJECTED",
+                "COPY_PENDING",
+                "MOVE_FAILED",
+            }:
+                issues.append(
+                    "SMTP sent copy "
+                    f"{item.sent_copy_status}: {item.sent_copy_id or item.subject}"
+                )
+
         result.reconciliation_issues = issues
         result.reconciliation_status = "WARNING" if issues else "PASS"
         if issues:
@@ -773,14 +925,14 @@ class OutlookRevisiEngine:
         client: OutlookComClient,
         message: OutlookMessage,
         result: OutlookProcessMessageResult,
-    ) -> bool:
+    ) -> tuple[bool, Any | None]:
         if self._to_bool(configuration.general.get("Auto_Reply_Enabled")) is False:
-            return False
+            return False, None
 
         template = self._select_reply_template(configuration, result)
         if template is None:
             logger.warning("Reply template not found for result: %s", result.status)
-            return False
+            return False, None
 
         values = self._template_values(configuration, message, result)
         subject = self._render_template(template.subject_template, values)
@@ -789,15 +941,15 @@ class OutlookRevisiEngine:
 
         if self.dry_run:
             logger.info("Dry-run reply skipped: %s", subject)
-            return False
+            return False, None
 
-        client.send_reply(
+        sent_copy = client.send_reply(
             message=message,
             subject=subject,
             body=body,
             send_mode=send_mode,
         )
-        return send_mode.strip().upper() == "SEND"
+        return send_mode.strip().upper() == "SEND", sent_copy
 
     def _send_summary(
         self,
@@ -868,20 +1020,12 @@ class OutlookRevisiEngine:
         message: OutlookMessage,
         result: OutlookProcessMessageResult,
     ) -> dict[str, str]:
-        sender = (
-            self._match_sender(
-                configuration,
-                message.sender_email,
-                result.workflow,
-            )
-            if result.workflow in ("HO", "Branch")
-            else None
-        )
         return {
             "SENDER_NAME": message.sender_name,
             "PERIOD": str(configuration.general.get("Payroll_Period", "")),
             "ORIGINAL_SUBJECT": message.subject,
-            "REQUIRED_CC_EMAIL": sender.required_cc_email if sender else "",
+            "EXPECTED_SUBJECT": result.expected_subject,
+            "REQUIRED_CC_EMAIL": result.required_cc,
             "RESUBMIT_DEADLINE": str(
                 configuration.general.get("Resubmit_Deadline", "")
             ),
@@ -928,6 +1072,11 @@ class OutlookRevisiEngine:
         for item in result.message_results:
             lines.append(f"[{item.status}] {item.sender_email} | {item.subject}")
             lines.append(f"Workflow: {item.workflow}")
+            if item.sent_copy_id:
+                lines.append(f"Sent Copy ID: {item.sent_copy_id}")
+                lines.append(f"Sent Copy Status: {item.sent_copy_status}")
+                if item.sent_copy_detail:
+                    lines.append(f"Sent Copy Detail: {item.sent_copy_detail}")
             if item.errors:
                 lines.extend(f"- {error}" for error in item.errors)
             for output_file in item.output_files:
@@ -967,6 +1116,9 @@ class OutlookRevisiEngine:
                             "reply_sent": item.reply_sent,
                             "reply_result": item.reply_result,
                             "move_result": item.move_result,
+                            "sent_copy_id": item.sent_copy_id,
+                            "sent_copy_status": item.sent_copy_status,
+                            "sent_copy_detail": item.sent_copy_detail,
                             "failure_code": item.failure_code,
                         }
                         for item in result.message_results
@@ -1019,10 +1171,167 @@ class OutlookRevisiEngine:
             encoding="utf-8",
         )
 
+    def _recover_pending_sent_copies(
+        self,
+        client: OutlookComClient,
+        pending: dict[str, dict[str, str]],
+    ) -> dict[str, dict[str, str]]:
+        """Retry previous BCC copies once without delaying the current job."""
+        if not pending:
+            return {}
+
+        register = getattr(client, "register_pending_smtp_copy", None)
+        collect = getattr(client, "collect_smtp_sent_copies", None)
+        if not callable(register) or not callable(collect):
+            return pending
+
+        for copy_id, metadata in pending.items():
+            register(copy_id, metadata.get("subject", ""))
+
+        try:
+            recovered = collect(
+                set(pending),
+                timeout_seconds=0,
+            )
+        except Exception as error:
+            logger.warning(
+                "Previous SMTP BCC archives could not be recovered yet: %s",
+                error,
+            )
+            return pending
+
+        outstanding: dict[str, dict[str, str]] = {}
+        for copy_id, metadata in pending.items():
+            copy_result = recovered.get(copy_id)
+            status = str(getattr(copy_result, "status", "COPY_PENDING"))
+            if status == "MOVED_TO_SENT":
+                logger.info("Recovered pending SMTP BCC archive: %s", copy_id)
+                continue
+            outstanding[copy_id] = {
+                **metadata,
+                "status": status,
+                "detail": str(getattr(copy_result, "detail", "") or ""),
+            }
+        return outstanding
+
+    def _collect_smtp_sent_copies(
+        self,
+        client: OutlookComClient,
+        message_results: list[OutlookProcessMessageResult],
+    ) -> dict[str, dict[str, str]]:
+        """Collect this batch's BCC copies with one bounded wait."""
+        copy_ids = {
+            item.sent_copy_id
+            for item in message_results
+            if item.sent_copy_id
+            and item.sent_copy_status not in {"BCC_REJECTED", "DISABLED"}
+        }
+        if not copy_ids:
+            return {}
+
+        collect = getattr(client, "collect_smtp_sent_copies", None)
+        lookup = getattr(client, "get_smtp_copy_result", None)
+        if not callable(collect):
+            return {}
+
+        try:
+            collected = collect(
+                copy_ids,
+                timeout_seconds=5,
+                poll_interval=1,
+            )
+        except Exception as error:
+            logger.exception(
+                "SMTP replies were sent, but their BCC archives could not be "
+                "collected in this job."
+            )
+            collected = {}
+            for item in message_results:
+                if item.sent_copy_id not in copy_ids:
+                    continue
+                item.sent_copy_status = "COPY_PENDING"
+                item.sent_copy_detail = str(error)
+
+        pending: dict[str, dict[str, str]] = {}
+        for item in message_results:
+            if item.sent_copy_id not in copy_ids:
+                continue
+            copy_result = collected.get(item.sent_copy_id)
+            if copy_result is None and callable(lookup):
+                copy_result = lookup(item.sent_copy_id)
+            if copy_result is not None:
+                item.sent_copy_status = str(
+                    getattr(copy_result, "status", "COPY_PENDING")
+                    or "COPY_PENDING"
+                )
+                item.sent_copy_detail = str(
+                    getattr(copy_result, "detail", "") or ""
+                )
+
+            if item.sent_copy_status not in {"COPY_PENDING", "MOVE_FAILED"}:
+                continue
+            pending[item.sent_copy_id] = {
+                "copy_id": item.sent_copy_id,
+                "subject": item.subject,
+                "status": item.sent_copy_status,
+                "detail": item.sent_copy_detail,
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        return pending
+
+    def _load_pending_sent_copies(
+        self,
+        output_root: Path,
+        workflow: str,
+    ) -> dict[str, dict[str, str]]:
+        path = self._pending_sent_copies_path(output_root, workflow)
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            entries = data.get("pending_copies", [])
+            return {
+                str(item.get("copy_id", "")).strip(): {
+                    str(key): str(value or "")
+                    for key, value in item.items()
+                }
+                for item in entries
+                if str(item.get("copy_id", "")).strip()
+            }
+        except Exception:
+            logger.warning("Pending SMTP BCC state could not be read: %s", path)
+            return {}
+
+    def _save_pending_sent_copies(
+        self,
+        output_root: Path,
+        workflow: str,
+        pending: dict[str, dict[str, str]],
+    ) -> None:
+        path = self._pending_sent_copies_path(output_root, workflow)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "pending_copies": [
+                        pending[copy_id]
+                        for copy_id in sorted(pending)
+                    ]
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
     @staticmethod
     def _history_path(output_root: Path, workflow: str) -> Path:
         workflow_label = OutlookRevisiEngine._normalize_workflow(workflow)
         return output_root / workflow_label / "runtime_history.json"
+
+    @staticmethod
+    def _pending_sent_copies_path(output_root: Path, workflow: str) -> Path:
+        workflow_label = OutlookRevisiEngine._normalize_workflow(workflow)
+        return output_root / workflow_label / "smtp_sent_copy_pending.json"
 
     @staticmethod
     def _normalize_workflow(workflow: str) -> str:

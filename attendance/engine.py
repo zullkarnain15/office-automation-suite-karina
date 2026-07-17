@@ -34,6 +34,7 @@ to be written to HRIS TXT.
 from __future__ import annotations
 
 import json
+import secrets
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,7 @@ PAIR_STATUS_INVALID_CHECKTIME: str = "INVALID_CHECKTIME"
 VALIDATION_STATUS_VALID: str = "VALID_FOR_TXT"
 VALIDATION_STATUS_VALID_WARNING: str = "VALID_WITH_WARNING"
 VALIDATION_STATUS_INVALID: str = "INVALID"
+VALIDATION_STATUS_DUPLICATE_REMOVED: str = "DUPLICATE_REMOVED"
 
 
 class AttendancePairingEngine:
@@ -338,6 +340,7 @@ class AttendanceValidationEngine:
             "valid_for_txt_records": 0,
             "valid_with_warning_records": 0,
             "anomaly_records": 0,
+            "duplicate_removed_records": 0,
             "single_tap_records": 0,
             "missing_nik_records": 0,
             "invalid_checktime_records": 0,
@@ -356,8 +359,11 @@ class AttendanceValidationEngine:
             if validation_status == VALIDATION_STATUS_VALID_WARNING:
                 summary["valid_with_warning_records"] += 1
 
-            if validation_status == VALIDATION_STATUS_INVALID:
+            if not is_valid_for_txt:
                 summary["anomaly_records"] += 1
+
+            if validation_status == VALIDATION_STATUS_DUPLICATE_REMOVED:
+                summary["duplicate_removed_records"] += 1
 
             if pair_status == PAIR_STATUS_SINGLE_TAP:
                 summary["single_tap_records"] += 1
@@ -461,6 +467,116 @@ class AttendanceValidationEngine:
         ] = "Record does not meet valid TXT criteria."
 
         return validated_record
+
+
+class AttendanceTXTRecordDeduplicator:
+    """
+    Remove records that would produce an identical HRIS TXT row.
+
+    The comparison deliberately uses the final six output fields, including
+    minute-level time formatting, so two source records that HRIS cannot
+    distinguish are uploaded only once. Removed records remain available as
+    anomaly audit records.
+    """
+
+    def deduplicate(
+        self,
+        valid_records: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Return unique TXT records and annotate exact duplicates."""
+        unique_records: list[dict[str, Any]] = []
+        duplicate_records: list[dict[str, Any]] = []
+        retained_by_key: dict[
+            tuple[str, str, str, str, str, str],
+            dict[str, Any],
+        ] = {}
+
+        for record in valid_records:
+            output_key = self.output_fields(record)
+            retained_record = retained_by_key.get(output_key)
+
+            if retained_record is None:
+                retained_by_key[output_key] = record
+                unique_records.append(record)
+                continue
+
+            retained_source = str(
+                retained_record.get("source_mdb")
+                or retained_record.get("source_mdb_path")
+                or "(unknown)"
+            )
+            original_remarks = str(
+                record.get("validation_remarks") or ""
+            ).strip()
+            duplicate_remarks = (
+                "Exact duplicate HRIS TXT row removed. "
+                f"Retained source MDB: {retained_source}."
+            )
+
+            if original_remarks:
+                duplicate_remarks += f" Original validation: {original_remarks}"
+
+            record["is_valid_for_txt"] = False
+            record[
+                "validation_status"
+            ] = VALIDATION_STATUS_DUPLICATE_REMOVED
+            record["validation_remarks"] = duplicate_remarks
+            record["duplicate_of_source_mdb"] = retained_record.get(
+                "source_mdb", ""
+            )
+            record["duplicate_of_source_mdb_path"] = retained_record.get(
+                "source_mdb_path", ""
+            )
+            duplicate_records.append(record)
+
+        summary = {
+            "input_valid_records": len(valid_records),
+            "unique_txt_records": len(unique_records),
+            "duplicate_removed_records": len(duplicate_records),
+        }
+
+        logger.info(
+            "Attendance TXT deduplication finished. "
+            "Input valid: %s, Unique TXT: %s, Duplicate removed: %s",
+            summary["input_valid_records"],
+            summary["unique_txt_records"],
+            summary["duplicate_removed_records"],
+        )
+
+        return {
+            "unique_records": unique_records,
+            "duplicate_records": duplicate_records,
+            "summary": summary,
+        }
+
+    @staticmethod
+    def output_fields(
+        record: dict[str, Any],
+    ) -> tuple[str, str, str, str, str, str]:
+        """Return the exact six fields written to the HRIS TXT file."""
+        nik = str(record.get("nik") or "").strip()
+        check_in = record.get("check_in")
+        check_out = record.get("check_out")
+
+        if not nik:
+            raise ValueError("NIK is empty.")
+
+        if not isinstance(check_in, datetime):
+            raise ValueError("check_in must be datetime.")
+
+        if not isinstance(check_out, datetime):
+            raise ValueError("check_out must be datetime.")
+
+        return (
+            check_out.strftime(DATE_FORMAT),
+            nik,
+            check_in.strftime(DATE_FORMAT),
+            check_in.strftime(TIME_FORMAT),
+            check_out.strftime(DATE_FORMAT),
+            check_out.strftime(TIME_FORMAT),
+        )
+
+
 class AttendanceHRISTXTWriter:
     """
     HRIS TXT writer.
@@ -534,15 +650,21 @@ class AttendanceHRISTXTWriter:
             sorted_records,
             max_rows_per_file,
         )
+        used_random_suffixes = self._existing_random_suffixes(output_folder)
 
         for file_index, records_chunk in enumerate(
             chunks,
             start=1,
         ):
+            random_suffix = self._unique_random_suffix(
+                used_random_suffixes
+            )
+            used_random_suffixes.add(random_suffix)
             file_name = self._create_txt_filename(
                 workflow_label,
                 file_index,
                 job_id,
+                random_suffix,
             )
 
             file_path = output_folder / file_name
@@ -602,33 +724,7 @@ class AttendanceHRISTXTWriter:
         Format:
         "MM/DD/YYYY","NIK","MM/DD/YYYY","HH:MM","MM/DD/YYYY","HH:MM"
         """
-        nik = str(record.get("nik") or "").strip()
-        check_in = record.get("check_in")
-        check_out = record.get("check_out")
-
-        if not nik:
-            raise ValueError("NIK is empty.")
-
-        if not isinstance(check_in, datetime):
-            raise ValueError("check_in must be datetime.")
-
-        if not isinstance(check_out, datetime):
-            raise ValueError("check_out must be datetime.")
-
-        hris_date = check_out.strftime(DATE_FORMAT)
-        date_in = check_in.strftime(DATE_FORMAT)
-        time_in = check_in.strftime(TIME_FORMAT)
-        date_out = check_out.strftime(DATE_FORMAT)
-        time_out = check_out.strftime(TIME_FORMAT)
-
-        fields = [
-            hris_date,
-            nik,
-            date_in,
-            time_in,
-            date_out,
-            time_out,
-        ]
+        fields = AttendanceTXTRecordDeduplicator.output_fields(record)
 
         return ",".join(
             self._quote_field(field)
@@ -685,16 +781,50 @@ class AttendanceHRISTXTWriter:
         workflow_label: str,
         file_index: int,
         job_id: str,
+        random_suffix: str,
     ) -> str:
         """
         Create TXT filename.
 
         Example:
-        Attendance_HO_001_153045.txt
-        Attendance_Branch_001_153045.txt
+        Attendance_HO_001_153045_482.txt
+        Attendance_Branch_001_153045_731.txt
         """
         suffix = AttendanceHRISTXTWriter._job_id_time_suffix(job_id)
-        return f"Attendance_{workflow_label}_{file_index:03d}_{suffix}.txt"
+        return (
+            f"Attendance_{workflow_label}_{file_index:03d}_"
+            f"{suffix}_{random_suffix}.txt"
+        )
+
+    @staticmethod
+    def _existing_random_suffixes(output_folder: Path) -> set[str]:
+        return {
+            path.stem.rsplit("_", maxsplit=1)[-1]
+            for path in output_folder.glob("*.txt")
+            if (
+                len(path.stem.rsplit("_", maxsplit=1)[-1]) == 3
+                and path.stem.rsplit("_", maxsplit=1)[-1].isdigit()
+            )
+        }
+
+    @staticmethod
+    def _unique_random_suffix(used_suffixes: set[str]) -> str:
+        """Return an unused zero-padded random number from 000 through 999."""
+        if len(used_suffixes) >= 1000:
+            raise RuntimeError("All three-digit TXT filename suffixes are in use.")
+
+        for _attempt in range(32):
+            candidate = f"{secrets.randbelow(1000):03d}"
+            if candidate not in used_suffixes:
+                return candidate
+
+        # Deterministic fallback guarantees progress even if the random source
+        # repeatedly returns a value that already exists.
+        for number in range(1000):
+            candidate = f"{number:03d}"
+            if candidate not in used_suffixes:
+                return candidate
+        raise RuntimeError("Unable to reserve a unique TXT filename suffix.")
 
     @staticmethod
     def _job_id_time_suffix(job_id: str) -> str:
@@ -716,13 +846,16 @@ class AttendanceHRISTXTWriter:
         job_id: str,
     ) -> Path:
         """
-        Return Attendance run folder: Attendance/Workflow/YYYYMMDD_HHMMSS.
+        Return Attendance run folder: Attendance/Workflow/YYYY-MM/run ID.
         """
+        run_label = cls._run_label(job_id)
+        month_label = f"{run_label[:4]}-{run_label[4:6]}"
         return (
             Path(output_root)
             / cls.MODULE_FOLDER_NAME
             / workflow_label
-            / cls._run_label(job_id)
+            / month_label
+            / run_label
         )
 
     @staticmethod
@@ -859,6 +992,9 @@ class AttendanceExcelReportWriter:
             "sheet_count": len(workbook.worksheets),
             "valid_records": len(valid_records),
             "anomaly_records": len(anomaly_records),
+            "duplicate_removed_records": validation_summary.get(
+                "duplicate_removed_records", 0
+            ),
         }
 
     def _write_summary_sheet(
@@ -885,6 +1021,10 @@ class AttendanceExcelReportWriter:
             ["Total Validated Records", validation_summary.get("total_records", 0)],
             ["Valid For TXT", validation_summary.get("valid_for_txt_records", 0)],
             ["Valid With Warning", validation_summary.get("valid_with_warning_records", 0)],
+            [
+                "Duplicate TXT Records Removed",
+                validation_summary.get("duplicate_removed_records", 0),
+            ],
             ["Single Tap Records", validation_summary.get("single_tap_records", 0)],
             ["Missing NIK Records", validation_summary.get("missing_nik_records", 0)],
             ["Invalid CHECKTIME Records", validation_summary.get("invalid_checktime_records", 0)],
@@ -1219,13 +1359,16 @@ class AttendanceExcelReportWriter:
         job_id: str,
     ) -> Path:
         """
-        Return Attendance run folder: Attendance/Workflow/YYYYMMDD_HHMMSS.
+        Return Attendance run folder: Attendance/Workflow/YYYY-MM/run ID.
         """
+        run_label = cls._run_label(job_id)
+        month_label = f"{run_label[:4]}-{run_label[4:6]}"
         return (
             Path(output_root)
             / cls.MODULE_FOLDER_NAME
             / workflow_label
-            / cls._run_label(job_id)
+            / month_label
+            / run_label
         )
 
     @staticmethod
@@ -1366,7 +1509,16 @@ class AttendanceProcessEngine:
         valid_records = validation_result["valid_records"]
         anomaly_records = validation_result["anomaly_records"]
         all_records = validation_result["all_records"]
-        validation_summary = validation_result["summary"]
+
+        deduplication_result = (
+            AttendanceTXTRecordDeduplicator().deduplicate(valid_records)
+        )
+        valid_records = deduplication_result["unique_records"]
+        duplicate_records = deduplication_result["duplicate_records"]
+        anomaly_records.extend(duplicate_records)
+        validation_summary = validation_engine.summarize_validation(
+            all_records
+        )
 
         txt_result = None
         report_result = None
@@ -1405,6 +1557,8 @@ class AttendanceProcessEngine:
             "paired_record_count": len(paired_records),
             "valid_record_count": len(valid_records),
             "anomaly_record_count": len(anomaly_records),
+            "duplicate_removed_count": len(duplicate_records),
+            "deduplication_summary": deduplication_result["summary"],
             "validation_summary": validation_summary,
             "txt_result": txt_result,
             "report_result": report_result,
@@ -1494,7 +1648,7 @@ class AttendanceRunArtifactWriter:
     for each Attendance run.
 
     Output location:
-    output_root / Attendance / workflow / YYYYMMDD_HHMMSS
+    output_root / Attendance / workflow / YYYY-MM / YYYYMMDD_HHMMSS
     """
     MODULE_FOLDER_NAME: str = "Attendance"
 
@@ -1582,6 +1736,10 @@ class AttendanceRunArtifactWriter:
         lines.append(
             f"Valid record count  : "
             f"{result.get('valid_record_count', 0)}"
+        )
+        lines.append(
+            f"Duplicate removed   : "
+            f"{result.get('duplicate_removed_count', 0)}"
         )
         lines.append(
             f"Anomaly count       : "
@@ -1743,13 +1901,16 @@ class AttendanceRunArtifactWriter:
         job_id: str,
     ) -> Path:
         """
-        Return Attendance run folder: Attendance/Workflow/YYYYMMDD_HHMMSS.
+        Return Attendance run folder: Attendance/Workflow/YYYY-MM/run ID.
         """
+        run_label = cls._run_label(job_id)
+        month_label = f"{run_label[:4]}-{run_label[4:6]}"
         return (
             Path(output_root)
             / cls.MODULE_FOLDER_NAME
             / workflow_label
-            / cls._run_label(job_id)
+            / month_label
+            / run_label
         )
 
     @staticmethod

@@ -6,11 +6,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from email.utils import format_datetime
+from email.utils import make_msgid
 from email.message import EmailMessage
 from pathlib import Path
+import re
 import smtplib
+import time
 from typing import Any
 from typing import Callable
+from uuid import uuid4
 
 from shared.logger import get_logger
 
@@ -41,12 +46,30 @@ class OutlookMessage:
     attachment_count: int = 0
 
 
+@dataclass(slots=True)
+class SmtpSentCopyResult:
+    """Lifecycle state for one SMTP BCC archive copy."""
+
+    copy_id: str
+    message_id: str = ""
+    subject: str = ""
+    status: str = "BCC_QUEUED"
+    detail: str = ""
+    created_at: datetime | None = None
+    moved_at: datetime | None = None
+
+
 class OutlookComClient:
     """Thin wrapper around Microsoft Outlook COM automation."""
 
     OL_FOLDER_INBOX = 6
     OL_FOLDER_DELETED_ITEMS = 3
     OL_FOLDER_SENT_MAIL = 5
+    TRANSPORT_HEADERS_PROPERTIES = (
+        "http://schemas.microsoft.com/mapi/proptag/0x007D001F",
+        "http://schemas.microsoft.com/mapi/proptag/0x007D001E",
+    )
+    SMTP_COPY_HEADER = "X-OAS-K-Copy-ID"
 
     def __init__(
         self,
@@ -74,6 +97,7 @@ class OutlookComClient:
         self.save_smtp_copy_to_sent = bool(save_smtp_copy_to_sent)
         self._outlook = None
         self._namespace = None
+        self._smtp_copy_results: dict[str, SmtpSentCopyResult] = {}
 
     def connect(self) -> None:
         """Connect to Outlook through COM."""
@@ -142,6 +166,14 @@ class OutlookComClient:
             if getattr(item, "Class", None) != 43:
                 continue
 
+            sender_email = self._get_sender_email(item)
+            if self._is_smtp_archive_message(item, sender_email):
+                logger.info(
+                    "Skipping OAS-K SMTP BCC archive in Inbox: %s",
+                    str(getattr(item, "Subject", "") or ""),
+                )
+                continue
+
             message = OutlookMessage(
                 entry_id=str(getattr(item, "EntryID", "") or ""),
                 store_id=str(getattr(item, "Parent", "").StoreID)
@@ -149,7 +181,7 @@ class OutlookComClient:
                 else "",
                 subject=str(getattr(item, "Subject", "") or ""),
                 sender_name=str(getattr(item, "SenderName", "") or ""),
-                sender_email=self._get_sender_email(item),
+                sender_email=sender_email,
                 cc=self._get_cc_emails(item),
                 received_time=self._safe_datetime(
                     getattr(item, "ReceivedTime", None)
@@ -178,7 +210,7 @@ class OutlookComClient:
         to: str | None = None,
         cc: str | None = None,
         send_mode: str = "SEND",
-    ) -> None:
+    ) -> SmtpSentCopyResult | None:
         """Send or draft a reply using configured Outlook account."""
         if message.raw_item is None:
             logger.warning("Reply skipped because raw Outlook item is missing.")
@@ -192,15 +224,15 @@ class OutlookComClient:
             if internet_message_id:
                 headers["In-Reply-To"] = internet_message_id
                 headers["References"] = internet_message_id
-            self._send_smtp(
+            return self._send_smtp(
                 to=[to or message.sender_email],
                 cc=self._split_addresses(cc),
                 subject=subject,
                 body=body,
                 send_mode=send_mode,
                 headers=headers,
+                archive_copy=True,
             )
-            return
 
         reply = message.raw_item.Reply()
         reply.Subject = subject
@@ -223,6 +255,7 @@ class OutlookComClient:
             reply.Save()
         else:
             reply.Send()
+        return None
 
     def send_mail(
         self,
@@ -267,7 +300,8 @@ class OutlookComClient:
         body: str,
         send_mode: str,
         headers: dict[str, str] | None = None,
-    ) -> None:
+        archive_copy: bool = False,
+    ) -> SmtpSentCopyResult | None:
         """Send mail through the trusted internal SMTP relay."""
         if send_mode.strip().upper() == "DRAFT":
             raise RuntimeError(
@@ -278,9 +312,25 @@ class OutlookComClient:
         if not self.reply_from_smtp or "@" not in self.reply_from_smtp:
             raise RuntimeError("Reply_From_SMTP must be a valid email address.")
 
-        recipients = [item.strip() for item in [*to, *cc] if item.strip()]
+        recipients = self._deduplicate_addresses([*to, *cc])
         if not recipients:
             raise RuntimeError("SMTP message has no recipients.")
+
+        copy_result: SmtpSentCopyResult | None = None
+        archive_address = ""
+        if archive_copy and self.save_smtp_copy_to_sent:
+            archive_address = self.mailbox_smtp.strip().lower()
+            copy_id = self._new_smtp_copy_id()
+            copy_result = SmtpSentCopyResult(
+                copy_id=copy_id,
+                subject=subject,
+                created_at=datetime.now(),
+            )
+            self._smtp_copy_results[copy_id] = copy_result
+            if not archive_address or "@" not in archive_address:
+                copy_result.status = "BCC_REJECTED"
+                copy_result.detail = "Mailbox_SMTP is not a valid BCC address."
+                archive_address = ""
 
         mail = EmailMessage()
         mail["From"] = self.reply_from_smtp
@@ -291,14 +341,53 @@ class OutlookComClient:
         for name, value in (headers or {}).items():
             if value:
                 mail[name] = value
+        if copy_result is not None:
+            domain = self.reply_from_smtp.partition("@")[2] or None
+            copy_result.message_id = make_msgid(
+                idstring=copy_result.copy_id,
+                domain=domain,
+            )
+            mail["Message-ID"] = copy_result.message_id
+            mail["Date"] = format_datetime(datetime.now().astimezone())
+            mail[self.SMTP_COPY_HEADER] = copy_result.copy_id
         mail.set_content(body)
+
+        envelope_recipients = list(recipients)
+        if archive_address:
+            envelope_recipients = self._deduplicate_addresses(
+                [*envelope_recipients, archive_address]
+            )
 
         with smtplib.SMTP(
             self.smtp_server,
             self.smtp_port,
             timeout=self.smtp_timeout,
         ) as smtp:
-            smtp.send_message(mail, to_addrs=recipients)
+            refused_response = smtp.send_message(
+                mail,
+                to_addrs=envelope_recipients,
+            )
+
+        refused = (
+            {str(address).strip().lower(): detail for address, detail in refused_response.items()}
+            if isinstance(refused_response, dict)
+            else {}
+        )
+        if copy_result is not None and copy_result.status != "BCC_REJECTED":
+            if archive_address in refused:
+                copy_result.status = "BCC_REJECTED"
+                copy_result.detail = str(refused[archive_address])
+                logger.warning(
+                    "SMTP reply sent, but BCC archive recipient was rejected: %s",
+                    archive_address,
+                )
+            else:
+                copy_result.status = "BCC_ACCEPTED"
+                logger.info(
+                    "SMTP BCC archive accepted for %s with copy ID %s.",
+                    archive_address,
+                    copy_result.copy_id,
+                )
 
         logger.info(
             "Email sent through SMTP relay %s:%s from %s.",
@@ -307,69 +396,228 @@ class OutlookComClient:
             self.reply_from_smtp,
         )
 
-        if self.save_smtp_copy_to_sent:
-            self._save_smtp_sent_copy(
-                to=to,
-                cc=cc,
-                subject=subject,
-                body=body,
-            )
+        return copy_result
 
-    def _save_smtp_sent_copy(
+    def register_pending_smtp_copy(
         self,
-        to: list[str],
-        cc: list[str],
-        subject: str,
-        body: str,
-    ) -> None:
-        """Archive a best-effort copy of an SMTP message in Outlook Sent Items."""
-        try:
-            if self._outlook is None or self._namespace is None:
-                self.connect()
+        copy_id: str,
+        subject: str = "",
+    ) -> SmtpSentCopyResult:
+        """Register a previous-run BCC copy for idempotent recovery."""
+        normalized = str(copy_id or "").strip()
+        if not normalized:
+            raise ValueError("SMTP sent copy ID cannot be empty.")
+        result = self._smtp_copy_results.get(normalized)
+        if result is None:
+            result = SmtpSentCopyResult(
+                copy_id=normalized,
+                subject=subject,
+                status="COPY_PENDING",
+            )
+            self._smtp_copy_results[normalized] = result
+        return result
 
-            destination = self._get_sent_items_folder()
-            copy = self._outlook.CreateItem(0)
-            copy.To = "; ".join(item.strip() for item in to if item.strip())
-            copy.CC = "; ".join(item.strip() for item in cc if item.strip())
-            copy.Subject = subject
-            copy.Body = body
-            copy.Save()
-            copy.Move(destination)
-            logger.info(
-                "SMTP sent copy archived in Outlook Sent Items for mailbox %s.",
-                self.mailbox_smtp,
-            )
-        except Exception:
-            # SMTP delivery has already succeeded. Archiving must never cause a
-            # retry because that could send a duplicate reply.
-            logger.exception(
-                "SMTP delivery succeeded, but its Outlook Sent Items copy "
-                "could not be archived."
-            )
-
-    def _get_sent_items_folder(self) -> Any:
-        """Resolve shared-mailbox Sent Items, then fall back to profile default."""
-        try:
-            return self._get_mailbox_store().GetDefaultFolder(
-                self.OL_FOLDER_SENT_MAIL
-            )
-        except Exception:
-            logger.warning(
-                "Could not resolve shared mailbox Sent Items from its store; "
-                "trying shared-folder access."
-            )
-
-        try:
-            return self._get_shared_default_folder(self.OL_FOLDER_SENT_MAIL)
-        except Exception:
-            logger.warning(
-                "Could not access shared mailbox Sent Items; using the "
-                "default Outlook profile Sent Items folder."
-            )
+    def collect_smtp_sent_copies(
+        self,
+        copy_ids: set[str] | None = None,
+        timeout_seconds: float = 5.0,
+        poll_interval: float = 1.0,
+    ) -> dict[str, SmtpSentCopyResult]:
+        """Move matching BCC replies from shared Inbox to its Sent Items."""
+        wanted = {
+            copy_id
+            for copy_id in (copy_ids or set(self._smtp_copy_results))
+            if copy_id in self._smtp_copy_results
+            and self._smtp_copy_results[copy_id].status
+            in {"BCC_ACCEPTED", "COPY_PENDING", "MOVE_FAILED"}
+        }
+        if not wanted:
+            return {
+                copy_id: self._smtp_copy_results[copy_id]
+                for copy_id in (copy_ids or set(self._smtp_copy_results))
+                if copy_id in self._smtp_copy_results
+            }
 
         if self._namespace is None:
-            raise RuntimeError("Outlook namespace is not connected.")
-        return self._namespace.GetDefaultFolder(self.OL_FOLDER_SENT_MAIL)
+            self.connect()
+        inbox = self._get_shared_inbox_folder()
+        deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+
+        while wanted:
+            matches = self._find_smtp_archive_items(inbox, wanted)
+            for copy_id, item in matches.items():
+                result = self._smtp_copy_results[copy_id]
+                try:
+                    self._move_smtp_archive_item(item)
+                    result.status = "MOVED_TO_SENT"
+                    result.detail = "BCC archive moved to shared Sent Items."
+                    result.moved_at = datetime.now()
+                    wanted.discard(copy_id)
+                    logger.info(
+                        "SMTP BCC archive moved to Sent Items: %s",
+                        copy_id,
+                    )
+                except Exception as error:
+                    result.status = "MOVE_FAILED"
+                    result.detail = str(error)
+                    wanted.discard(copy_id)
+                    logger.exception(
+                        "SMTP BCC archive remains in Inbox because move failed: %s",
+                        copy_id,
+                    )
+
+            if not wanted or time.monotonic() >= deadline:
+                break
+            time.sleep(min(max(0.05, poll_interval), max(0.0, deadline - time.monotonic())))
+
+        for copy_id in wanted:
+            result = self._smtp_copy_results[copy_id]
+            result.status = "COPY_PENDING"
+            result.detail = "BCC archive has not arrived in Inbox yet."
+
+        selected = copy_ids or set(self._smtp_copy_results)
+        return {
+            copy_id: self._smtp_copy_results[copy_id]
+            for copy_id in selected
+            if copy_id in self._smtp_copy_results
+        }
+
+    def get_smtp_copy_result(self, copy_id: str) -> SmtpSentCopyResult | None:
+        """Return the current BCC archive state for one reply."""
+        return self._smtp_copy_results.get(str(copy_id or "").strip())
+
+    def _get_shared_inbox_folder(self) -> Any:
+        try:
+            return self._get_mailbox_store().GetDefaultFolder(self.OL_FOLDER_INBOX)
+        except RuntimeError:
+            return self._get_shared_default_folder(self.OL_FOLDER_INBOX)
+
+    def _find_smtp_archive_items(
+        self,
+        inbox: Any,
+        wanted: set[str],
+        scan_limit: int = 500,
+    ) -> dict[str, Any]:
+        items = inbox.Items
+        try:
+            items.Sort("[ReceivedTime]", True)
+        except Exception:
+            logger.warning("Could not sort shared Inbox while finding BCC archives.")
+
+        candidates: list[Any] = []
+        try:
+            count = min(int(getattr(items, "Count", 0) or 0), scan_limit)
+            candidates = [items.Item(index) for index in range(1, count + 1)]
+        except Exception:
+            candidates = []
+            for index, item in enumerate(items):
+                if index >= scan_limit:
+                    break
+                candidates.append(item)
+
+        matches: dict[str, Any] = {}
+        for item in candidates:
+            if getattr(item, "Class", None) != 43:
+                continue
+            copy_id = self._smtp_copy_id_from_item(item, wanted)
+            if copy_id and copy_id not in matches:
+                matches[copy_id] = item
+        return matches
+
+    def _move_smtp_archive_item(self, item: Any) -> None:
+        parent = getattr(item, "Parent", None)
+        source_store = getattr(parent, "Store", None)
+        if source_store is None:
+            raise RuntimeError("BCC archive source store is unavailable.")
+        destination = source_store.GetDefaultFolder(self.OL_FOLDER_SENT_MAIL)
+        if destination is None:
+            raise RuntimeError("Shared Sent Items folder is unavailable.")
+
+        try:
+            if bool(getattr(item, "UnRead", False)):
+                item.UnRead = False
+                item.Save()
+        except Exception:
+            logger.warning(
+                "BCC archive could not be marked read before moving; "
+                "continuing with the Sent Items move."
+            )
+        moved_item = item.Move(destination)
+        try:
+            if moved_item is not None and bool(
+                getattr(moved_item, "UnRead", False)
+            ):
+                moved_item.UnRead = False
+                moved_item.Save()
+        except Exception:
+            # Move already succeeded. A read-state failure must not keep the
+            # Copy ID in the pending queue forever.
+            logger.warning(
+                "BCC archive moved to Sent Items but its read state could not "
+                "be updated."
+            )
+
+    def _is_smtp_archive_message(self, item: Any, sender_email: str) -> bool:
+        if self._smtp_copy_id_from_item(item):
+            return True
+        subject = str(getattr(item, "Subject", "") or "").strip().lower()
+        return (
+            sender_email.strip().lower() == self.reply_from_smtp
+            and subject.startswith(("re:", "fw:", "fwd:"))
+        )
+
+    def _smtp_copy_id_from_item(
+        self,
+        item: Any,
+        wanted: set[str] | None = None,
+    ) -> str:
+        headers = self._transport_headers(item)
+        match = re.search(
+            rf"(?im)^{re.escape(self.SMTP_COPY_HEADER)}:\s*([^\s]+)",
+            headers,
+        )
+        if match:
+            return match.group(1).strip()
+
+        internet_message_id = str(
+            getattr(item, "InternetMessageID", "") or ""
+        )
+        searchable = f"{headers}\n{internet_message_id}".lower()
+        for copy_id in wanted or set(self._smtp_copy_results):
+            if copy_id.lower() in searchable:
+                return copy_id
+        return ""
+
+    def _transport_headers(self, item: Any) -> str:
+        accessor = getattr(item, "PropertyAccessor", None)
+        if accessor is None:
+            return ""
+        for property_name in self.TRANSPORT_HEADERS_PROPERTIES:
+            try:
+                value = str(accessor.GetProperty(property_name) or "")
+                if value:
+                    return value
+            except Exception:
+                continue
+        return ""
+
+    @staticmethod
+    def _deduplicate_addresses(values: list[str]) -> list[str]:
+        addresses: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            address = str(value or "").strip()
+            normalized = address.lower()
+            if not address or normalized in seen:
+                continue
+            seen.add(normalized)
+            addresses.append(address)
+        return addresses
+
+    @staticmethod
+    def _new_smtp_copy_id() -> str:
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        return f"OASK-SENT-{timestamp}-{uuid4().hex[:8]}"
 
     @staticmethod
     def _split_addresses(value: str | None) -> list[str]:

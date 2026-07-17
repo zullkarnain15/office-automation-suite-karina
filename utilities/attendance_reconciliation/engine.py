@@ -19,6 +19,7 @@ from utilities.attendance_reconciliation.duplicate_detector import (
 from utilities.attendance_reconciliation.excel_writer import (
     ReconciliationExcelWriter,
 )
+from utilities.attendance_reconciliation.excel_writer import format_duration
 from utilities.attendance_reconciliation.matcher import invalid_conflicts
 from utilities.attendance_reconciliation.matcher import match_records
 from utilities.attendance_reconciliation.models import ENGINE_VERSION
@@ -97,6 +98,7 @@ class ReconciliationEngine:
         scan: ReconciliationScan | None = None,
         cancel_event: Event | None = None,
     ) -> ReconciliationResult:
+        process_started_at = datetime.now()
         validate_request(request)
         if scan is None:
             scan = self.scan(request, cancel_event)
@@ -125,9 +127,25 @@ class ReconciliationEngine:
 
         try:
             check_cancelled(cancel_event)
+            process.write(
+                "Duplicate analysis started: "
+                f"Attendance={len(scan.attendance.records)}, "
+                f"Outlook={len(scan.outlook.records)}."
+            )
             machines = detect_machine_duplicates(list(scan.attendance.records))
             revisions = detect_revision_duplicates(list(scan.outlook.records))
+            process.write(
+                "Duplicate analysis completed: "
+                f"machine keys={len(machines.unique) + len(machines.conflicts)}, "
+                f"revision keys={len(revisions.unique) + len(revisions.conflicts)}."
+            )
+            check_cancelled(cancel_event)
+            process.write("Record matching started.")
             comparisons, conflicts = match_records(machines, revisions)
+            process.write(
+                "Record matching completed: "
+                f"comparisons={len(comparisons)}, conflicts={len(conflicts)}."
+            )
             conflicts.extend(
                 invalid_conflicts(
                     [
@@ -167,6 +185,10 @@ class ReconciliationEngine:
                 duplicates,
             )
             check_cancelled(cancel_event)
+            process.write(
+                "Streaming Excel report started: "
+                f"comparison rows={len(comparisons)}."
+            )
             self.excel_writer.write(
                 report_file,
                 job_id,
@@ -177,8 +199,33 @@ class ReconciliationEngine:
                 duplicates,
                 summary,
                 cancel_event,
+                process_started_at=process_started_at,
             )
+            process_completed_at = datetime.now()
+            process_duration_seconds = max(
+                0.0,
+                (process_completed_at - process_started_at).total_seconds(),
+            )
+            summary["process_started_at"] = process_started_at.isoformat(
+                timespec="seconds"
+            )
+            summary["process_completed_at"] = process_completed_at.isoformat(
+                timespec="seconds"
+            )
+            summary["process_duration"] = format_duration(
+                process_duration_seconds
+            )
+            summary["process_duration_seconds"] = round(
+                process_duration_seconds,
+                2,
+            )
+            process.write("Streaming Excel report completed.")
             write_summary(summary_json, summary)
+            process.write(
+                "Process duration: "
+                f"{summary['process_duration']} "
+                f"({summary['process_duration_seconds']:.2f} seconds)."
+            )
             process.write(
                 f"Comparison summary: total={len(comparisons)}, "
                 f"review={sum(item.review_required for item in comparisons)}."
@@ -214,6 +261,10 @@ class ReconciliationEngine:
             "job_id": job_id,
             "engine_version": ENGINE_VERSION,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "process_started_at": "",
+            "process_completed_at": "",
+            "process_duration": "",
+            "process_duration_seconds": 0.0,
             "workflow": request.workflow,
             "start_date": format_date(request.start_date),
             "end_date": format_date(request.end_date),
@@ -255,8 +306,15 @@ class ReconciliationEngine:
 
     @staticmethod
     def _reserve_job_folder(output_root: Path, workflow: str) -> tuple[str, Path]:
-        root = output_root / "Utilities" / "Attendance-Reconciliation" / workflow
         base = datetime.now().strftime("%Y%m%d_%H%M%S")
+        month_label = f"{base[:4]}-{base[4:6]}"
+        root = (
+            output_root
+            / "Utilities"
+            / "Attendance-Reconciliation"
+            / workflow
+            / month_label
+        )
         for sequence in range(1, 1000):
             job_id = base if sequence == 1 else f"{base}_{sequence:02d}"
             folder = root / job_id

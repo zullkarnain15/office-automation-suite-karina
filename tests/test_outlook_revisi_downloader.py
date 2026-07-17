@@ -2,6 +2,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from outlook.downloader import OutlookComClient
+from outlook.downloader import SmtpSentCopyResult
+from outlook.engine import OutlookProcessMessageResult
+from outlook.engine import OutlookRevisiEngine
 
 
 class _Recipients:
@@ -79,55 +82,288 @@ def test_smtp_reply_uses_configured_from_and_thread_headers() -> None:
     ]
 
 
-def test_smtp_success_archives_copy_in_shared_sent_items() -> None:
-    sent_items = SimpleNamespace(Name="Sent Items")
-    moved_to = []
-    archived = SimpleNamespace()
-    archived.Save = lambda: None
-    archived.Move = lambda destination: moved_to.append(destination)
-    outlook = SimpleNamespace(CreateItem=lambda _item_type: archived)
-    store = SimpleNamespace(
-        GetDefaultFolder=lambda folder_type: (
-            sent_items if folder_type == 5 else None
-        )
+def test_smtp_reply_bcc_uses_mailbox_without_visible_bcc_header() -> None:
+    message = SimpleNamespace(
+        raw_item=SimpleNamespace(InternetMessageID="<source@example.com>"),
+        sender_email="sender@example.com",
     )
     client = OutlookComClient(
         "karina.hr.1@oto.co.id",
         send_transport="SMTP",
         smtp_server="mail.oto.co.id",
     )
-    client._outlook = outlook
-    client._namespace = SimpleNamespace()
-    client._get_mailbox_store = lambda: store
-
-    with patch("outlook.downloader.smtplib.SMTP"):
-        client.send_mail(
-            ["sender@example.com"],
-            ["cc@example.com"],
-            "Reply subject",
-            "Reply body",
-        )
-
-    assert archived.To == "sender@example.com"
-    assert archived.CC == "cc@example.com"
-    assert archived.Subject == "Reply subject"
-    assert archived.Body == "Reply body"
-    assert moved_to == [sent_items]
-
-
-def test_sent_copy_failure_does_not_resend_or_fail_smtp_delivery() -> None:
-    client = OutlookComClient(
-        "karina.hr.1@oto.co.id",
-        send_transport="SMTP",
-        smtp_server="mail.oto.co.id",
-    )
-    client.connect = lambda: (_ for _ in ()).throw(RuntimeError("COM failed"))
 
     with patch("outlook.downloader.smtplib.SMTP") as smtp_class:
-        client.send_mail(["sender@example.com"], [], "Subject", "Body")
+        copy_result = client.send_reply(
+            message,
+            "Re: Reply subject",
+            "Reply body",
+            cc="cc@example.com",
+        )
 
-    smtp = smtp_class.return_value.__enter__.return_value
+    sent = smtp_class.return_value.__enter__.return_value.send_message.call_args
+    mail = sent.args[0]
+    assert sent.kwargs["to_addrs"] == [
+        "sender@example.com",
+        "cc@example.com",
+        "karina.hr.1@oto.co.id",
+    ]
+    assert mail["Bcc"] is None
+    assert mail["X-OAS-K-Copy-ID"] == copy_result.copy_id
+    assert copy_result.status == "BCC_ACCEPTED"
+
+
+def test_smtp_bcc_uses_mailbox_smtp_not_reply_from_smtp() -> None:
+    message = SimpleNamespace(
+        raw_item=SimpleNamespace(InternetMessageID="<source@example.com>"),
+        sender_email="sender@example.com",
+    )
+    client = OutlookComClient(
+        "archive.mailbox@oto.co.id",
+        reply_from_smtp="smtp.sender@oto.co.id",
+        send_transport="SMTP",
+        smtp_server="mail.oto.co.id",
+    )
+
+    with patch("outlook.downloader.smtplib.SMTP") as smtp_class:
+        client.send_reply(message, "Re: Attendance", "Processed")
+
+    sent = smtp_class.return_value.__enter__.return_value.send_message.call_args
+    assert sent.args[0]["From"] == "smtp.sender@oto.co.id"
+    assert sent.kwargs["to_addrs"] == [
+        "sender@example.com",
+        "archive.mailbox@oto.co.id",
+    ]
+
+
+def test_smtp_summary_mail_does_not_create_bcc_archive() -> None:
+    client = OutlookComClient(
+        "karina.hr.1@oto.co.id",
+        send_transport="SMTP",
+        smtp_server="mail.oto.co.id",
+    )
+
+    with patch("outlook.downloader.smtplib.SMTP") as smtp_class:
+        client.send_mail(
+            ["pic@example.com"],
+            ["supervisor@example.com"],
+            "Process summary",
+            "Completed",
+        )
+
+    sent = smtp_class.return_value.__enter__.return_value.send_message.call_args
+    assert sent.kwargs["to_addrs"] == [
+        "pic@example.com",
+        "supervisor@example.com",
+    ]
+    assert sent.args[0]["X-OAS-K-Copy-ID"] is None
+
+
+def test_bcc_rejection_does_not_resend_or_fail_smtp_delivery() -> None:
+    message = SimpleNamespace(
+        raw_item=SimpleNamespace(InternetMessageID="<source@example.com>"),
+        sender_email="sender@example.com",
+    )
+    client = OutlookComClient(
+        "karina.hr.1@oto.co.id",
+        send_transport="SMTP",
+        smtp_server="mail.oto.co.id",
+    )
+
+    with patch("outlook.downloader.smtplib.SMTP") as smtp_class:
+        smtp = smtp_class.return_value.__enter__.return_value
+        smtp.send_message.return_value = {
+            "karina.hr.1@oto.co.id": (550, b"BCC rejected")
+        }
+        copy_result = client.send_reply(message, "Subject", "Body")
+
     smtp.send_message.assert_called_once()
+    assert copy_result.status == "BCC_REJECTED"
+    assert "550" in copy_result.detail
+
+
+class _Items:
+    def __init__(self, items) -> None:
+        self._items = items
+        self.Count = len(items)
+
+    def Sort(self, *_args) -> None:
+        return None
+
+    def Item(self, index: int):
+        return self._items[index - 1]
+
+    def __iter__(self):
+        return iter(self._items)
+
+
+def test_bcc_archive_moves_from_source_store_to_sent_items() -> None:
+    copy_id = "OASK-SENT-TEST-001"
+    sent_items = SimpleNamespace(Name="Sent Items")
+    moved_to = []
+    saved_states = []
+    store = SimpleNamespace()
+    item = SimpleNamespace(
+        Class=43,
+        Subject="Re: Attendance",
+        InternetMessageID=f"<{copy_id}@oto.co.id>",
+        PropertyAccessor=SimpleNamespace(
+            GetProperty=lambda _name: f"X-OAS-K-Copy-ID: {copy_id}\r\n"
+        ),
+        Parent=SimpleNamespace(Store=store),
+        UnRead=True,
+    )
+    item.Save = lambda: saved_states.append(item.UnRead)
+    item.Move = lambda destination: moved_to.append(destination)
+    inbox = SimpleNamespace(Items=_Items([item]))
+    store.GetDefaultFolder = lambda folder_type: {
+        5: sent_items,
+        6: inbox,
+    }.get(folder_type)
+
+    client = OutlookComClient("karina.hr.1@oto.co.id")
+    client._namespace = SimpleNamespace()
+    client._get_mailbox_store = lambda: store
+    client.register_pending_smtp_copy(copy_id)
+
+    result = client.collect_smtp_sent_copies(
+        {copy_id},
+        timeout_seconds=0,
+    )[copy_id]
+
+    assert result.status == "MOVED_TO_SENT"
+    assert moved_to == [sent_items]
+    assert saved_states == [False]
+
+
+def test_missing_bcc_archive_remains_pending_without_resend() -> None:
+    copy_id = "OASK-SENT-TEST-002"
+    inbox = SimpleNamespace(Items=_Items([]))
+    store = SimpleNamespace(
+        GetDefaultFolder=lambda folder_type: inbox if folder_type == 6 else None
+    )
+    client = OutlookComClient("karina.hr.1@oto.co.id")
+    client._namespace = SimpleNamespace()
+    client._get_mailbox_store = lambda: store
+    client.register_pending_smtp_copy(copy_id)
+
+    result = client.collect_smtp_sent_copies(
+        {copy_id},
+        timeout_seconds=0,
+    )[copy_id]
+
+    assert result.status == "COPY_PENDING"
+
+
+def test_bcc_archive_is_excluded_from_normal_inbox_processing(tmp_path) -> None:
+    copy_id = "OASK-SENT-TEST-003"
+    item = SimpleNamespace(
+        Class=43,
+        Subject="Re: Attendance",
+        SenderEmailAddress="karina.hr.1@oto.co.id",
+        PropertyAccessor=SimpleNamespace(
+            GetProperty=lambda _name: f"X-OAS-K-Copy-ID: {copy_id}\r\n"
+        ),
+        Parent=SimpleNamespace(StoreID="store"),
+        Attachments=SimpleNamespace(Count=0),
+    )
+    inbox = SimpleNamespace(Items=_Items([item]))
+    client = OutlookComClient("karina.hr.1@oto.co.id")
+    client._namespace = SimpleNamespace()
+    client._get_source_folder = lambda: inbox
+
+    messages = client.fetch_messages(tmp_path)
+
+    assert messages == []
+
+
+def test_bcc_move_failure_leaves_copy_pending_for_retry() -> None:
+    copy_id = "OASK-SENT-TEST-004"
+    sent_items = SimpleNamespace(Name="Sent Items")
+    store = SimpleNamespace()
+    item = SimpleNamespace(
+        Class=43,
+        Subject="Re: Attendance",
+        PropertyAccessor=SimpleNamespace(
+            GetProperty=lambda _name: f"X-OAS-K-Copy-ID: {copy_id}\r\n"
+        ),
+        Parent=SimpleNamespace(Store=store),
+        UnRead=False,
+        Move=lambda _destination: (_ for _ in ()).throw(
+            RuntimeError("move denied")
+        ),
+    )
+    inbox = SimpleNamespace(Items=_Items([item]))
+    store.GetDefaultFolder = lambda folder_type: {
+        5: sent_items,
+        6: inbox,
+    }.get(folder_type)
+    client = OutlookComClient("karina.hr.1@oto.co.id")
+    client._namespace = SimpleNamespace()
+    client._get_mailbox_store = lambda: store
+    client.register_pending_smtp_copy(copy_id)
+
+    result = client.collect_smtp_sent_copies(
+        {copy_id},
+        timeout_seconds=0,
+    )[copy_id]
+
+    assert result.status == "MOVE_FAILED"
+    assert result.detail == "move denied"
+
+
+def test_engine_collects_bcc_status_and_persists_only_pending(tmp_path) -> None:
+    moved_id = "OASK-SENT-MOVED"
+    pending_id = "OASK-SENT-PENDING"
+    records = {
+        moved_id: SmtpSentCopyResult(
+            copy_id=moved_id,
+            status="MOVED_TO_SENT",
+            detail="moved",
+        ),
+        pending_id: SmtpSentCopyResult(
+            copy_id=pending_id,
+            status="COPY_PENDING",
+            detail="waiting",
+        ),
+    }
+    calls = []
+    client = SimpleNamespace(
+        collect_smtp_sent_copies=lambda ids, **kwargs: (
+            calls.append((ids, kwargs)) or records
+        ),
+        get_smtp_copy_result=lambda copy_id: records.get(copy_id),
+    )
+    results = [
+        OutlookProcessMessageResult(
+            entry_id=copy_id,
+            subject=f"Subject {copy_id}",
+            sender_email="sender@example.com",
+            workflow="HO",
+            status="SUCCESS",
+            errors=[],
+            output_files=[],
+            reply_sent=True,
+            sent_copy_id=copy_id,
+            sent_copy_status="BCC_ACCEPTED",
+        )
+        for copy_id in (moved_id, pending_id)
+    ]
+    engine = OutlookRevisiEngine("unused.xlsx", "HO")
+
+    pending = engine._collect_smtp_sent_copies(client, results)
+    engine._save_pending_sent_copies(tmp_path, "HO", pending)
+    loaded = engine._load_pending_sent_copies(tmp_path, "HO")
+
+    assert calls == [
+        (
+            {moved_id, pending_id},
+            {"timeout_seconds": 5, "poll_interval": 1},
+        )
+    ]
+    assert results[0].sent_copy_status == "MOVED_TO_SENT"
+    assert results[1].sent_copy_status == "COPY_PENDING"
+    assert set(loaded) == {pending_id}
 
 
 def test_smtp_transport_rejects_draft_mode() -> None:

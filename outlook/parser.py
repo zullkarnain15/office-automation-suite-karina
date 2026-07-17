@@ -5,9 +5,11 @@ Outlook - Revisi attachment parsing and TXT output helpers.
 from __future__ import annotations
 
 import csv
+import secrets
 from dataclasses import dataclass, field
 from datetime import date
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -110,7 +112,7 @@ class OutlookAttachmentParser:
         try:
             workbook = load_workbook(path, data_only=True, read_only=True)
             sheet = workbook.active
-            rows = list(sheet.iter_rows(values_only=True))
+            rows = iter(sheet.iter_rows(values_only=True))
         except Exception as error:
             reason = f"Failed to read Excel attachment: {error}"
             return ParseResult(
@@ -119,17 +121,37 @@ class OutlookAttachmentParser:
             )
 
         try:
-            if not rows:
+            header_index: int | None = None
+            header_row: tuple[Any, ...] | None = None
+            saw_row = False
+            required_headers = {
+                self._normalize_header(value)
+                for value in REQUIRED_HO_COLUMNS
+            }
+            for index, row in enumerate(rows):
+                saw_row = True
+                actual_headers = {
+                    self._normalize_header(value)
+                    for value in row
+                    if self._to_text(value)
+                }
+                if required_headers.issubset(actual_headers):
+                    header_index = index
+                    header_row = row
+                    break
+
+            if not saw_row:
                 reason = "Excel attachment is empty."
                 return ParseResult(
                     [], [reason],
                     [OutlookDataAnomaly(path, 0, "", "", "", "", "", "ATTACHMENT_STRUCTURE_INVALID", reason)],
                 )
 
-            try:
-                header_index = self._find_header_index(rows, REQUIRED_HO_COLUMNS)
-            except ValueError as error:
-                reason = str(error)
+            if header_index is None or header_row is None:
+                reason = (
+                    "Missing required HO column(s): "
+                    + ", ".join(REQUIRED_HO_COLUMNS)
+                )
                 return ParseResult(
                     [],
                     [reason],
@@ -140,17 +162,14 @@ class OutlookAttachmentParser:
                         )
                     ],
                 )
-            headers = [
-                self._normalize_header(value)
-                for value in rows[header_index]
-            ]
+            headers = [self._normalize_header(value) for value in header_row]
             column_map = {
                 header: index
                 for index, header in enumerate(headers)
                 if header
             }
 
-            for row_number, row in enumerate(rows[header_index + 1:], header_index + 2):
+            for row_number, row in enumerate(rows, header_index + 2):
                 row_read += 1
                 if self._is_empty_ho_data_row(row, column_map):
                     empty_row_dropped += 1
@@ -227,10 +246,10 @@ class OutlookAttachmentParser:
         empty_row_dropped = 0
 
         try:
-            with path.open("r", encoding="utf-8-sig", newline="") as handle:
-                sample = handle.read(4096)
-                handle.seek(0)
-                delimiter = "\t" if "\t" in sample and "," not in sample else ","
+            text = self._decode_branch_text(path)
+            sample = text[:4096]
+            delimiter = "\t" if "\t" in sample and "," not in sample else ","
+            with StringIO(text, newline="") as handle:
                 reader = csv.reader(handle, delimiter=delimiter)
                 for row_number, row in enumerate(reader, 1):
                     row_read += 1
@@ -280,6 +299,28 @@ class OutlookAttachmentParser:
             )
 
         return ParseResult(records, errors, anomalies, row_read, empty_row_dropped)
+
+    @staticmethod
+    def _decode_branch_text(path: Path) -> str:
+        """Decode Branch TXT without silently discarding invalid bytes."""
+        raw_data = path.read_bytes()
+        encodings = (
+            ("utf-16",)
+            if raw_data.startswith((b"\xff\xfe", b"\xfe\xff"))
+            else ("utf-8-sig", "cp1252")
+        )
+        decode_errors: list[str] = []
+
+        for encoding in encodings:
+            try:
+                return raw_data.decode(encoding)
+            except UnicodeDecodeError as error:
+                decode_errors.append(f"{encoding}: {error}")
+
+        raise UnicodeError(
+            f"Unable to decode {path.name}. Tried: "
+            + "; ".join(decode_errors)
+        )
 
     def _record_from_values(
         self,
@@ -470,8 +511,10 @@ class OutlookTxtWriter:
         limit = max(max_lines, 1)
         files: list[Path] = []
         remaining = list(records)
-        existing_files = sorted(
-            output_path.glob(f"{safe_prefix}_*_{date_suffix}.txt")
+        existing_files = self._existing_output_files(
+            output_path,
+            safe_prefix,
+            date_suffix,
         )
 
         if existing_files:
@@ -489,10 +532,16 @@ class OutlookTxtWriter:
             safe_prefix,
             date_suffix,
         )
+        used_random_suffixes = self._existing_random_suffixes(output_path)
         for start in range(0, len(remaining), limit):
             chunk = remaining[start:start + limit]
+            random_suffix = self._unique_random_suffix(
+                used_random_suffixes
+            )
+            used_random_suffixes.add(random_suffix)
             file_path = output_path / (
-                f"{safe_prefix}_{file_index:03d}_{date_suffix}.txt"
+                f"{safe_prefix}_{file_index:03d}_{date_suffix}_"
+                f"{random_suffix}.txt"
             )
             self._write_chunk(file_path, chunk, mode="w")
             files.append(file_path)
@@ -528,9 +577,83 @@ class OutlookTxtWriter:
         date_suffix: str,
     ) -> int:
         """Return the next free job-wide TXT sequence number."""
-        index = 1
-        while (
-            output_path / f"{safe_prefix}_{index:03d}_{date_suffix}.txt"
-        ).exists():
-            index += 1
-        return index
+        existing = OutlookTxtWriter._existing_output_files(
+            output_path,
+            safe_prefix,
+            date_suffix,
+        )
+        indexes = [
+            OutlookTxtWriter._output_index(path, safe_prefix, date_suffix)
+            for path in existing
+        ]
+        return max((index for index in indexes if index is not None), default=0) + 1
+
+    @staticmethod
+    def _existing_output_files(
+        output_path: Path,
+        safe_prefix: str,
+        date_suffix: str,
+    ) -> list[Path]:
+        """Return legacy and randomized TXT files in sequence order."""
+        candidates = {
+            *output_path.glob(f"{safe_prefix}_*_{date_suffix}.txt"),
+            *output_path.glob(f"{safe_prefix}_*_{date_suffix}_???.txt"),
+        }
+        return sorted(
+            candidates,
+            key=lambda path: (
+                OutlookTxtWriter._output_index(
+                    path,
+                    safe_prefix,
+                    date_suffix,
+                )
+                or 0,
+                path.name,
+            ),
+        )
+
+    @staticmethod
+    def _output_index(
+        path: Path,
+        safe_prefix: str,
+        date_suffix: str,
+    ) -> int | None:
+        stem = path.stem
+        prefix = f"{safe_prefix}_"
+        if not stem.startswith(prefix):
+            return None
+        parts = stem[len(prefix):].split("_")
+        if len(parts) not in {2, 3} or parts[1] != date_suffix:
+            return None
+        try:
+            return int(parts[0])
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _existing_random_suffixes(output_path: Path) -> set[str]:
+        return {
+            path.stem.rsplit("_", maxsplit=1)[-1]
+            for path in output_path.glob("*.txt")
+            if (
+                len(path.stem.rsplit("_", maxsplit=1)[-1]) == 3
+                and path.stem.rsplit("_", maxsplit=1)[-1].isdigit()
+            )
+        }
+
+    @staticmethod
+    def _unique_random_suffix(used_suffixes: set[str]) -> str:
+        """Return an unused zero-padded random number from 000 through 999."""
+        if len(used_suffixes) >= 1000:
+            raise RuntimeError("All three-digit TXT filename suffixes are in use.")
+
+        for _attempt in range(32):
+            candidate = f"{secrets.randbelow(1000):03d}"
+            if candidate not in used_suffixes:
+                return candidate
+
+        for number in range(1000):
+            candidate = f"{number:03d}"
+            if candidate not in used_suffixes:
+                return candidate
+        raise RuntimeError("Unable to reserve a unique TXT filename suffix.")

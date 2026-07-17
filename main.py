@@ -110,23 +110,21 @@ def open_outlook_module(root: tk.Tk) -> None:
 
 
 def open_utilities_module(root: tk.Tk) -> None:
-    """Open Comparison-Attendance Reconciliation through a lazy import."""
+    """Open the Utilities Hub through a lazy import."""
     try:
-        from utilities.attendance_reconciliation.gui import (
-            AttendanceReconciliationGUI,
-        )
+        from utilities.gui import UtilitiesGUI
 
-        logger.info("Comparison-Attendance Reconciliation module opened.")
+        logger.info("Utilities Hub opened.")
         utilities_window = tk.Toplevel(root)
         utilities_window.transient(root)
-        AttendanceReconciliationGUI(utilities_window)
+        UtilitiesGUI(utilities_window)
         utilities_window.lift()
         utilities_window.focus_force()
     except Exception as error:
-        logger.exception("Utilities reconciliation module could not be opened.")
+        logger.exception("Utilities Hub could not be opened.")
         messagebox.showerror(
             "Office Automation Suite - Karina",
-            "Gagal membuka Comparison-Attendance Reconciliation.\n\n"
+            "Gagal membuka Utilities.\n\n"
             f"{error}",
             parent=root,
         )
@@ -278,7 +276,10 @@ def main() -> None:
         (
             "Utilities",
             "utilities.png",
-            "Compare Attendance machine reports with Outlook revision reports.",
+            (
+                "Comparison Result and Attachment Consolidation "
+                "for HRIS-ready output."
+            ),
             True,
         ),
     ]
