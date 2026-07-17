@@ -13,6 +13,7 @@ Application Entry Point
 
 from __future__ import annotations
 
+from functools import partial
 import tkinter as tk
 from tkinter import messagebox
 
@@ -39,6 +40,7 @@ from config.ui_config import (
     WINDOW_WIDTH,
 )
 from hris.gui import HRISUploadGUI
+from outlook.gui import OutlookRevisiGUI
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
@@ -93,6 +95,39 @@ def open_attendance_module(root: tk.Tk) -> None:
     AttendanceGUI(attendance_window)
     attendance_window.lift()
     attendance_window.focus_force()
+
+
+def open_outlook_module(root: tk.Tk) -> None:
+    """Open Outlook - Revisi module."""
+
+    logger.info("Outlook - Revisi module opened.")
+
+    outlook_window = tk.Toplevel(root)
+    outlook_window.transient(root)
+    OutlookRevisiGUI(outlook_window)
+    outlook_window.lift()
+    outlook_window.focus_force()
+
+
+def open_utilities_module(root: tk.Tk) -> None:
+    """Open the Utilities Hub through a lazy import."""
+    try:
+        from utilities.gui import UtilitiesGUI
+
+        logger.info("Utilities Hub opened.")
+        utilities_window = tk.Toplevel(root)
+        utilities_window.transient(root)
+        UtilitiesGUI(utilities_window)
+        utilities_window.lift()
+        utilities_window.focus_force()
+    except Exception as error:
+        logger.exception("Utilities Hub could not be opened.")
+        messagebox.showerror(
+            "Office Automation Suite - Karina",
+            "Gagal membuka Utilities.\n\n"
+            f"{error}",
+            parent=root,
+        )
 
 
 # =========================================================
@@ -229,8 +264,8 @@ def main() -> None:
         (
             "Outlook",
             "outlook.png",
-            "Email automation module.",
-            False,
+            "Process attendance revision emails and prepare HRIS TXT output.",
+            True,
         ),
         (
             "HRIS",
@@ -241,8 +276,11 @@ def main() -> None:
         (
             "Utilities",
             "utilities.png",
-            "Merge, split, and clean office files.",
-            False,
+            (
+                "Comparison Result and Attachment Consolidation "
+                "for HRIS-ready output."
+            ),
+            True,
         ),
     ]
 
@@ -320,12 +358,16 @@ def main() -> None:
             pady=(0, 12),
         )
 
-        if module_name == "Attendance":
-            button_command = lambda r=root: open_attendance_module(r)
-        elif module_name == "HRIS":
-            button_command = lambda r=root: open_hris_module(r)
-        else:
-            button_command = lambda m=module_name: coming_soon(m)
+        module_commands = {
+            "Attendance": partial(open_attendance_module, root),
+            "Outlook": partial(open_outlook_module, root),
+            "HRIS": partial(open_hris_module, root),
+            "Utilities": partial(open_utilities_module, root),
+        }
+        button_command = module_commands.get(
+            module_name,
+            partial(coming_soon, module_name),
+        )
 
         button_bg = APP_SUCCESS if is_available else APP_ACCENT
         button_active_bg = APP_SUCCESS_ACTIVE if is_available else PRIMARY_COLOR

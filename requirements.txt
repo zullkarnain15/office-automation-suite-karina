@@ -2,4 +2,5 @@ pyodbc==5.3.0
 openpyxl
 pyinstaller
 pyautogui
+playwright
 pywin32

@@ -97,9 +97,9 @@ class HRISBatchUploader:
         for index, plan_item in enumerate(upload_plan.plan_items):
             if index > 0:
                 logger.info(
-                    "Reopening Overtime Upload Attendance page before next item."
+                    "Preparing Run Control search page before next item."
                 )
-                self.navigator.open_overtime_upload_attendance()
+                self.navigator.prepare_next_upload()
 
             result = self.page_handler.upload_one_file(
                 plan_item=plan_item,

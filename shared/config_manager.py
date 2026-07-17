@@ -460,9 +460,14 @@ class OutlookRevisiConfiguration:
             return None
 
         if output_path.is_absolute():
-            return output_path
+            resolved_path = output_path
+        else:
+            resolved_path = self._get_application_root() / output_path
 
-        return self._get_application_root() / output_path
+        if resolved_path.name.casefold() == "output":
+            return resolved_path / "Outlook-Revisi"
+
+        return resolved_path
 
     def get_pic_hr_emails(self) -> list[str]:
         """
@@ -661,12 +666,16 @@ class OutlookRevisiConfigurationReader:
             if not self._to_bool(record.get("Active")):
                 continue
 
+            sender_email = self._to_text(record.get("Sender_Email"))
+            if not sender_email:
+                continue
+
             senders.append(
                 OutlookSenderConfig(
                     active=True,
                     workflow="HO",
                     sender_name=self._to_text(record.get("Sender_Name")),
-                    sender_email=self._to_text(record.get("Sender_Email")),
+                    sender_email=sender_email,
                     required_cc_email=self._to_text(
                         record.get("Required_CC_Email")
                     ),
@@ -699,6 +708,10 @@ class OutlookRevisiConfigurationReader:
             if not self._to_bool(record.get("Active")):
                 continue
 
+            sender_email = self._to_text(record.get("Sender_Email"))
+            if not sender_email:
+                continue
+
             senders.append(
                 OutlookSenderConfig(
                     active=True,
@@ -706,7 +719,7 @@ class OutlookRevisiConfigurationReader:
                     company=self._to_text(record.get("Company")),
                     branch_code=self._to_text(record.get("Branch_Code")),
                     sender_name=self._to_text(record.get("Sender_Name")),
-                    sender_email=self._to_text(record.get("Sender_Email")),
+                    sender_email=sender_email,
                     required_cc_email=self._to_text(
                         record.get("Required_CC_Email")
                     ),
@@ -1054,10 +1067,26 @@ DEFAULT_HRIS_ASSISTED_STEPS: tuple[tuple[Any, ...], ...] = (
     ("Y", 9, "ok_after_run", "click", "NONE", "coordinate", True, 1, "Click OK after Run"),
 )
 HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES = (
+    "upload",
     "ok_after_upload",
     "run",
     "ok_after_run",
 )
+
+
+def resolve_hris_macro_steps(
+    steps: list[HRISAssistedStepConfig],
+) -> list[HRISAssistedStepConfig]:
+    """Resolve canonical macro steps while supporting legacy four-step configs."""
+    steps_by_name = {step.step_name: step for step in steps}
+    canonical_steps = [
+        steps_by_name[name]
+        for name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
+        if name in steps_by_name
+    ]
+    return canonical_steps or list(steps)
+
+
 HRIS_ASSISTED_ACTIONS = {
     "click", "click_type", "type", "press",
     "attach_file", "wait", "manual_continue",

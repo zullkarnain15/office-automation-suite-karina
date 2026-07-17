@@ -45,7 +45,7 @@ from hris.engine import HRISFullUploadEngine
 from hris.click_profile import HRISClickProfileManager
 from shared.config_manager import (
     HRISConfigurationReader,
-    HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES,
+    resolve_hris_macro_steps,
 )
 from shared.logger import get_logger
 
@@ -64,6 +64,8 @@ APP_ACCENT_HOVER = "#123B63"
 APP_SUCCESS = "#43A58F"
 APP_SUCCESS_ACTIVE = "#2E8775"
 APP_SUCCESS_BORDER = "#247363"
+WORKFLOW_ACCENT = "#B45309"
+WORKFLOW_ACCENT_HOVER = "#92400E"
 APP_LOG_BG = "#24384C"
 APP_LOG_FG = "#F4F7FB"
 APP_SOFT_ACCENT = "#DDF3F3"
@@ -78,7 +80,7 @@ class HRISUploadGUI:
 
     def __init__(self, root: tk.Tk | tk.Toplevel) -> None:
         self.root = root
-        self.root.title("HRIS Upload Module")
+        self.root.title("OAS-K | HRIS Upload - by ZSH")
         self.root.geometry("1240x720")
         self.root.minsize(1100, 680)
         self.root.configure(bg=APP_BACKGROUND)
@@ -113,6 +115,7 @@ class HRISUploadGUI:
         self._create_widgets()
         self._apply_widget_theme(self.root)
         self._style_primary_action()
+        self._refresh_workflow_selector()
         self.toggle_output_source()
         self.toggle_login_mode()
         self._load_assisted_configuration()
@@ -653,32 +656,34 @@ class HRISUploadGUI:
             padx=(0, 8),
         )
 
-        tk.Radiobutton(
+        self.workflow_ho_button = tk.Button(
             workflow_frame,
             text="Head Office (HO)",
-            variable=self.workflow_var,
-            value="HO",
-            font=DEFAULT_FONT,
-            command=self.update_workflow_status,
-        ).grid(
+            width=18,
+            font=BUTTON_FONT,
+            command=lambda: self._select_workflow("HO"),
+            takefocus=True,
+        )
+        self.workflow_ho_button.grid(
             row=0,
             column=0,
-            sticky="w",
-            padx=5,
+            sticky="ew",
+            padx=(5, 4),
         )
 
-        tk.Radiobutton(
+        self.workflow_branch_button = tk.Button(
             workflow_frame,
             text="Branch",
-            variable=self.workflow_var,
-            value="Branch",
-            font=DEFAULT_FONT,
-            command=self.update_workflow_status,
-        ).grid(
+            width=18,
+            font=BUTTON_FONT,
+            command=lambda: self._select_workflow("Branch"),
+            takefocus=True,
+        )
+        self.workflow_branch_button.grid(
             row=0,
             column=1,
-            sticky="w",
-            padx=20,
+            sticky="ew",
+            padx=(4, 5),
         )
 
         self.workflow_status_label = tk.Label(
@@ -695,6 +700,9 @@ class HRISUploadGUI:
             padx=5,
             pady=(6, 0),
         )
+
+        workflow_frame.columnconfigure(0, weight=1)
+        workflow_frame.columnconfigure(1, weight=1)
 
     def _build_result_frame(self, parent: tk.Frame) -> None:
         result_frame = tk.LabelFrame(
@@ -1006,11 +1014,9 @@ class HRISUploadGUI:
                 (int(screen.width), int(screen.height)),
                 configuration.upload,
                 current_scale_percent=self._get_display_scale_percent(),
-                required_steps=[
-                    step
-                    for step in configuration.assisted_steps
-                    if step.step_name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
-                ],
+                required_steps=resolve_hris_macro_steps(
+                    configuration.assisted_steps
+                ),
             )
             return f"Click Profile Status: {validation.message}"
         except Exception as error:
@@ -1158,8 +1164,48 @@ class HRISUploadGUI:
         else:
             text = "Selected Workflow : Branch"
 
+        self._refresh_workflow_selector()
         self.workflow_status_label.config(text=text)
         self._append_log(text)
+
+    def _select_workflow(self, workflow: str) -> None:
+        """Select a workflow through the compact card controls."""
+
+        if workflow not in ("HO", "Branch"):
+            return
+
+        self.workflow_var.set(workflow)
+        self.update_workflow_status()
+
+    def _refresh_workflow_selector(self) -> None:
+        """Refresh the selected and unselected workflow card colors."""
+
+        selected_workflow = self.workflow_var.get()
+        buttons = (
+            ("HO", "Head Office (HO)", self.workflow_ho_button),
+            ("Branch", "Branch", self.workflow_branch_button),
+        )
+
+        for workflow, label, button in buttons:
+            is_selected = workflow == selected_workflow
+            self._safe_configure(
+                button,
+                text=f"\u2713  {label}" if is_selected else label,
+                bg=WORKFLOW_ACCENT if is_selected else APP_INPUT,
+                fg="#FFFFFF" if is_selected else APP_TEXT,
+                activebackground=(
+                    WORKFLOW_ACCENT_HOVER if is_selected else APP_SOFT_ACCENT
+                ),
+                activeforeground="#FFFFFF" if is_selected else APP_TEXT,
+                relief="solid",
+                bd=1,
+                highlightthickness=1,
+                highlightbackground=(
+                    WORKFLOW_ACCENT if is_selected else APP_BORDER
+                ),
+                highlightcolor=WORKFLOW_ACCENT,
+                cursor="hand2",
+            )
 
     def toggle_login_mode(self) -> None:
         """Toggle HRIS credential fields based on login mode."""
@@ -1744,6 +1790,7 @@ class HRISUploadGUI:
         self.workflow_status_label.config(
             text="Selected Workflow : Head Office (HO)"
         )
+        self._refresh_workflow_selector()
         self.toggle_output_source()
         self.toggle_login_mode()
         self.update_status("Ready")

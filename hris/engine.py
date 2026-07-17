@@ -482,7 +482,7 @@ class HRISFullUploadEngine:
                 failed_count=batch_result.failed_count,
                 diagnostic_folder=diagnostic_folder,
                 diagnostic_zip_file=(
-                    diagnostic_folder.parent / "Diagnostic.zip"
+                    diagnostic_folder.with_suffix(".zip")
                     if diagnostic_folder is not None
                     else None
                 ),
@@ -533,7 +533,7 @@ class HRISFullUploadEngine:
                 failed_count=0,
                 diagnostic_folder=diagnostic_folder,
                 diagnostic_zip_file=(
-                    diagnostic_folder.parent / "Diagnostic.zip"
+                    diagnostic_folder.with_suffix(".zip")
                     if diagnostic_folder is not None
                     else None
                 ),
@@ -591,13 +591,11 @@ class HRISFullUploadEngine:
         from hris.assisted_verifier import HRISAssistedResultVerifier
         from hris.batch_uploader import HRISBatchUploader
         from hris.click_profile import HRISClickProfileManager
-        from shared.config_manager import HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
+        from shared.config_manager import resolve_hris_macro_steps
 
-        post_upload_steps = [
-            step
-            for step in configuration.assisted_steps
-            if step.step_name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
-        ]
+        post_upload_steps = resolve_hris_macro_steps(
+            configuration.assisted_steps
+        )
 
         profile_path = HRISClickProfileManager.resolve_profile_path(configuration)
         if not profile_path.exists():
@@ -673,6 +671,7 @@ class HRISFullUploadEngine:
             self._assisted_diagnostic_context[
                 "verification_message"
             ] = verification.message
+            self._record_assisted_verification(item, verification)
             if verification.submitted:
                 result.message = verification.message
                 return result
@@ -690,8 +689,19 @@ class HRISFullUploadEngine:
             upload_plan=upload_plan,
             start_date=self.start_date,
             end_date=self.end_date,
-            stop_on_first_failure=True,
+            stop_on_first_failure=self._to_bool(
+                configuration.upload.get("Stop_On_First_Failure", True)
+            ),
         )
+
+    @staticmethod
+    def _record_assisted_verification(
+        item: object,
+        verification: object,
+    ) -> None:
+        """Persist assisted verification fields used by summary and report."""
+        item.verification_status = verification.status
+        item.process_instance = verification.process_instance
 
     @staticmethod
     def _to_bool(value: object) -> bool:
