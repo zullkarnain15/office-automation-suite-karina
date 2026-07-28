@@ -70,6 +70,10 @@ class OutlookComClient:
         "http://schemas.microsoft.com/mapi/proptag/0x007D001E",
     )
     SMTP_COPY_HEADER = "X-OAS-K-Copy-ID"
+    PR_SMTP_ADDRESS_PROPERTIES = (
+        "http://schemas.microsoft.com/mapi/proptag/0x39FE001F",
+        "http://schemas.microsoft.com/mapi/proptag/0x39FE001E",
+    )
 
     def __init__(
         self,
@@ -88,8 +92,7 @@ class OutlookComClient:
         self.send_transport = send_transport.strip().upper() or "OUTLOOK"
         if self.send_transport not in {"OUTLOOK", "SMTP"}:
             raise ValueError(
-                "Send_Transport must be OUTLOOK or SMTP, got: "
-                f"{send_transport}"
+                f"Send_Transport must be OUTLOOK or SMTP, got: {send_transport}"
             )
         self.smtp_server = smtp_server.strip()
         self.smtp_port = int(smtp_port)
@@ -183,9 +186,7 @@ class OutlookComClient:
                 sender_name=str(getattr(item, "SenderName", "") or ""),
                 sender_email=sender_email,
                 cc=self._get_cc_emails(item),
-                received_time=self._safe_datetime(
-                    getattr(item, "ReceivedTime", None)
-                ),
+                received_time=self._safe_datetime(getattr(item, "ReceivedTime", None)),
                 attachments=[],
                 raw_item=item,
                 attachment_count=int(
@@ -201,6 +202,25 @@ class OutlookComClient:
             count += 1
 
         return messages
+
+    def validate_mailbox(self) -> tuple[str, str]:
+        """Resolve the configured mailbox/folder without reading messages."""
+        if self._namespace is None:
+            self.connect()
+        folder = self._get_source_folder()
+        folder_name = str(getattr(folder, "Name", "") or "")
+        if folder_name.strip().casefold() != self.source_folder.casefold():
+            raise RuntimeError(
+                f"Resolved folder is '{folder_name}', expected '{self.source_folder}'."
+            )
+        parent = getattr(folder, "Parent", None)
+        store = getattr(parent, "Store", None)
+        display = str(
+            getattr(store, "DisplayName", "")
+            or getattr(parent, "Name", "")
+            or self.mailbox_smtp
+        )
+        return display, folder_name
 
     def send_reply(
         self,
@@ -246,8 +266,7 @@ class OutlookComClient:
         account = self._find_account(self.reply_from_smtp)
         if account is None:
             raise RuntimeError(
-                "Reply account not found in Outlook profile: "
-                f"{self.reply_from_smtp}"
+                f"Reply account not found in Outlook profile: {self.reply_from_smtp}"
             )
         reply.SendUsingAccount = account
 
@@ -282,8 +301,7 @@ class OutlookComClient:
         account = self._find_account(self.reply_from_smtp)
         if account is None:
             raise RuntimeError(
-                "Reply account not found in Outlook profile: "
-                f"{self.reply_from_smtp}"
+                f"Reply account not found in Outlook profile: {self.reply_from_smtp}"
             )
         mail.SendUsingAccount = account
 
@@ -369,7 +387,10 @@ class OutlookComClient:
             )
 
         refused = (
-            {str(address).strip().lower(): detail for address, detail in refused_response.items()}
+            {
+                str(address).strip().lower(): detail
+                for address, detail in refused_response.items()
+            }
             if isinstance(refused_response, dict)
             else {}
         )
@@ -468,7 +489,9 @@ class OutlookComClient:
 
             if not wanted or time.monotonic() >= deadline:
                 break
-            time.sleep(min(max(0.05, poll_interval), max(0.0, deadline - time.monotonic())))
+            time.sleep(
+                min(max(0.05, poll_interval), max(0.0, deadline - time.monotonic()))
+            )
 
         for copy_id in wanted:
             result = self._smtp_copy_results[copy_id]
@@ -544,9 +567,7 @@ class OutlookComClient:
             )
         moved_item = item.Move(destination)
         try:
-            if moved_item is not None and bool(
-                getattr(moved_item, "UnRead", False)
-            ):
+            if moved_item is not None and bool(getattr(moved_item, "UnRead", False)):
                 moved_item.UnRead = False
                 moved_item.Save()
         except Exception:
@@ -579,9 +600,7 @@ class OutlookComClient:
         if match:
             return match.group(1).strip()
 
-        internet_message_id = str(
-            getattr(item, "InternetMessageID", "") or ""
-        )
+        internet_message_id = str(getattr(item, "InternetMessageID", "") or "")
         searchable = f"{headers}\n{internet_message_id}".lower()
         for copy_id in wanted or set(self._smtp_copy_results):
             if copy_id.lower() in searchable:
@@ -623,7 +642,9 @@ class OutlookComClient:
     def _split_addresses(value: str | None) -> list[str]:
         if not value:
             return []
-        return [item.strip() for item in value.replace(",", ";").split(";") if item.strip()]
+        return [
+            item.strip() for item in value.replace(",", ";").split(";") if item.strip()
+        ]
 
     def move_to_folder(self, message: OutlookMessage, folder_name: str) -> None:
         """Mark a processed message read, then move it to its source store."""
@@ -663,9 +684,7 @@ class OutlookComClient:
                 message.raw_item.Save()
             raise
 
-        if moved_item is not None and bool(
-            getattr(moved_item, "UnRead", False)
-        ):
+        if moved_item is not None and bool(getattr(moved_item, "UnRead", False)):
             moved_item.UnRead = False
             moved_item.Save()
         logger.info(
@@ -690,9 +709,7 @@ class OutlookComClient:
                 store = self._get_mailbox_store()
                 return store.GetDefaultFolder(self.OL_FOLDER_DELETED_ITEMS)
             except RuntimeError:
-                return self._get_shared_default_folder(
-                    self.OL_FOLDER_DELETED_ITEMS
-                )
+                return self._get_shared_default_folder(self.OL_FOLDER_DELETED_ITEMS)
 
         try:
             root = self._get_mailbox_store().GetRootFolder()
@@ -713,9 +730,7 @@ class OutlookComClient:
 
         for store in self._namespace.Stores:
             smtp = self._store_smtp(store)
-            display_name = str(getattr(store, "DisplayName", "") or "").lower()
-
-            if smtp == self.mailbox_smtp or self.mailbox_smtp in display_name:
+            if smtp == self.mailbox_smtp:
                 return store
 
         raise RuntimeError(
@@ -744,11 +759,39 @@ class OutlookComClient:
             ) from error
 
     def _store_smtp(self, store: Any) -> str:
+        candidates = [store]
         try:
-            account = store.GetDefaultFolder(self.OL_FOLDER_INBOX).Store
-            return str(getattr(account, "DisplayName", "") or "").lower()
+            candidates.append(store.GetRootFolder())
         except Exception:
-            return str(getattr(store, "DisplayName", "") or "").lower()
+            pass
+        for candidate in candidates:
+            accessor = getattr(candidate, "PropertyAccessor", None)
+            if accessor is None:
+                continue
+            for property_name in self.PR_SMTP_ADDRESS_PROPERTIES:
+                try:
+                    value = str(accessor.GetProperty(property_name) or "").strip()
+                except Exception:
+                    continue
+                if value:
+                    return value.casefold()
+
+        store_id = str(getattr(store, "StoreID", "") or "")
+        try:
+            for account in self._namespace.Accounts:
+                delivery_store = getattr(account, "DeliveryStore", None)
+                if (
+                    store_id
+                    and str(getattr(delivery_store, "StoreID", "") or "") == store_id
+                ):
+                    return (
+                        str(getattr(account, "SmtpAddress", "") or "")
+                        .strip()
+                        .casefold()
+                    )
+        except Exception:
+            logger.warning("Unable to inspect Outlook account delivery stores.")
+        return ""
 
     def _save_attachments(
         self,
@@ -831,9 +874,7 @@ class OutlookComClient:
         except Exception:
             pass
 
-        entry_address = str(
-            getattr(address_entry, "Address", "") or ""
-        ).strip()
+        entry_address = str(getattr(address_entry, "Address", "") or "").strip()
         if "@" in entry_address:
             return entry_address.lower()
 
@@ -875,10 +916,7 @@ class OutlookComClient:
     @staticmethod
     def _safe_attachment_name(value: str) -> str:
         return "".join(
-            character
-            if character not in '<>:"/\\|?*'
-            else "_"
-            for character in value
+            character if character not in '<>:"/\\|?*' else "_" for character in value
         )
 
     @staticmethod

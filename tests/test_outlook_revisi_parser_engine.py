@@ -88,7 +88,10 @@ def _configuration(path: Path, output_root: Path) -> None:
     workbook["Attachment_Rules"].append([])
     workbook["Attachment_Rules"].append([])
     workbook["Attachment_Rules"].append(["Active", "Workflow", "Allowed_Extensions"])
-    workbook["Attachment_Rules"].append(["Y", "HO", ".xlsx;.xls"])
+    # SQLite stores one extension per row; keep this fixture aligned with the
+    # runtime export used by Unified UI.
+    workbook["Attachment_Rules"].append(["Y", "HO", ".xls"])
+    workbook["Attachment_Rules"].append(["Y", "HO", ".xlsx"])
     workbook["Attachment_Rules"].append(["Y", "Branch", ".txt"])
 
     workbook["Validation_Rules"].append(["Title"])
@@ -175,6 +178,46 @@ class FakeClient:
 
     def move_to_folder(self, message, folder_name):
         self.moves.append((message, folder_name))
+
+
+def test_split_attachment_rules_accept_every_extension(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.xlsx"
+    _configuration(config_path, tmp_path / "output")
+    configuration = OutlookRevisiConfigurationReader(config_path).read()
+    legacy = tmp_path / "legacy.xls"
+    modern = tmp_path / "modern.xlsx"
+    legacy.touch()
+    modern.touch()
+    message = OutlookMessage(
+        entry_id="split-attachment-rules",
+        store_id="store",
+        subject="ATT_REV 06-2026",
+        sender_name="HO User",
+        sender_email="ho@example.com",
+        cc="cc@example.com",
+        received_time=None,
+        attachments=[
+            OutlookAttachment(legacy.name, legacy),
+            OutlookAttachment(modern.name, modern),
+        ],
+    )
+    engine = OutlookRevisiEngine(
+        config_path,
+        "HO",
+        dry_run=True,
+        client=FakeClient([]),
+    )
+    errors: list[str] = []
+
+    accepted = engine._valid_attachment_paths(
+        configuration,
+        "HO",
+        message,
+        errors,
+    )
+
+    assert accepted == [legacy, modern]
+    assert errors == []
 
 
 def test_parse_ho_excel_attachment(tmp_path: Path) -> None:

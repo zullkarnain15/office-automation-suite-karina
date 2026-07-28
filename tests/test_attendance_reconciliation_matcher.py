@@ -74,6 +74,47 @@ def test_machine_time_variants_are_source_conflict() -> None:
     assert len(result.conflicts) == 1
 
 
+def test_complete_machine_record_wins_over_empty_duplicate() -> None:
+    complete = machine("001", source="complete.xlsx")
+    empty_duplicate = machine(
+        "001",
+        machine_in=None,
+        machine_out=None,
+        anomaly=False,
+        source="empty.xlsx",
+    )
+    empty_duplicate.source_mdb = ""
+
+    result = detect_machine_duplicates([empty_duplicate, complete])
+    record = next(iter(result.unique.values()))
+
+    assert result.conflicts == {}
+    assert record.source_report == Path("complete.xlsx")
+    assert record.machine_in == time(8)
+    assert record.machine_out == time(17)
+    assert result.audits[0].duplicate_type == (
+        "MACHINE_INCOMPLETE_DUPLICATE_IGNORED"
+    )
+
+
+def test_complete_machine_record_still_compares_when_empty_duplicate_exists() -> None:
+    comparisons, conflicts = match_records(
+        detect_machine_duplicates(
+            [
+                machine("001", machine_in=None, machine_out=None, source="empty.xlsx"),
+                machine("001", source="complete.xlsx"),
+            ]
+        ),
+        detect_revision_duplicates([revision("001")]),
+    )
+
+    assert conflicts == []
+    assert len(comparisons) == 1
+    assert comparisons[0].status == "MACHINE_COMPLETE_REVISION_MATCH"
+    assert comparisons[0].machine is not None
+    assert comparisons[0].machine.source_report == Path("complete.xlsx")
+
+
 def test_exact_revision_duplicate_and_conflict() -> None:
     exact = detect_revision_duplicates([
         revision("001", source="one.xlsx"),

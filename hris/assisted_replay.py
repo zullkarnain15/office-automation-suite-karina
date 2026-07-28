@@ -37,6 +37,7 @@ class HRISAssistedReplayEngine:
         page: Any | None = None,
         manual_recovery_callback: Callable[[str], None] | None = None,
         automation: Any | None = None,
+        excluded_step_names: set[str] | None = None,
     ) -> None:
         self.configuration = configuration
         self.profile_manager = HRISClickProfileManager(profile)
@@ -46,6 +47,7 @@ class HRISAssistedReplayEngine:
             configuration.upload.get("Manual_Recovery_Enabled", True)
         )
         self.automation = automation or self._load_pyautogui()
+        self.excluded_step_names = excluded_step_names or set()
         self.last_context: dict[str, Any] = {}
 
     def run_item(
@@ -56,6 +58,8 @@ class HRISAssistedReplayEngine:
     ) -> HRISAssistedReplayResult:
         steps = resolve_hris_macro_steps(self.configuration.assisted_steps)
         for step in steps:
+            if step.step_name in self.excluded_step_names:
+                continue
             self.last_context = {
                 "current_step": step.step_name,
                 "action": step.action,

@@ -244,6 +244,9 @@ class HRISFullUploadEngine:
         hris_password: str | None = None,
         close_browser_on_error: bool = True,
         manual_verification_callback: Callable[[str], str] | None = None,
+        manual_upload_callback: Callable[[object], None] | None = None,
+        profile_path_override: str | Path | None = None,
+        move_failed_files: bool = True,
     ) -> None:
         self.configuration_file = Path(configuration_file)
         self.txt_folder = Path(txt_folder)
@@ -258,6 +261,11 @@ class HRISFullUploadEngine:
         self.hris_password = hris_password
         self.close_browser_on_error = close_browser_on_error
         self.manual_verification_callback = manual_verification_callback
+        self.manual_upload_callback = manual_upload_callback
+        self.profile_path_override = (
+            Path(profile_path_override) if profile_path_override else None
+        )
+        self.move_failed_files = move_failed_files
 
         self.config_reader = HRISConfigurationReader(
             self.configuration_file,
@@ -430,6 +438,7 @@ class HRISFullUploadEngine:
             move_results = file_manager.move_uploaded_files(
                 artifacts=artifacts,
                 plan_items=batch_result.results,
+                move_failed_files=self.move_failed_files,
             )
 
             self.artifact_writer.update_summary_after_file_move(
@@ -597,7 +606,9 @@ class HRISFullUploadEngine:
             configuration.assisted_steps
         )
 
-        profile_path = HRISClickProfileManager.resolve_profile_path(configuration)
+        profile_path = self.profile_path_override or (
+            HRISClickProfileManager.resolve_profile_path(configuration)
+        )
         if not profile_path.exists():
             raise FileNotFoundError(
                 f"HRIS click profile not found: {profile_path}. "
@@ -646,6 +657,7 @@ class HRISFullUploadEngine:
             profile=profile,
             page=page,
             manual_recovery_callback=self.manual_checkpoint_callback,
+            excluded_step_names={"upload"} if self.manual_upload_callback else None,
         )
         verifier = HRISAssistedResultVerifier(
             page=page,
@@ -684,6 +696,7 @@ class HRISFullUploadEngine:
             page=page,
             manual_checkpoint_callback=self.manual_checkpoint_callback,
             post_upload_recorder_callback=run_post_upload_recorder,
+            manual_upload_callback=self.manual_upload_callback,
         )
         return batch_uploader.upload_batch(
             upload_plan=upload_plan,

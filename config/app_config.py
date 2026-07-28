@@ -68,7 +68,7 @@ APP_ICON: Path = ICON_PATH / "app.ico"
 LOGO_ICON: Path = ICON_PATH / "logo.ico"
 
 ATTENDANCE_ICON: Path = ICON_PATH / "attendance.ico"
-OUTLOOK_ICON: Path = ICON_PATH / "outlook.ico"
+OUTLOOK_ICON: Path = ICON_PATH / "outlook_revisi.ico"
 HRIS_ICON: Path = ICON_PATH / "hris.ico"
 UTILITIES_ICON: Path = ICON_PATH / "utilities.ico"
 

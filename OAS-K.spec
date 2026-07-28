@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas = [
     ('assets', 'assets'),
@@ -15,6 +15,12 @@ datas = [
         'config/outlook/OAS-K_Outlook-Revisi_Configuration.xlsx',
         'config/outlook',
     ),
+    (
+        'config/templates/OAS-K_Configuration_Template.xlsx',
+        'config/templates',
+    ),
+    ('shared/database/schema', 'shared/database/schema'),
+    ('shared/database/migrations', 'shared/database/migrations'),
 ]
 binaries = []
 hiddenimports = [
@@ -29,6 +35,11 @@ hiddenimports = [
     'pywintypes',
     'win32timezone',
 ]
+hiddenimports += collect_submodules('ui')
+hiddenimports += collect_submodules('shared')
+hiddenimports += collect_submodules('attendance')
+hiddenimports += collect_submodules('outlook')
+hiddenimports += collect_submodules('utilities')
 tmp_ret = collect_all('playwright')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('pyautogui')

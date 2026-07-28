@@ -84,6 +84,7 @@ class AttachmentConsolidationEngine:
         scan: ConsolidationScan | None = None,
         cancel_event: Event | None = None,
         progress: ProgressCallback | None = None,
+        txt_max_lines: int | None = None,
     ) -> ConsolidationResult:
         self.scanner.validate_request(request)
         current_scan = scan or self.scan(request, cancel_event, progress)
@@ -92,13 +93,21 @@ class AttachmentConsolidationEngine:
         if not current_scan.processable_files:
             raise ValueError("Tidak ada file yang dapat diproses.")
 
-        configuration_file = resolve_outlook_configuration(
-            request.configuration_file
-        )
-        configuration = OutlookRevisiConfigurationReader(
-            configuration_file
-        ).read()
-        max_lines = self._max_lines(configuration.general.get("TXT_Max_Lines"))
+        if txt_max_lines is None:
+            configuration_file = resolve_outlook_configuration(
+                request.configuration_file
+            )
+            configuration = OutlookRevisiConfigurationReader(
+                configuration_file
+            ).read()
+            max_lines = self._max_lines(
+                configuration.general.get("TXT_Max_Lines")
+            )
+        else:
+            configuration_file = request.configuration_file or Path(
+                "OAS-K Database"
+            )
+            max_lines = self._max_lines(txt_max_lines)
 
         started_at = datetime.now()
         artifacts = self.job_manager.reserve(

@@ -47,8 +47,10 @@ class ReconciliationEngine:
         self,
         request: ReconciliationRequest,
         cancel_event: Event | None = None,
+        *,
+        read_only: bool = False,
     ) -> ReconciliationScan:
-        validate_request(request)
+        validate_request(request, create_output=not read_only)
         check_cancelled(cancel_event)
         attendance = self.attendance_reader.read_folder(
             request.attendance_path,

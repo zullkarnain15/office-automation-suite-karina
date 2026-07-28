@@ -479,10 +479,12 @@ class HRISUploadPageHandler:
         post_upload_recorder_callback: (
             Callable[[HRISUploadPlanItem, str, str], object] | None
         ) = None,
+        manual_upload_callback: Callable[[HRISUploadPlanItem], None] | None = None,
     ) -> None:
         self.page = page
         self.manual_checkpoint_callback = manual_checkpoint_callback
         self.post_upload_recorder_callback = post_upload_recorder_callback
+        self.manual_upload_callback = manual_upload_callback
         self._attachment_frame: Frame | None = None
         self._real_process_submitted = False
         self._upload_ok_confirmed = False
@@ -549,6 +551,8 @@ class HRISUploadPageHandler:
                     "terbuka, lalu klik OK untuk mencoba lanjut otomatis."
                 ),
             )
+            if self.manual_upload_callback is not None:
+                self.manual_upload_callback(plan_item)
             if self.post_upload_recorder_callback is not None:
                 self._wait_for_upload_macro_ready(timeout=10_000)
                 recorder_result = self.post_upload_recorder_callback(
@@ -573,7 +577,7 @@ class HRISUploadPageHandler:
                 completion_message = str(
                     getattr(recorder_result, "message", "") or completion_message
                 )
-            else:
+            elif self.manual_upload_callback is None:
                 self._run_step_with_manual_checkpoint(
                     "Klik Upload attachment",
                     self._click_upload,
@@ -584,6 +588,8 @@ class HRISUploadPageHandler:
                         "otomatis."
                     ),
                 )
+                self._run_playwright_post_upload_steps()
+            else:
                 self._run_playwright_post_upload_steps()
 
             if not self._verify_success():

@@ -4,3 +4,4 @@ pyinstaller
 pyautogui
 playwright
 pywin32
+Pillow

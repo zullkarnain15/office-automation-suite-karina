@@ -16,8 +16,8 @@ from __future__ import annotations
 from functools import partial
 import tkinter as tk
 from tkinter import messagebox
+from typing import Any
 
-from attendance.gui import AttendanceGUI
 from config.app_config import (
     APP_ICON,
     APP_VERSION,
@@ -39,11 +39,13 @@ from config.ui_config import (
     WINDOW_RESIZABLE,
     WINDOW_WIDTH,
 )
-from hris.gui import HRISUploadGUI
-from outlook.gui import OutlookRevisiGUI
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
+
+AttendanceGUI: Any = None
+HRISUploadGUI: Any = None
+OutlookRevisiGUI: Any = None
 
 APP_BACKGROUND = BACKGROUND_COLOR
 APP_PANEL = CARD_COLOR
@@ -63,6 +65,37 @@ APP_CARD_TITLE_FONT = ("Segoe UI", 12, "bold")
 # EVENT
 # =========================================================
 
+
+def _load_attendance_gui() -> Any:
+    global AttendanceGUI
+
+    if AttendanceGUI is None:
+        from attendance.gui import AttendanceGUI as attendance_gui
+
+        AttendanceGUI = attendance_gui
+    return AttendanceGUI
+
+
+def _load_hris_gui() -> Any:
+    global HRISUploadGUI
+
+    if HRISUploadGUI is None:
+        from hris.gui import HRISUploadGUI as hris_gui
+
+        HRISUploadGUI = hris_gui
+    return HRISUploadGUI
+
+
+def _load_outlook_gui() -> Any:
+    global OutlookRevisiGUI
+
+    if OutlookRevisiGUI is None:
+        from outlook.gui import OutlookRevisiGUI as outlook_gui
+
+        OutlookRevisiGUI = outlook_gui
+    return OutlookRevisiGUI
+
+
 def coming_soon(module_name: str) -> None:
     """Temporary event for unavailable modules."""
 
@@ -80,7 +113,7 @@ def open_hris_module(root: tk.Tk) -> None:
 
     hris_window = tk.Toplevel(root)
     hris_window.transient(root)
-    HRISUploadGUI(hris_window)
+    _load_hris_gui()(hris_window)
     hris_window.lift()
     hris_window.focus_force()
 
@@ -92,7 +125,7 @@ def open_attendance_module(root: tk.Tk) -> None:
 
     attendance_window = tk.Toplevel(root)
     attendance_window.transient(root)
-    AttendanceGUI(attendance_window)
+    _load_attendance_gui()(attendance_window)
     attendance_window.lift()
     attendance_window.focus_force()
 
@@ -104,7 +137,7 @@ def open_outlook_module(root: tk.Tk) -> None:
 
     outlook_window = tk.Toplevel(root)
     outlook_window.transient(root)
-    OutlookRevisiGUI(outlook_window)
+    _load_outlook_gui()(outlook_window)
     outlook_window.lift()
     outlook_window.focus_force()
 
@@ -134,7 +167,8 @@ def open_utilities_module(root: tk.Tk) -> None:
 # MAIN
 # =========================================================
 
-def main() -> None:
+def legacy_main() -> None:
+    """Start the previous multi-window launcher for rollback."""
 
     logger.info("Starting OAS-K")
 
@@ -207,7 +241,7 @@ def main() -> None:
 
     tk.Label(
         header,
-        text="Office Automation Suite - Karina",
+        text="Office Automation Suite - Karina by. ZSH",
         font=APP_TITLE_FONT,
         bg=APP_BACKGROUND,
         fg=PRIMARY_COLOR,
@@ -451,6 +485,20 @@ def main() -> None:
     logger.info("Launcher loaded successfully.")
 
     root.mainloop()
+
+
+def main() -> None:
+    """Start the current OAS-K Unified UI shell."""
+
+    from shared.database import StartupDatabaseMigrationError
+    from ui.app import create_app
+
+    try:
+        app = create_app()
+    except StartupDatabaseMigrationError:
+        logger.error("Application stopped because database migration failed.")
+        return
+    app.run()
 
 
 if __name__ == "__main__":

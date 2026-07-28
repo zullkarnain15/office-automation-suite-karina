@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from utilities.attendance_reconciliation.models import ReconciliationRequest
@@ -28,7 +29,11 @@ OUTLOOK_VALID_HEADERS = {
 }
 
 
-def validate_request(request: ReconciliationRequest) -> None:
+def validate_request(
+    request: ReconciliationRequest,
+    *,
+    create_output: bool = True,
+) -> None:
     if request.source_mode not in {SOURCE_MODE_SCAN, SOURCE_MODE_JOB}:
         raise ValueError("Source Mode is invalid.")
     if request.workflow not in {"HO", "Branch"}:
@@ -37,6 +42,15 @@ def validate_request(request: ReconciliationRequest) -> None:
         raise ValueError("Start Date must be on or before End Date.")
     _require_folder(request.attendance_path, "Attendance source")
     _require_folder(request.outlook_path, "Outlook-Revisi source")
+    if not create_output:
+        candidate = request.output_folder
+        while not candidate.exists() and candidate != candidate.parent:
+            candidate = candidate.parent
+        if not candidate.is_dir() or not os.access(candidate, os.W_OK):
+            raise ValueError(
+                f"Output Folder parent is not writable: {request.output_folder}"
+            )
+        return
     try:
         request.output_folder.mkdir(parents=True, exist_ok=True)
         probe = request.output_folder / ".oas_k_write_probe"

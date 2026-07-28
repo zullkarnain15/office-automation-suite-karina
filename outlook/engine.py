@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from outlook.downloader import OutlookComClient
 from outlook.downloader import OutlookMessage
@@ -113,6 +113,7 @@ class OutlookProcessResult:
     anomaly_row_count: int = 0
     reconciliation_status: str = "PASS"
     reconciliation_issues: list[str] = field(default_factory=list)
+    cancelled: bool = False
 
 
 class OutlookRevisiEngine:
@@ -125,12 +126,16 @@ class OutlookRevisiEngine:
         dry_run: bool = True,
         message_limit: int | None = None,
         client: OutlookComClient | None = None,
+        progress_callback: Callable[[str, str], None] | None = None,
+        cancellation_requested: Callable[[], bool] | None = None,
     ) -> None:
         self.configuration_file = Path(configuration_file)
         self.workflow = self._normalize_workflow(workflow)
         self.dry_run = dry_run
         self.message_limit = message_limit
         self.client = client
+        self.progress_callback = progress_callback
+        self.cancellation_requested = cancellation_requested
         self.parser = OutlookAttachmentParser()
         self.writer = OutlookTxtWriter()
         self.report_writer = OutlookProcessReportWriter()
@@ -138,9 +143,8 @@ class OutlookRevisiEngine:
     def run(self) -> OutlookProcessResult:
         """Run Outlook - Revisi processing."""
         start_time = datetime.now()
-        configuration = OutlookRevisiConfigurationReader(
-            self.configuration_file
-        ).read()
+        self._report("VALIDATING_CONFIGURATION", "Validating Configuration")
+        configuration = OutlookRevisiConfigurationReader(self.configuration_file).read()
         output_root = configuration.get_output_root()
 
         if output_root is None:
@@ -160,13 +164,9 @@ class OutlookRevisiEngine:
                 configuration.general.get("Reply_From_SMTP", "")
                 or configuration.general.get("Mailbox_SMTP", "")
             ),
-            send_transport=str(
-                configuration.general.get("Send_Transport", "OUTLOOK")
-            ),
+            send_transport=str(configuration.general.get("Send_Transport", "OUTLOOK")),
             smtp_server=str(configuration.general.get("SMTP_Server", "")),
-            smtp_port=self._to_int(
-                configuration.general.get("SMTP_Port"), default=25
-            ),
+            smtp_port=self._to_int(configuration.general.get("SMTP_Port"), default=25),
             smtp_timeout=self._to_int(
                 configuration.general.get("SMTP_Timeout_Seconds"), default=30
             ),
@@ -175,29 +175,44 @@ class OutlookRevisiEngine:
             ),
         )
 
-        previous_pending = self._load_pending_sent_copies(
-            output_root,
-            self.workflow,
-        )
-        previous_pending = self._recover_pending_sent_copies(
-            client,
-            previous_pending,
-        )
-
-        messages = client.fetch_messages(
-            attachment_folder=attachments_folder,
-            limit=self.message_limit,
-            message_filter=lambda message: bool(
-                self._detect_message_workflow(configuration, message)
-            ),
-            attachment_filter=lambda message: self._detect_message_workflow(
-                configuration, message
-            ) == self.workflow,
-        )
+        cancelled = self._is_cancel_requested()
+        previous_pending = {}
+        messages = []
+        if not cancelled:
+            previous_pending = self._load_pending_sent_copies(
+                output_root,
+                self.workflow,
+            )
+            previous_pending = self._recover_pending_sent_copies(
+                client,
+                previous_pending,
+            )
+            self._report("CONNECTING_OUTLOOK", "Connecting to Outlook")
+            self._report("RESOLVING_MAILBOX", "Resolving Mailbox and Inbox")
+            self._report("READING_INBOX", "Reading Inbox")
+            messages = client.fetch_messages(
+                attachment_folder=attachments_folder,
+                limit=self.message_limit,
+                message_filter=lambda message: bool(
+                    self._detect_message_workflow(configuration, message)
+                ),
+                attachment_filter=lambda message: (
+                    self._detect_message_workflow(configuration, message)
+                    == self.workflow
+                ),
+            )
         history = self._load_history(output_root, self.workflow)
         message_results: list[OutlookProcessMessageResult] = []
+        cancelled = cancelled or self._is_cancel_requested()
 
-        for message in messages:
+        for index, message in enumerate(messages, start=1):
+            if self._is_cancel_requested():
+                cancelled = True
+                break
+            self._report(
+                "FILTERING_MESSAGES",
+                f"Processing candidate email {index} of {len(messages)}",
+            )
             if self._message_key(message) in history:
                 logger.info("Skipping duplicate Outlook message: %s", message.entry_id)
                 continue
@@ -209,6 +224,10 @@ class OutlookRevisiEngine:
                 job_folder=job_folder,
             )
             message_results.append(result)
+
+            if self._is_cancel_requested():
+                cancelled = True
+                break
 
             if result.reply_sent and result.move_result == "MOVED":
                 history.add(self._message_key(message))
@@ -235,18 +254,13 @@ class OutlookRevisiEngine:
         success_count = sum(1 for item in message_results if item.status == "SUCCESS")
         failed_count = sum(1 for item in message_results if item.status == "FAILED")
         skipped_count = sum(
-            1 for item in message_results
-            if item.status == "SKIPPED_OTHER_WORKFLOW"
+            1 for item in message_results if item.status == "SKIPPED_OTHER_WORKFLOW"
         )
         output_txt_count = len(
-            {
-                path.resolve()
-                for item in message_results
-                for path in item.output_files
-            }
+            {path.resolve() for item in message_results for path in item.output_files}
         )
         result = OutlookProcessResult(
-            success=failed_count == 0,
+            success=failed_count == 0 and not cancelled,
             job_id=job_id,
             output_folder=job_folder,
             total_email=len(message_results),
@@ -263,30 +277,31 @@ class OutlookRevisiEngine:
             end_time=datetime.now(),
             report_folder=report_folder,
             report_file=(
-                report_folder
-                / f"Outlook_Process_Report_{self.workflow}_{job_id}.xlsx"
+                report_folder / f"Outlook_Process_Report_{self.workflow}_{job_id}.xlsx"
             ),
+            cancelled=cancelled,
         )
         result.valid_row_count = sum(
             len(item.valid_records) for item in message_results
         )
         result.anomaly_row_count = sum(
-            len(item.anomalies) + sum(
-                attachment.empty_row_dropped
-                for attachment in item.attachment_results
+            len(item.anomalies)
+            + sum(
+                attachment.empty_row_dropped for attachment in item.attachment_results
             )
             for item in message_results
         )
         result.final_status = (
-            "COMPLETED WITH WARNING"
+            "CANCELLED"
+            if cancelled
+            else "COMPLETED WITH WARNING"
             if failed_count or result.anomaly_row_count
             else "COMPLETED"
         )
+        self._report("GENERATING_OUTPUTS", "Generating Outputs")
         self._reconcile(result)
         self._write_artifacts(result)
-        logger.info(
-            "Outlook report generation started: %s", result.report_file
-        )
+        logger.info("Outlook report generation started: %s", result.report_file)
         try:
             result.report_file = self.report_writer.write(result, configuration)
             result.report_status = "CREATED"
@@ -294,9 +309,7 @@ class OutlookRevisiEngine:
         except Exception as error:
             result.report_status = "FAILED"
             result.final_status = "COMPLETED WITH WARNING"
-            result.reconciliation_issues.append(
-                f"Report generation failed: {error}"
-            )
+            result.reconciliation_issues.append(f"Report generation failed: {error}")
             logger.exception("Outlook report generation failed; TXT output retained.")
         self._write_artifacts(result)
         if result.report_status == "CREATED":
@@ -304,7 +317,10 @@ class OutlookRevisiEngine:
                 attachments_folder,
                 message_results,
             )
-        self._send_summary(configuration, client, result)
+        if not cancelled:
+            self._report("PREPARING_REPLIES", "Preparing Summary Email")
+            self._send_summary(configuration, client, result)
+        self._report("FINALIZING", "Finalizing")
         return result
 
     @staticmethod
@@ -335,16 +351,13 @@ class OutlookRevisiEngine:
                         )
                 except OSError as error:
                     logger.warning(
-                        "Successful-email attachment could not be removed: "
-                        "%s | %s",
+                        "Successful-email attachment could not be removed: %s | %s",
                         path,
                         error,
                     )
 
         try:
-            if attachments_folder.exists() and not any(
-                attachments_folder.iterdir()
-            ):
+            if attachments_folder.exists() and not any(attachments_folder.iterdir()):
                 attachments_folder.rmdir()
                 logger.info("Empty Attachments folder removed: %s", attachments_folder)
         except OSError as error:
@@ -366,11 +379,7 @@ class OutlookRevisiEngine:
         workflow_root = output_root / workflow_label / month_label
 
         for sequence in range(1, 1000):
-            job_id = (
-                base_job_id
-                if sequence == 1
-                else f"{base_job_id}_{sequence:02d}"
-            )
+            job_id = base_job_id if sequence == 1 else f"{base_job_id}_{sequence:02d}"
             job_folder = workflow_root / job_id
 
             try:
@@ -424,9 +433,7 @@ class OutlookRevisiEngine:
                 reply_result="NOT_REQUIRED",
                 move_result="NOT_MOVED",
                 processed_time=processed_time,
-                attachment_count=(
-                    message.attachment_count or len(message.attachments)
-                ),
+                attachment_count=(message.attachment_count or len(message.attachments)),
             )
 
         workflow = self.workflow
@@ -517,7 +524,8 @@ class OutlookRevisiEngine:
                 parse_issues.extend(parse_result.errors)
                 attachment_result = next(
                     (
-                        item for item in attachment_results
+                        item
+                        for item in attachment_results
                         if item.path.resolve() == attachment_path.resolve()
                     ),
                     None,
@@ -526,16 +534,12 @@ class OutlookRevisiEngine:
                     attachment_result.row_read = parse_result.row_read
                     attachment_result.row_valid = len(parse_result.records)
                     attachment_result.row_anomaly = len(parse_result.anomalies)
-                    attachment_result.empty_row_dropped = (
-                        parse_result.empty_row_dropped
-                    )
+                    attachment_result.empty_row_dropped = parse_result.empty_row_dropped
                     if parse_result.errors:
                         attachment_result.file_status = (
                             "WARNING" if parse_result.records else "FAILED"
                         )
-                        attachment_result.error_message = "\n".join(
-                            parse_result.errors
-                        )
+                        attachment_result.error_message = "\n".join(parse_result.errors)
 
             if records:
                 data_warnings.extend(parse_issues)
@@ -606,50 +610,41 @@ class OutlookRevisiEngine:
             sender_name=message.sender_name,
             actual_cc=message.cc,
             required_cc=sender.required_cc_email if sender else "",
-            expected_subject=self._expected_subject(
-                configuration, workflow, sender
-            ) if sender else "",
+            expected_subject=self._expected_subject(configuration, workflow, sender)
+            if sender
+            else "",
             detected_workflow=detected_workflow,
             validation_sender=validation_sender,
             validation_cc=validation_cc,
             validation_subject=validation_subject,
             validation_attachment=validation_attachment,
             validation_data=validation_data,
-            failure_code=(
-                failure_code
-                or ("DATA_ANOMALY" if data_warnings else "")
-            ),
-            reply_from=str(
-                configuration.general.get("Reply_From_SMTP", "")
-            ),
+            failure_code=(failure_code or ("DATA_ANOMALY" if data_warnings else "")),
+            reply_from=str(configuration.general.get("Reply_From_SMTP", "")),
             processed_time=processed_time,
             attachment_results=attachment_results,
             valid_records=records if output_files else [],
             anomalies=anomalies,
-            attachment_count=(
-                message.attachment_count or len(message.attachments)
-            ),
+            attachment_count=(message.attachment_count or len(message.attachments)),
         )
 
-        auto_reply = self._to_bool(
-            configuration.general.get("Auto_Reply_Enabled")
-        )
+        auto_reply = self._to_bool(configuration.general.get("Auto_Reply_Enabled"))
         send_mode = str(configuration.general.get("Send_Mode", "SEND")).upper()
+        if self._is_cancel_requested():
+            result.reply_result = "CANCELLED"
+            result.move_result = "NOT_MOVED"
+            return result
         try:
+            self._report("PREPARING_REPLIES", "Preparing Reply")
             result.reply_sent, sent_copy = self._send_message_reply(
                 configuration, client, message, result
             )
             if sent_copy is not None:
-                result.sent_copy_id = str(
-                    getattr(sent_copy, "copy_id", "") or ""
-                )
+                result.sent_copy_id = str(getattr(sent_copy, "copy_id", "") or "")
                 result.sent_copy_status = str(
-                    getattr(sent_copy, "status", "BCC_ACCEPTED")
-                    or "BCC_ACCEPTED"
+                    getattr(sent_copy, "status", "BCC_ACCEPTED") or "BCC_ACCEPTED"
                 )
-                result.sent_copy_detail = str(
-                    getattr(sent_copy, "detail", "") or ""
-                )
+                result.sent_copy_detail = str(getattr(sent_copy, "detail", "") or "")
             if not auto_reply:
                 result.reply_result = "NOT_REQUIRED"
             elif self.dry_run:
@@ -751,9 +746,7 @@ class OutlookRevisiEngine:
             ("Branch", configuration.branch_senders),
         ):
             if any(
-                self._subject_matches(
-                    configuration, workflow, message.subject, sender
-                )
+                self._subject_matches(configuration, workflow, message.subject, sender)
                 for sender in senders
             ):
                 return workflow
@@ -784,11 +777,7 @@ class OutlookRevisiEngine:
             return []
 
         actual = actual_cc.lower()
-        return [
-            email
-            for email in sorted(required)
-            if email not in actual
-        ]
+        return [email for email in sorted(required) if email not in actual]
 
     def _expected_subject(
         self,
@@ -797,10 +786,7 @@ class OutlookRevisiEngine:
         sender: OutlookSenderConfig,
     ) -> str:
         rule = next(
-            (
-                item for item in configuration.subject_rules
-                if item.workflow == workflow
-            ),
+            (item for item in configuration.subject_rules if item.workflow == workflow),
             None,
         )
         if rule is None:
@@ -834,9 +820,7 @@ class OutlookRevisiEngine:
         reply_sent = sum(
             1 for item in result.message_results if item.reply_result == "SENT"
         )
-        moved = sum(
-            1 for item in result.message_results if item.move_result == "MOVED"
-        )
+        moved = sum(1 for item in result.message_results if item.move_result == "MOVED")
         if reply_sent > result.success_email + result.failed_email:
             issues.append("Reply sent count exceeds processed target email count.")
         if moved > reply_sent:
@@ -866,9 +850,7 @@ class OutlookRevisiEngine:
         sender: OutlookSenderConfig,
     ) -> bool:
         rules = [
-            rule
-            for rule in configuration.subject_rules
-            if rule.workflow == workflow
+            rule for rule in configuration.subject_rules if rule.workflow == workflow
         ]
 
         if not rules:
@@ -900,21 +882,25 @@ class OutlookRevisiEngine:
         if not workflow:
             return []
 
-        rule = self._attachment_rule(configuration.attachment_rules, workflow)
-        if rule is None:
+        allowed_extensions = self._attachment_extensions(
+            configuration.attachment_rules,
+            workflow,
+        )
+        if not allowed_extensions:
             errors.append(f"Attachment rule not configured for workflow: {workflow}.")
             return []
 
+        allowed_extension_set = set(allowed_extensions)
         paths = [
             attachment.path
             for attachment in message.attachments
-            if attachment.path.suffix.lower() in rule.allowed_extensions
+            if attachment.path.suffix.casefold() in allowed_extension_set
         ]
 
         if not paths:
             errors.append(
                 "No allowed attachment found. Allowed: "
-                + "; ".join(rule.allowed_extensions)
+                + "; ".join(allowed_extensions)
             )
 
         return paths
@@ -1110,8 +1096,7 @@ class OutlookRevisiEngine:
                             "status": item.status,
                             "errors": item.errors,
                             "output_files": [
-                                str(output_file)
-                                for output_file in item.output_files
+                                str(output_file) for output_file in item.output_files
                             ],
                             "reply_sent": item.reply_sent,
                             "reply_result": item.reply_result,
@@ -1261,12 +1246,9 @@ class OutlookRevisiEngine:
                 copy_result = lookup(item.sent_copy_id)
             if copy_result is not None:
                 item.sent_copy_status = str(
-                    getattr(copy_result, "status", "COPY_PENDING")
-                    or "COPY_PENDING"
+                    getattr(copy_result, "status", "COPY_PENDING") or "COPY_PENDING"
                 )
-                item.sent_copy_detail = str(
-                    getattr(copy_result, "detail", "") or ""
-                )
+                item.sent_copy_detail = str(getattr(copy_result, "detail", "") or "")
 
             if item.sent_copy_status not in {"COPY_PENDING", "MOVE_FAILED"}:
                 continue
@@ -1292,8 +1274,7 @@ class OutlookRevisiEngine:
             entries = data.get("pending_copies", [])
             return {
                 str(item.get("copy_id", "")).strip(): {
-                    str(key): str(value or "")
-                    for key, value in item.items()
+                    str(key): str(value or "") for key, value in item.items()
                 }
                 for item in entries
                 if str(item.get("copy_id", "")).strip()
@@ -1312,12 +1293,7 @@ class OutlookRevisiEngine:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(
-                {
-                    "pending_copies": [
-                        pending[copy_id]
-                        for copy_id in sorted(pending)
-                    ]
-                },
+                {"pending_copies": [pending[copy_id] for copy_id in sorted(pending)]},
                 indent=2,
             ),
             encoding="utf-8",
@@ -1343,11 +1319,22 @@ class OutlookRevisiEngine:
         raise ValueError("workflow must be 'HO' or 'Branch'.")
 
     @staticmethod
-    def _attachment_rule(
+    def _attachment_extensions(
         rules: list[OutlookAttachmentRule],
         workflow: str,
-    ) -> OutlookAttachmentRule | None:
-        return next((rule for rule in rules if rule.workflow == workflow), None)
+    ) -> list[str]:
+        extensions: list[str] = []
+        seen: set[str] = set()
+        for rule in rules:
+            if rule.workflow != workflow:
+                continue
+            for value in rule.allowed_extensions:
+                extension = str(value or "").strip().casefold()
+                if not extension or extension in seen:
+                    continue
+                extensions.append(extension)
+                seen.add(extension)
+        return extensions
 
     @staticmethod
     def _subject_pattern_to_regex(
@@ -1386,3 +1373,12 @@ class OutlookRevisiEngine:
             return int(value)
         except (TypeError, ValueError):
             return default
+
+    def _report(self, stage: str, message: str) -> None:
+        if self.progress_callback is not None:
+            self.progress_callback(stage, message)
+
+    def _is_cancel_requested(self) -> bool:
+        return bool(
+            self.cancellation_requested is not None and self.cancellation_requested()
+        )
