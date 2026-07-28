@@ -70,11 +70,11 @@ def test_spacing_and_font_hierarchy_are_centralized() -> None:
 
 def test_ui8_visual_palette_is_centralized() -> None:
     expected = {
-        "OUTLINE": "#33664d",
+        "OUTLINE": "#222034",
         "ROYAL_BLUE": "#4D72B8",
         "SKY_BLUE": "#3A86C8",
         "SKY_BLUE_SOFT": "#E3F2FF",
-        "SKY_BLUE_BORDER": "#A7D4F5",
+        "SKY_BLUE_BORDER": "#4D72B8",
         "FOREST_GREEN": "#5E9C3A",
         "OLD_GOLD": "#D2A15A",
         "IVORY_WHITE": "#F7F1DD",
@@ -82,18 +82,21 @@ def test_ui8_visual_palette_is_centralized() -> None:
         "BACKGROUND": "#EAE7DA",
         "CONTENT_BACKGROUND": "#EAE7DA",
         "CARD_BACKGROUND": "#F7F1DD",
-        "TEXT_PRIMARY": "#33664d",
-        "BORDER": "#33664d",
-        "LOG_BACKGROUND": "#33664d",
+        "TEXT_PRIMARY": "#222034",
+        "BORDER": "#222034",
+        "LOG_BACKGROUND": "#222034",
         "LOG_TEXT": "#F7F1DD",
     }
     assert {name: getattr(constants, name) for name in expected} == expected
+    assert constants.SIDEBAR_WIDTH == 170
 
 
 def test_ui5b_styles_cover_actions_inputs_log_status_and_steps() -> None:
     source = (PROJECT_ROOT / "ui" / "style_manager.py").read_text(encoding="utf-8")
     for style in (
         "ModernCard.TFrame",
+        "RPGShadow.TFrame",
+        "RPGAccent.TFrame",
         "CardTitle.TLabel",
         "DashboardValue.TLabel",
         "ChoiceSegmentSelected.TLabel",
@@ -115,8 +118,26 @@ def test_ui5b_styles_cover_actions_inputs_log_status_and_steps() -> None:
         "StepActive.TLabel",
         "StepCompleted.TLabel",
         "StepPending.TLabel",
+        "Treeview.Heading",
     ):
         assert style in source
+    assert "background=IVORY_WHITE" in source
+    assert "background=ROYAL_BLUE" in source
+
+
+def test_ui8_refinement_does_not_add_image_asset_pipeline_to_theme() -> None:
+    checked = (
+        PROJECT_ROOT / "ui" / "style_manager.py",
+        PROJECT_ROOT / "ui" / "theme" / "palette.py",
+        PROJECT_ROOT / "ui" / "widgets" / "content_card.py",
+        PROJECT_ROOT / "ui" / "widgets" / "modern_card.py",
+        PROJECT_ROOT / "ui" / "widgets" / "metric_card.py",
+        PROJECT_ROOT / "ui" / "widgets" / "result_summary.py",
+    )
+    forbidden = ("PhotoImage", "ImageTk", "assets/icons", ".png", ".ico")
+    for path in checked:
+        source = path.read_text(encoding="utf-8")
+        assert not any(token in source for token in forbidden)
 
 
 def test_dashboard_metric_values_use_sky_blue_style() -> None:

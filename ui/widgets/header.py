@@ -13,12 +13,12 @@ class Header(ttk.Frame):
         super().__init__(
             parent,
             style="Header.TFrame",
-            padding=(24, 12),
+            padding=(20, 10, 20, 0),
         )
         self._title_icons = self._load_title_icons(icon_manager)
         self.columnconfigure(1, weight=1)
         self.actions = ttk.Frame(self, style="Header.TFrame")
-        self.actions.grid(row=0, column=2, rowspan=2, padx=(16, 20))
+        self.actions.grid(row=0, column=2, rowspan=2, padx=(14, 16))
         self.title_icon_label = ttk.Label(
             self,
             style="Header.TLabel",
@@ -37,10 +37,17 @@ class Header(ttk.Frame):
         self.subtitle_label.grid(row=1, column=1, sticky="w", pady=(3, 0))
         self.status_label = ttk.Label(
             self,
-            text="STATUS APLIKASI: Siap",
+            text="- STATUS APLIKASI: Siap -",
             style="HeaderStatus.TLabel",
         )
         self.status_label.grid(row=0, column=3, rowspan=2, sticky="e")
+        ttk.Frame(self, style="RPGAccent.TFrame", height=2).grid(
+            row=2,
+            column=0,
+            columnspan=4,
+            sticky="ew",
+            pady=(10, 0),
+        )
 
     def update_metadata(self, metadata: HeaderMetadata) -> None:
         self.title_label.configure(text=metadata.title)
@@ -58,7 +65,7 @@ class Header(ttk.Frame):
         else:
             self.title_icon_label.grid_remove()
         self.status_label.configure(
-            text=f"STATUS APLIKASI: {metadata.application_status}"
+            text=f"- STATUS APLIKASI: {metadata.application_status} -"
         )
 
     @staticmethod

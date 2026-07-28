@@ -314,10 +314,16 @@ class OutlookRevisiAdapter:
     def _normalize_result(self, request, result, started, log):
         cancelled = bool(getattr(result, "cancelled", False))
         outputs = self._outputs(result)
-        staging_warnings = 0
-        if bool(result.success) and not cancelled:
-            staging_warnings = self._stage_hris_txt(request, outputs, log)
         messages = list(getattr(result, "message_results", ()))
+        successful_email_count = int(getattr(result, "success_email", 0))
+        failed_email_count = int(getattr(result, "failed_email", 0))
+        operational_success = (
+            not cancelled
+            and (bool(result.success) or successful_email_count > 0)
+        )
+        staging_warnings = 0
+        if operational_success:
+            staging_warnings = self._stage_hris_txt(request, outputs, log)
         attachment_results = [
             attachment
             for message in messages
@@ -330,7 +336,7 @@ class OutlookRevisiAdapter:
         }
         warnings = len(getattr(result, "reconciliation_issues", ())) + int(
             getattr(result, "anomaly_row_count", 0)
-        ) + staging_warnings
+        ) + failed_email_count + staging_warnings
         if cancelled:
             warnings += 1
         error_summary = None
@@ -339,8 +345,8 @@ class OutlookRevisiAdapter:
                 "Pembatalan diterapkan pada safe checkpoint; partial output "
                 "dipertahankan."
             )
-        elif not result.success:
-            error_summary = f"{int(result.failed_email)} email gagal diproses."
+        elif failed_email_count:
+            error_summary = f"{failed_email_count} email gagal diproses."
         log(
             self._log(
                 "WARNING" if cancelled or warnings else "INFO",
@@ -353,7 +359,7 @@ class OutlookRevisiAdapter:
             Path(result.output_folder) / "Attachments"
         )
         return OutlookRevisiRunResult(
-            success=bool(result.success) and not cancelled,
+            success=operational_success,
             cancelled=cancelled,
             job_id=request.job_id,
             workflow=request.workflow,
@@ -374,10 +380,20 @@ class OutlookRevisiAdapter:
                     int(getattr(item, "attachment_count", 0)) for item in messages
                 ),
                 "accepted": sum(
-                    item.file_status == "ACCEPTED" for item in attachment_results
+                    item.file_status in {"ACCEPTED", "WARNING"}
+                    for item in attachment_results
                 ),
                 "rejected": sum(
-                    item.file_status != "ACCEPTED" for item in attachment_results
+                    item.file_status in {"REJECTED", "FAILED"}
+                    for item in attachment_results
+                ),
+                "ignored": sum(
+                    item.file_status == "IGNORED_UNSUPPORTED"
+                    for item in attachment_results
+                ),
+                "skipped": sum(
+                    item.file_status == "SKIPPED"
+                    for item in attachment_results
                 ),
             },
             reply_counts=reply_counts,

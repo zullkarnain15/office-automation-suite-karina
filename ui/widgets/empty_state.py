@@ -15,17 +15,21 @@ class EmptyState(ttk.Frame):
     ) -> None:
         super().__init__(
             parent,
-            style="ContentCard.TFrame",
-            padding=(28, 26),
+            style="RPGShadow.TFrame",
+            padding=(0, 0, 3, 3),
         )
         self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        panel = ttk.Frame(self, style="ContentCard.TFrame", padding=(28, 26))
+        panel.grid(row=0, column=0, sticky="nsew")
+        panel.columnconfigure(0, weight=1)
         ttk.Label(
-            self,
+            panel,
             text=title,
             style="CardTitle.TLabel",
-        ).grid(row=0, column=0, sticky="w")
+        ).grid(row=0, column=0, sticky="ew")
         ttk.Label(
-            self,
+            panel,
             text=message,
             style="EmptyState.TLabel",
             justify="left",

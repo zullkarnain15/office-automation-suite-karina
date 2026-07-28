@@ -267,6 +267,87 @@ def test_engine_receives_runtime_output_period_and_normalizes_files(
     assert events
 
 
+def test_partial_batch_is_warning_and_stages_successful_txt(
+    tmp_path: Path,
+) -> None:
+    config = workbook(tmp_path / "outlook.xlsx")
+    output = tmp_path / "manual-output"
+
+    class Engine:
+        def __init__(self, **_values):
+            pass
+
+        def run(self):
+            folder = output / "HO" / "job"
+            folder.mkdir(parents=True)
+            txt = folder / "attendance.txt"
+            report = folder / "report.xlsx"
+            process_log = folder / "Process.log"
+            summary = folder / "summary.json"
+            for item in (txt, report, process_log, summary):
+                item.touch()
+            successful = SimpleNamespace(
+                attachment_count=2,
+                attachment_results=[
+                    SimpleNamespace(file_status="WARNING"),
+                    SimpleNamespace(file_status="IGNORED_UNSUPPORTED"),
+                ],
+                reply_result="SENT",
+                output_files=[txt],
+            )
+            failed = SimpleNamespace(
+                attachment_count=1,
+                attachment_results=[SimpleNamespace(file_status="FAILED")],
+                reply_result="NOT_ATTEMPTED",
+                output_files=[],
+            )
+            return SimpleNamespace(
+                success=False,
+                cancelled=False,
+                output_folder=folder,
+                total_email=2,
+                target_email=2,
+                success_email=1,
+                failed_email=1,
+                skipped_other_workflow=0,
+                message_results=[successful, failed],
+                process_log=process_log,
+                summary_json=summary,
+                report_file=report,
+                anomaly_row_count=0,
+                reconciliation_issues=[],
+            )
+
+    result = OutlookRevisiAdapter(
+        engine_class=Engine,
+        client_factory=lambda configuration: ReadyClient(),
+    ).run(
+        resolved(config, output),
+        cancellation=OutlookRevisiCancellationToken(),
+        progress=lambda event: None,
+        log=lambda event: None,
+    )
+
+    assert result.success
+    assert result.warning_count == 1
+    assert result.error_summary == "1 email gagal diproses."
+    assert result.message_counts == {
+        "total": 2,
+        "target": 2,
+        "success": 1,
+        "failed": 1,
+        "skipped": 0,
+    }
+    assert result.attachment_counts == {
+        "total": 3,
+        "accepted": 1,
+        "rejected": 1,
+        "ignored": 1,
+        "skipped": 0,
+    }
+    assert (output / "HRIS" / "HO" / "attendance.txt").exists()
+
+
 def test_cancellation_before_connect_never_constructs_engine(tmp_path: Path) -> None:
     config = workbook(tmp_path / "outlook.xlsx")
     calls = []

@@ -317,6 +317,54 @@ def test_job_lifecycle_actual_values_and_existing_files(tmp_path: Path) -> None:
     assert not job["used_global_output"] and not job["used_global_period"]
 
 
+def test_partial_success_is_persisted_as_completed_with_warning(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "config.xlsx"
+    config.touch()
+    db = database(tmp_path)
+    service = OutlookRevisiService(Storage(tmp_path, db), Adapter())
+    resolved = service.resolve_request(request(config, tmp_path), require_database=True)
+    service.adapter.result = OutlookRevisiRunResult(
+        True,
+        False,
+        resolved.job_id,
+        "HO",
+        "karina.hr.1@oto.co.id",
+        "2026-07-01T00:00:00+00:00",
+        "2026-07-01T00:00:01+00:00",
+        tmp_path,
+        None,
+        {"total": 2, "success": 1, "failed": 1, "skipped": 0},
+        {"total": 2, "accepted": 1, "rejected": 0, "ignored": 1},
+        {"sent": 1, "drafted": 0, "failed": 0},
+        (),
+        warning_count=1,
+        error_summary="1 email gagal diproses.",
+    )
+
+    service.run_job(
+        resolved,
+        cancellation=OutlookRevisiCancellationToken(),
+        progress=lambda event: None,
+        log=lambda event: None,
+    )
+
+    with SQLiteConnectionFactory().connect(db, read_only=True) as connection:
+        job = connection.execute(
+            "SELECT unified_status, success_count, warning_count, failed_count, "
+            "error_message FROM job_history WHERE job_id=?",
+            (resolved.job_id,),
+        ).fetchone()
+    assert tuple(job) == (
+        "COMPLETED_WITH_WARNING",
+        1,
+        1,
+        1,
+        "1 email gagal diproses.",
+    )
+
+
 @pytest.mark.parametrize(
     "cancelled,success,expected",
     [(False, False, "FAILED"), (True, False, "CANCELLED")],

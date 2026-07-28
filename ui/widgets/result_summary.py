@@ -9,12 +9,16 @@ class ResultSummary(ttk.Frame):
     def __init__(self, parent, *, wraplength: int = 760) -> None:
         super().__init__(
             parent,
-            style="ContentCard.TFrame",
-            padding=(14, 12),
+            style="RPGShadow.TFrame",
+            padding=(0, 0, 3, 3),
         )
         self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        panel = ttk.Frame(self, style="ContentCard.TFrame", padding=(14, 12))
+        panel.grid(row=0, column=0, sticky="nsew")
+        panel.columnconfigure(0, weight=1)
         self.label = ttk.Label(
-            self,
+            panel,
             text="Belum ada hasil.",
             style="ResultSummary.TLabel",
             justify="left",

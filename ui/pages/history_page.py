@@ -6,7 +6,17 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
-from ui.constants import SPACE_LG, SPACE_MD, SPACE_SM
+from ui.constants import (
+    BORDER,
+    CARD_BACKGROUND,
+    CARD_BODY_FONT,
+    IVORY_WHITE,
+    ROYAL_BLUE,
+    SPACE_LG,
+    SPACE_MD,
+    SPACE_SM,
+    TEXT_PRIMARY,
+)
 from ui.pages.base_page import BasePage
 from ui.services.history_service import HistoryFilters
 from ui.widgets import DateEntry, EmptyState, PaginationBar, iso_to_display
@@ -272,7 +282,23 @@ class HistoryPage(BasePage):
         window.title("Job Detail")
         window.geometry("760x520")
         window.transient(self)
-        text = tk.Text(window, wrap="word", padx=SPACE_LG, pady=SPACE_LG)
+        text = tk.Text(
+            window,
+            wrap="word",
+            background=CARD_BACKGROUND,
+            foreground=TEXT_PRIMARY,
+            insertbackground=TEXT_PRIMARY,
+            selectbackground=ROYAL_BLUE,
+            selectforeground=IVORY_WHITE,
+            font=CARD_BODY_FONT,
+            relief="solid",
+            borderwidth=2,
+            highlightthickness=1,
+            highlightbackground=BORDER,
+            highlightcolor=BORDER,
+            padx=SPACE_LG,
+            pady=SPACE_LG,
+        )
         text.pack(fill="both", expand=True)
         values = detail.job
         lines = [

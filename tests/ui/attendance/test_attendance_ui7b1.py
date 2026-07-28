@@ -66,7 +66,7 @@ def test_normal_workflow_and_run_are_visible_at_minimum_size(tk_root, tmp_path) 
     for _ in range(10):
         tk_root.update()
     page = app.navigation._cache["attendance"]
-    assert app.sidebar.master.winfo_width() == 230
+    assert app.sidebar.master.winfo_width() == 170
     assert page.run_button.winfo_rooty() + page.run_button.winfo_height() <= (
         tk_root.winfo_rooty() + tk_root.winfo_height()
     )

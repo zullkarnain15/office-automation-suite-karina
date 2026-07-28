@@ -713,6 +713,8 @@ class OutlookRevisiPage(BasePage):
         status = (
             "CANCELLED"
             if result.cancelled
+            else "COMPLETED WITH WARNING"
+            if result.success and result.warning_count
             else "SUCCESS"
             if result.success
             else "FAILED"
@@ -728,6 +730,10 @@ class OutlookRevisiPage(BasePage):
                 f"{result.message_counts.get('success', 0)} / "
                 f"{result.message_counts.get('failed', 0)}",
                 f"Attachments: {result.attachment_counts.get('total', 0)}",
+                f"Accepted / ignored / rejected: "
+                f"{result.attachment_counts.get('accepted', 0)} / "
+                f"{result.attachment_counts.get('ignored', 0)} / "
+                f"{result.attachment_counts.get('rejected', 0)}",
                 f"Replies sent/drafted: {result.reply_counts.get('sent', 0)} / "
                 f"{result.reply_counts.get('drafted', 0)}",
                 f"Files: {len(result.output_files)}",
@@ -739,6 +745,8 @@ class OutlookRevisiPage(BasePage):
         self.validation_status_var.set(
             "Dibatalkan"
             if result.cancelled
+            else "Berhasil dengan peringatan"
+            if result.success and result.warning_count
             else "Berhasil"
             if result.success
             else "Gagal"

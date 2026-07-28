@@ -502,7 +502,12 @@ class OutlookRevisiEngine:
                 file_status=(
                     "ACCEPTED"
                     if attachment.path.resolve() in allowed_path_set
-                    else "REJECTED"
+                    else "IGNORED_UNSUPPORTED"
+                ),
+                error_message=(
+                    ""
+                    if attachment.path.resolve() in allowed_path_set
+                    else "Attachment extension is not configured for this workflow."
                 ),
             )
             for attachment in message.attachments

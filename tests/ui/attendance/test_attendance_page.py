@@ -85,11 +85,11 @@ def test_ui7b1_sidebar_and_primary_controls_are_compact() -> None:
         encoding="utf-8"
     )
     styles = (PROJECT_ROOT / "ui" / "style_manager.py").read_text(encoding="utf-8")
-    assert SIDEBAR_WIDTH == 230
+    assert SIDEBAR_WIDTH == 170
     assert "Office Automation Suite" not in sidebar
     assert BUTTON_FONT[1] == 8
-    assert "font=(ui_family, 10)" in styles
-    assert "padding=(9, 7)" in styles
+    assert "font=(ui_family, 8)" in styles
+    assert "padding=(6, 7)" in styles
 
 
 def test_ui7b1_normal_flow_has_no_primary_configuration_or_output_browse() -> None:

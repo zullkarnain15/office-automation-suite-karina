@@ -11,7 +11,7 @@ from ui.theme.typography import typography
 
 
 def test_ui8_palette_constants_are_centralized() -> None:
-    assert constants.OUTLINE == "#33664d"
+    assert constants.OUTLINE == "#222034"
     assert constants.ROYAL_BLUE == "#4D72B8"
     assert constants.FOREST_GREEN == "#5E9C3A"
     assert constants.OLD_GOLD == "#D2A15A"
@@ -20,6 +20,7 @@ def test_ui8_palette_constants_are_centralized() -> None:
     assert constants.ERROR == constants.DANGER_RED
     assert constants.ERROR not in {constants.OLD_GOLD, constants.FOREST_GREEN}
     assert constants.MAIN_BACKGROUND == palette.soft_background
+    assert constants.SIDEBAR_WIDTH == 170
 
 
 def test_ui8_font_files_exist_and_sizes_are_compact() -> None:
@@ -53,6 +54,9 @@ def test_font_loader_missing_fonts_fallback_without_registry_write(tmp_path: Pat
 def test_button_styles_define_required_retro_states() -> None:
     source = (PROJECT_ROOT / "ui" / "style_manager.py").read_text(encoding="utf-8")
     for style in (
+        '"TButton"',
+        '"Primary.TButton"',
+        '"Secondary.TButton"',
         "RetroPrimary.TButton",
         "RetroSecondary.TButton",
         "RetroDanger.TButton",
@@ -63,6 +67,7 @@ def test_button_styles_define_required_retro_states() -> None:
         assert state in source
     assert '"DangerAction.TButton"' in source
     assert "ERROR" in source
+    assert "#A9A9A9" not in source
 
 
 def test_icon_scaling_uses_nearest_neighbor_and_missing_is_safe(tmp_path: Path) -> None:

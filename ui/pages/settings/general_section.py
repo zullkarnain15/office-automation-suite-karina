@@ -5,6 +5,14 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from ui.constants import (
+    BORDER,
+    CARD_BACKGROUND,
+    CARD_BODY_FONT,
+    IVORY_WHITE,
+    ROYAL_BLUE,
+    TEXT_PRIMARY,
+)
 from ui.pages.settings.common import SettingsSection
 from ui.services.protocols import (
     GlobalSettingsDraft,
@@ -90,6 +98,19 @@ class GeneralSection(SettingsSection):
             self.outlook_frame,
             height=3,
             wrap="word",
+            background=CARD_BACKGROUND,
+            foreground=TEXT_PRIMARY,
+            insertbackground=TEXT_PRIMARY,
+            selectbackground=ROYAL_BLUE,
+            selectforeground=IVORY_WHITE,
+            font=CARD_BODY_FONT,
+            relief="solid",
+            borderwidth=2,
+            highlightthickness=1,
+            highlightbackground=BORDER,
+            highlightcolor=BORDER,
+            padx=8,
+            pady=6,
         )
         self.resubmit_deadline_text.grid(
             row=1,

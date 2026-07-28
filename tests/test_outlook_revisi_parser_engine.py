@@ -541,6 +541,79 @@ def test_engine_writes_split_txt_in_dry_run(tmp_path: Path) -> None:
     assert "entry-1" not in history.read_text(encoding="utf-8")
 
 
+def test_engine_ignores_unsupported_files_when_excel_is_valid(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.xlsx"
+    output_root = tmp_path / "output" / "Outlook-Revisi"
+    attachment = tmp_path / "attendance.xlsx"
+    _configuration(config_path, output_root)
+    _ho_attachment(attachment)
+    extra_paths = []
+    for file_name in ("photo.jpeg", "image.png", "document.pdf"):
+        path = tmp_path / file_name
+        path.write_bytes(b"unsupported attachment")
+        extra_paths.append(path)
+    message = OutlookMessage(
+        entry_id="mixed-attachments",
+        store_id="store",
+        subject="ATT_REV 06-2026",
+        sender_name="HO User",
+        sender_email="ho@example.com",
+        cc="cc@example.com",
+        received_time=None,
+        attachments=[
+            OutlookAttachment(attachment.name, attachment),
+            *[
+                OutlookAttachment(path.name, path)
+                for path in extra_paths
+            ],
+        ],
+    )
+
+    result = OutlookRevisiEngine(
+        configuration_file=config_path,
+        workflow="HO",
+        dry_run=True,
+        client=FakeClient([message]),
+    ).run()
+
+    assert result.success
+    assert result.success_email == 1
+    assert result.failed_email == 0
+    assert result.output_txt_count == 2
+    message_result = result.message_results[0]
+    assert message_result.status == "SUCCESS"
+    assert message_result.validation_attachment == "PASS"
+    assert message_result.validation_data == "PASS"
+    assert [
+        item.file_status for item in message_result.attachment_results
+    ] == [
+        "ACCEPTED",
+        "IGNORED_UNSUPPORTED",
+        "IGNORED_UNSUPPORTED",
+        "IGNORED_UNSUPPORTED",
+    ]
+    assert all(
+        item.error_message
+        for item in message_result.attachment_results[1:]
+    )
+    report = load_workbook(result.report_file, data_only=True)
+    assert [
+        row[6]
+        for row in report["Attachment_Result"].iter_rows(
+            min_row=2,
+            values_only=True,
+        )
+    ] == [
+        "ACCEPTED",
+        "IGNORED_UNSUPPORTED",
+        "IGNORED_UNSUPPORTED",
+        "IGNORED_UNSUPPORTED",
+    ]
+    report.close()
+
+
 def test_job_folder_reservation_uses_timestamp_and_safe_collision_suffix(
     tmp_path: Path,
     monkeypatch,

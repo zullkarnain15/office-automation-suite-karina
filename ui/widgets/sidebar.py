@@ -23,7 +23,7 @@ class Sidebar(ttk.Frame):
         super().__init__(
             parent,
             style="Sidebar.TFrame",
-            padding=(6, 12),
+            padding=(5, 10),
         )
         self.registry = registry
         self.icon_manager = icon_manager
@@ -35,7 +35,14 @@ class Sidebar(ttk.Frame):
         self.rowconfigure(9, weight=1)
 
         ttk.Label(self, text="OAS-K", style="SidebarBrand.TLabel").grid(
-            row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 10)
+            row=0, column=0, columnspan=2, sticky="w", padx=6, pady=(0, 6)
+        )
+        ttk.Frame(self, style="RPGAccent.TFrame", height=2).grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="sew",
+            padx=5,
         )
 
         for row, definition in enumerate(registry, start=1):
@@ -77,7 +84,7 @@ class Sidebar(ttk.Frame):
                 style="SidebarActive.TButton" if active else "Sidebar.TButton"
             )
             self._markers[item_id].configure(
-                text="|" if active else "",
+                text=">" if active else "",
                 foreground=OLD_GOLD,
             )
 
