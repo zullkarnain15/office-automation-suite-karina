@@ -8,6 +8,9 @@ from PIL import Image
 from config.app_config import PROJECT_ROOT
 from ui import constants
 from ui.icon_manager import IconManager
+from ui.models import HeaderMetadata
+from ui.widgets.header import Header
+from ui.widgets.compact_progress import CompactProgress
 
 
 REQUIRED = {
@@ -47,6 +50,97 @@ def test_icon_manager_prefers_png_and_missing_is_safe(tmp_path: Path) -> None:
         manager.widget_icon_path("dashboard.ico") == tmp_path / "png" / "dashboard.png"
     )
     assert manager.load("missing.ico") is None
+
+
+def test_icon_manager_loads_small_gif_animation_frames(tk_root, tmp_path: Path) -> None:
+    frame_one = Image.new("RGBA", (16, 16), "#3A86C8")
+    frame_two = Image.new("RGBA", (16, 16), "#F7F1DD")
+    path = tmp_path / "mob_icon2.gif"
+    frame_one.save(
+        path,
+        save_all=True,
+        append_images=[frame_two],
+        duration=120,
+        loop=0,
+    )
+
+    frames = IconManager(tmp_path, master=tk_root).load_animation(
+        "mob_icon2.gif", size=32
+    )
+
+    assert len(frames) == 2
+    assert frames[0].width() == 32
+    assert frames[0].height() == 32
+
+
+def test_header_uses_animated_icons_when_available(
+    tk_root, tmp_path: Path
+) -> None:
+    frame_one = Image.new("RGBA", (16, 16), "#3A86C8")
+    frame_two = Image.new("RGBA", (16, 16), "#F7F1DD")
+    for name in (
+        "mob_icon2.gif",
+        "jamur2.gif",
+        "blue_slime2.gif",
+        "green_slime2.gif",
+        "red_apple2.gif",
+    ):
+        frame_one.save(
+            tmp_path / name,
+            save_all=True,
+            append_images=[frame_two],
+            duration=120,
+            loop=0,
+        )
+    header = Header(tk_root, IconManager(tmp_path, master=tk_root))
+
+    header.update_metadata(HeaderMetadata("Dashboard", "Ringkasan"))
+    header._advance_animation()
+
+    assert len(header._animation_frames) == 2
+    assert header._animation_index == 1
+
+    header.update_metadata(HeaderMetadata("Attendance", "Module"))
+
+    assert len(header._animation_frames) == 2
+    assert header._animation_index == 0
+
+    header.update_metadata(HeaderMetadata("Outlook Revisi", "Module"))
+
+    assert len(header._animation_frames) == 2
+    assert header._animation_index == 0
+
+    header.update_metadata(HeaderMetadata("HRIS", "Module"))
+
+    assert len(header._animation_frames) == 2
+    assert header._animation_index == 0
+
+    header.update_metadata(HeaderMetadata("Utilities", "Module"))
+
+    assert len(header._animation_frames) == 2
+    assert header._animation_index == 0
+
+    header.update_metadata(HeaderMetadata("Unknown", "No icon"))
+
+    assert header._animation_frames == ()
+
+
+def test_header_subtitle_marquee_applies_to_all_modules(tk_root, tmp_path: Path) -> None:
+    header = Header(tk_root, IconManager(tmp_path, master=tk_root))
+
+    header.update_metadata(HeaderMetadata("Dashboard", "Ringkasan aktivitas"))
+    first_text = header.subtitle_label.cget("text")
+    header._advance_subtitle_marquee()
+
+    assert header._subtitle_job is not None
+    assert header.subtitle_label.cget("text") != first_text
+
+    header.update_metadata(HeaderMetadata("Attendance", "Validasi absensi"))
+    attendance_text = header.subtitle_label.cget("text")
+    header._advance_subtitle_marquee()
+
+    assert header._subtitle_job is not None
+    assert header.subtitle_label.cget("text") != attendance_text
 
 
 def test_corrupted_png_falls_back_without_crashing(tmp_path: Path) -> None:
@@ -99,6 +193,12 @@ def test_ui5b_styles_cover_actions_inputs_log_status_and_steps() -> None:
         "RPGAccent.TFrame",
         "CardTitle.TLabel",
         "DashboardValue.TLabel",
+        "DashboardValueBlink1.TLabel",
+        "DashboardValueBlink5.TLabel",
+        "WelcomeTitleShimmer1.TLabel",
+        "WelcomeTitleShimmer5.TLabel",
+        "WelcomeStartGlow1.TFrame",
+        "WelcomeStartGlow4.TFrame",
         "ChoiceSegmentSelected.TLabel",
         "OptionChipSelected.TLabel",
         "CompactSoft.TButton",
@@ -106,6 +206,12 @@ def test_ui5b_styles_cover_actions_inputs_log_status_and_steps() -> None:
         "AttendancePrimary.TButton",
         "AttendanceDanger.TButton",
         "CardBody.TLabel",
+        "ModuleDetail.TLabel",
+        "ModuleSuccess.TLabel",
+        "ModuleWarning.TLabel",
+        "ModuleError.TLabel",
+        "ModuleRunning.TLabel",
+        "ModuleNeutral.TLabel",
         "PrimaryAction.TButton",
         "SecondaryAction.TButton",
         "DangerAction.TButton",
@@ -113,6 +219,7 @@ def test_ui5b_styles_cover_actions_inputs_log_status_and_steps() -> None:
         "Readonly.TEntry",
         "LogPanel.TFrame",
         '"StatusReady"',
+        '"StatusRunning"',
         '"StatusWarning"',
         '"StatusError"',
         "StepActive.TLabel",
@@ -145,6 +252,19 @@ def test_dashboard_metric_values_use_sky_blue_style() -> None:
         encoding="utf-8"
     )
     assert 'value_style="DashboardValue.TLabel"' in source
+
+
+def test_compact_progress_uses_ready_and_running_status_styles(tk_root) -> None:
+    widget = CompactProgress(tk_root)
+    assert widget.label.cget("text") == "Status: Siap"
+    assert widget.label.cget("style") == "StatusReady.TLabel"
+
+    widget.start("Sedang berjalan")
+    assert widget.label.cget("style") == "StatusRunning.TLabel"
+
+    widget.stop()
+    assert widget.label.cget("text") == "Status: Siap"
+    assert widget.label.cget("style") == "StatusReady.TLabel"
 
 
 def test_attendance_uses_polished_choice_chips_for_primary_controls() -> None:

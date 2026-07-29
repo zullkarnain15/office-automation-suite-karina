@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import ast
 import logging
+from types import SimpleNamespace
 
 from config.app_config import APP_VERSION, PROJECT_ROOT
 from shared.storage.registry import FakeRegistryBackend, StorageRegistryService
 from ui.app import OASKUnifiedApp
 from ui.context import AppContext
+from ui.pages.hris_page import HRISPage
 from ui.services.service_container import build_default_app_services
 
 
@@ -77,3 +79,38 @@ def test_opening_hris_page_has_zero_side_effects(tk_root, tmp_path) -> None:
     assert page.fallback_var.get() is False
     assert page.can_navigate_away()
     assert app.close()
+
+
+def test_hris_status_visual_styles_keep_intervention_neutral(
+    tk_root, tmp_path
+) -> None:
+    services = SimpleNamespace(
+        hris_service=SimpleNamespace(),
+        task_runner=SimpleNamespace(),
+        dialog_service=SimpleNamespace(),
+        file_system_service=SimpleNamespace(open_folder=lambda path: False),
+    )
+    context = AppContext(
+        project_root=tmp_path,
+        assets_path=PROJECT_ROOT / "assets",
+        application_version=APP_VERSION,
+        logger=logging.getLogger("ui6-hris-visual-status"),
+        app_services=services,
+    )
+    page = HRISPage(tk_root, context)
+
+    page._set_profile_status("Kalibrasi berjalan...")
+    assert page.profile_status_label.cget("style") == "StatusRunning.TLabel"
+
+    page._set_profile_status("READY")
+    assert page.profile_status_label.cget("style") == "StatusReady.TLabel"
+
+    page._set_profile_status("Kalibrasi gagal.")
+    assert page.profile_status_label.cget("style") == "StatusError.TLabel"
+
+    page._set_profile_status("Profile tidak tersedia.")
+    assert page.profile_status_label.cget("style") == "StatusWarning.TLabel"
+
+    page._set_intervention_status("Menunggu login manual HRIS.")
+    assert page.intervention_status_var.get() == "Menunggu login manual HRIS."
+    assert page.intervention_status_label.cget("style") == "CompactStatus.TLabel"

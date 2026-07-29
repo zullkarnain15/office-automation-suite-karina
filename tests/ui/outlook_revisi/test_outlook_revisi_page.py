@@ -159,6 +159,7 @@ class _Service:
             "SEND" if self.live else "PREVIEW",
             True,
             False,
+            ("pic@example.com", "spv@example.com", "ho@example.com"),
             requires_confirmation=self.live,
         )
         value = OutlookRevisiValidationResult(
@@ -183,6 +184,7 @@ class _Service:
             attachment_rule_count=1,
             validation_rule_count=1,
             reply_template_count=1,
+            summary_recipient_count=2,
             template_previews=(("SUCCESS", "Re", "Line 1\nLine 2"),),
         )
         return resolved, value
@@ -261,6 +263,54 @@ def test_preview_confirmation_precedes_job_and_streams_result(
     assert not page._busy and not page._running and page.can_navigate_away()
     assert "Fixture log" in page.log_text.get("1.0", "end")
     assert page._last_result.success
+
+
+def test_validation_summary_shows_recipient_counts_not_addresses(
+    tk_root, tmp_path: Path
+) -> None:
+    page, service, *_ = _interactive_page(tk_root, tmp_path)
+
+    page.validate_configuration()
+
+    text = page.validation_summary.label.cget("text")
+    assert service.preflight_calls == [(False, False)]
+    assert "Outbound Scope: 3 configured address(es)" in text
+    assert "Summary Recipients / Sender Master: 2 / 1" in text
+    assert "pic@example.com" not in text
+    assert "spv@example.com" not in text
+    assert "ho@example.com" not in text
+
+
+def test_outlook_validation_status_uses_visual_state_styles(
+    tk_root, tmp_path: Path
+) -> None:
+    page, *_ = _interactive_page(tk_root, tmp_path)
+
+    page.validate_configuration()
+    assert page.validation_status_var.get() == "Siap"
+    assert page.validation_status_label.cget("style") == "StatusReady.TLabel"
+
+    page._show_result(
+        OutlookRevisiRunResult(
+            True,
+            False,
+            "UI-OUTLOOK-WARNING",
+            "HO",
+            "karina.hr.1@oto.co.id",
+            "2026-07-01T00:00:00+00:00",
+            "2026-07-01T00:00:01+00:00",
+            tmp_path / "output",
+            None,
+            {"total": 4, "success": 4, "failed": 0},
+            {"total": 4, "accepted": 4, "ignored": 0, "rejected": 0},
+            {"sent": 0, "drafted": 0},
+            (),
+            warning_count=1,
+        )
+    )
+
+    assert page.validation_status_var.get() == "Berhasil dengan peringatan"
+    assert page.validation_status_label.cget("style") == "StatusWarning.TLabel"
 
 
 def test_live_send_requires_checkbox_typed_send_and_second_confirmation(

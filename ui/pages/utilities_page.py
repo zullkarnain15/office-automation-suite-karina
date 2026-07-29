@@ -255,9 +255,12 @@ class UtilitiesPage(BasePage):
         ttk.Label(row, text="Validasi:", style="CompactText.TLabel").grid(
             row=0, column=0, sticky="w"
         )
-        ttk.Label(
-            row, textvariable=self.validation_status_var, style="CompactStatus.TLabel"
-        ).grid(row=0, column=0, sticky="w", padx=(58, 0))
+        self.validation_status_label = ttk.Label(
+            row,
+            textvariable=self.validation_status_var,
+            style="StatusInfo.TLabel",
+        )
+        self.validation_status_label.grid(row=0, column=0, sticky="w", padx=(58, 0))
         self.validation_summary = ResultSummary(row, wraplength=700)
         self.validation_summary.grid(row=1, column=0, columnspan=2, sticky="ew")
         self.validation_summary.grid_remove()
@@ -508,7 +511,7 @@ class UtilitiesPage(BasePage):
         except (ValueError, TypeError) as exc:
             self.validation_summary.show_lines([str(exc)])
             self.validation_summary.grid()
-            self.validation_status_var.set("Perlu perhatian")
+            self._set_validation_status("Perlu perhatian", "StatusWarning.TLabel")
             return
         token = (
             ComparisonCancellationToken()
@@ -528,7 +531,7 @@ class UtilitiesPage(BasePage):
         if not task.success:
             self.validation_summary.show_lines([task.error or "Validation failed"])
             self.validation_summary.grid()
-            self.validation_status_var.set("Perlu perhatian")
+            self._set_validation_status("Perlu perhatian", "StatusWarning.TLabel")
             return
         resolved, validation = task.value
         self._resolved, self._validation = resolved, validation
@@ -550,7 +553,9 @@ class UtilitiesPage(BasePage):
         lines.extend(validation.errors)
         self.validation_summary.show_lines(lines)
         self.validation_summary.grid()
-        self.validation_status_var.set("Siap" if validation.valid else "Perlu perhatian")
+        self._set_validation_status(
+            "Siap" if validation.valid else "Perlu perhatian"
+        )
         if (
             run_after
             and validation.valid
@@ -571,6 +576,7 @@ class UtilitiesPage(BasePage):
         self._running = True
         self.cancel_button.configure(state="normal")
         self.cancel_button.pack(side="left", padx=(8, 0))
+        self._set_validation_status("Sedang berjalan", "StatusRunning.TLabel")
         self._set_busy(True, "Job running...")
 
         def work(report):
@@ -599,7 +605,7 @@ class UtilitiesPage(BasePage):
         self.result_panel.grid()
         if not task.success:
             self.result_summary.show_lines(["FAILED", task.error or "Unexpected error"])
-            self.validation_status_var.set("Gagal")
+            self._set_validation_status("Gagal", "StatusError.TLabel")
             return
         self._last_result = task.value
         value = task.value
@@ -642,9 +648,34 @@ class UtilitiesPage(BasePage):
         if value.error_summary:
             lines.append(value.error_summary)
         self.result_summary.show_lines(lines)
-        self.validation_status_var.set(
-            "Dibatalkan" if value.cancelled else "Berhasil" if value.success else "Gagal"
+        status_text, status_style = (
+            ("Dibatalkan", "StatusInfo.TLabel")
+            if value.cancelled
+            else ("Berhasil dengan peringatan", "StatusWarning.TLabel")
+            if value.success and value.warning_count
+            else ("Berhasil", "StatusReady.TLabel")
+            if value.success
+            else ("Gagal", "StatusError.TLabel")
         )
+        self._set_validation_status(status_text, status_style)
+
+    def _set_validation_status(self, text: str, style: str | None = None) -> None:
+        if style is None:
+            normalized = text.casefold()
+            if normalized.startswith("siap") or normalized.startswith("berhasil"):
+                style = "StatusReady.TLabel"
+            elif normalized.startswith("gagal"):
+                style = "StatusError.TLabel"
+            elif normalized.startswith("perlu perhatian"):
+                style = "StatusWarning.TLabel"
+            elif normalized.startswith("sedang berjalan"):
+                style = "StatusRunning.TLabel"
+            elif normalized.startswith(("dibatalkan", "belum diperiksa")):
+                style = "StatusInfo.TLabel"
+            else:
+                style = "CompactStatus.TLabel"
+        self.validation_status_var.set(text)
+        self.validation_status_label.configure(style=style)
 
     def _stream_event(self, event) -> None:
         if isinstance(

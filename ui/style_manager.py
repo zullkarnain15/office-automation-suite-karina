@@ -305,9 +305,22 @@ class StyleManager:
         style.configure(
             "WelcomeTitle.TLabel",
             background=MAIN_BACKGROUND,
-            foreground=FOREST_GREEN,
-            font=(display_family, 13),
+            foreground=TEXT_PRIMARY,
+            font=(display_family, 13, "bold"),
         )
+        for name, foreground in (
+            ("WelcomeTitleShimmer1.TLabel", "#3B394A"),
+            ("WelcomeTitleShimmer2.TLabel", OLD_GOLD),
+            ("WelcomeTitleShimmer3.TLabel", FOREST_GREEN),
+            ("WelcomeTitleShimmer4.TLabel", OLD_GOLD),
+            ("WelcomeTitleShimmer5.TLabel", TEXT_PRIMARY),
+        ):
+            style.configure(
+                name,
+                background=MAIN_BACKGROUND,
+                foreground=foreground,
+                font=(display_family, 13, "bold"),
+            )
         style.configure(
             "WelcomeByline.TLabel",
             background=MAIN_BACKGROUND,
@@ -337,6 +350,13 @@ class StyleManager:
                 ("disabled", MAIN_BACKGROUND),
             ],
         )
+        for name, border in (
+            ("WelcomeStartGlow1.TFrame", OLD_GOLD),
+            ("WelcomeStartGlow2.TFrame", "#FF5AA5"),
+            ("WelcomeStartGlow3.TFrame", "#FFE45E"),
+            ("WelcomeStartGlow4.TFrame", "#FF5AA5"),
+        ):
+            style.configure(name, background=border)
         style.configure(
             "HeaderStatus.TLabel",
             background=FOREST_GREEN,
@@ -372,6 +392,19 @@ class StyleManager:
             foreground=SKY_BLUE,
             font=card_value_font,
         )
+        for name, foreground in (
+            ("DashboardValueBlink1.TLabel", "#5BA4E5"),
+            ("DashboardValueBlink2.TLabel", "#BDE4FF"),
+            ("DashboardValueBlink3.TLabel", "#F7F1DD"),
+            ("DashboardValueBlink4.TLabel", "#BDE4FF"),
+            ("DashboardValueBlink5.TLabel", "#5BA4E5"),
+        ):
+            style.configure(
+                name,
+                background=CARD_BACKGROUND,
+                foreground=foreground,
+                font=card_value_font,
+            )
         style.configure("ChoiceGroup.TFrame", background=CARD_BACKGROUND)
         style.configure(
             "ChoiceSegment.TLabel",
@@ -433,6 +466,42 @@ class StyleManager:
             "CardStatus.TLabel",
             background=CARD_BACKGROUND,
             foreground=MAIN_HEADER,
+            font=button_font,
+        )
+        style.configure(
+            "ModuleDetail.TLabel",
+            background=CARD_BACKGROUND,
+            foreground=TEXT_SECONDARY,
+            font=button_font,
+        )
+        style.configure(
+            "ModuleSuccess.TLabel",
+            background=CARD_BACKGROUND,
+            foreground=SUCCESS,
+            font=button_font,
+        )
+        style.configure(
+            "ModuleWarning.TLabel",
+            background=CARD_BACKGROUND,
+            foreground=WARNING,
+            font=button_font,
+        )
+        style.configure(
+            "ModuleError.TLabel",
+            background=CARD_BACKGROUND,
+            foreground=ERROR,
+            font=button_font,
+        )
+        style.configure(
+            "ModuleRunning.TLabel",
+            background=CARD_BACKGROUND,
+            foreground=SKY_BLUE,
+            font=button_font,
+        )
+        style.configure(
+            "ModuleNeutral.TLabel",
+            background=CARD_BACKGROUND,
+            foreground=TEXT_SECONDARY,
             font=button_font,
         )
         style.configure(
@@ -751,6 +820,7 @@ class StyleManager:
         )
         for name, background in (
             ("StatusReady", SUCCESS),
+            ("StatusRunning", SKY_BLUE),
             ("StatusWarning", WARNING),
             ("StatusError", ERROR),
             ("StatusInfo", INFO),

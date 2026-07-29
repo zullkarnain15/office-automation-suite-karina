@@ -273,6 +273,58 @@ def test_success_restores_busy_navigation_and_streams_result(
     assert page._last_result.success
 
 
+def test_attendance_validation_status_uses_visual_state_styles(
+    tk_root, tmp_path: Path
+) -> None:
+    page, *_ = _interactive_page(tk_root, tmp_path, confirm=True)
+
+    page.validate()
+    assert page.validation_status_var.get().startswith("Siap")
+    assert page.validation_status.cget("style") == "StatusReady.TLabel"
+
+    page._set_validation_status("Sedang berjalan")
+    assert page.validation_status_var.get() == "Sedang berjalan"
+    assert page.validation_status.cget("style") == "StatusRunning.TLabel"
+
+    page._show_validation_error("fixture validation warning")
+    assert page.validation_status_var.get() == "Perlu perhatian"
+    assert page.validation_status.cget("style") == "StatusWarning.TLabel"
+
+    page._show_result(
+        AttendanceRunResult(
+            False,
+            False,
+            "UI-FIXTURE-FAILED",
+            "HO",
+            "2026-07-01T00:00:00+00:00",
+            "2026-07-01T00:00:01+00:00",
+            tmp_path / "output",
+            None,
+            (),
+            {"valid": 0, "anomaly": 1},
+        )
+    )
+    assert page.validation_status_var.get() == "Gagal"
+    assert page.validation_status.cget("style") == "StatusError.TLabel"
+
+    page._show_result(
+        AttendanceRunResult(
+            False,
+            True,
+            "UI-FIXTURE-CANCELLED",
+            "HO",
+            "2026-07-01T00:00:00+00:00",
+            "2026-07-01T00:00:01+00:00",
+            tmp_path / "output",
+            None,
+            (),
+            {"valid": 0, "anomaly": 0},
+        )
+    )
+    assert page.validation_status_var.get() == "Dibatalkan"
+    assert page.validation_status.cget("style") == "StatusInfo.TLabel"
+
+
 def test_failed_background_task_restores_busy_state(tk_root, tmp_path: Path) -> None:
     page, attendance, _ = _interactive_page(tk_root, tmp_path, confirm=True)
 

@@ -267,6 +267,66 @@ def test_engine_receives_runtime_output_period_and_normalizes_files(
     assert events
 
 
+def test_outlook_module_root_stages_hris_txt_to_shared_output_root(
+    tmp_path: Path,
+) -> None:
+    config = workbook(tmp_path / "outlook.xlsx")
+    shared_output = tmp_path / "output"
+    output = shared_output / "Outlook-Revisi"
+
+    class Engine:
+        def __init__(self, **_values):
+            pass
+
+        def run(self):
+            folder = output / "HO" / "job"
+            attachments = folder / "Attachments"
+            attachments.mkdir(parents=True)
+            txt = folder / "attendance.txt"
+            txt.write_text('"001","07/01/2026","08:00","","",""\n', encoding="utf-8")
+            report = folder / "report.xlsx"
+            process_log = folder / "Process.log"
+            summary = folder / "summary.json"
+            for item in (report, process_log, summary):
+                item.touch()
+            message = SimpleNamespace(
+                attachment_count=1,
+                attachment_results=[SimpleNamespace(file_status="ACCEPTED")],
+                reply_result="NOT_ATTEMPTED",
+                output_files=[txt],
+            )
+            return SimpleNamespace(
+                success=True,
+                cancelled=False,
+                output_folder=folder,
+                total_email=1,
+                target_email=1,
+                success_email=1,
+                failed_email=0,
+                skipped_other_workflow=0,
+                message_results=[message],
+                process_log=process_log,
+                summary_json=summary,
+                report_file=report,
+                anomaly_row_count=0,
+                reconciliation_issues=[],
+            )
+
+    result = OutlookRevisiAdapter(
+        engine_class=Engine,
+        client_factory=lambda configuration: ReadyClient(),
+    ).run(
+        resolved(config, output),
+        cancellation=OutlookRevisiCancellationToken(),
+        progress=lambda event: None,
+        log=lambda event: None,
+    )
+
+    assert result.success
+    assert (shared_output / "HRIS" / "HO" / "attendance.txt").exists()
+    assert not (output / "HRIS").exists()
+
+
 def test_partial_batch_is_warning_and_stages_successful_txt(
     tmp_path: Path,
 ) -> None:

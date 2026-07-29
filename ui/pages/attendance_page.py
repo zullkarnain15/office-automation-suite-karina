@@ -222,7 +222,7 @@ class AttendancePage(BasePage):
         self.validation_status = ttk.Label(
             status,
             textvariable=self.validation_status_var,
-            style="CompactStatus.TLabel",
+            style="StatusInfo.TLabel",
         )
         self.validation_status.pack(side="left", padx=(5, 0))
         self.validation_detail_button = ttk.Button(
@@ -446,7 +446,7 @@ class AttendancePage(BasePage):
                 return
             self._set_busy(False)
             if not result.success:
-                self.validation_status_var.set("Perlu perhatian")
+                self._set_validation_status("Perlu perhatian", "StatusWarning.TLabel")
                 self._validation_lines = (result.error or "Defaults unavailable",)
                 self.validation_summary.show_lines(self._validation_lines)
                 return
@@ -470,7 +470,9 @@ class AttendancePage(BasePage):
             )
             if not value.database_available:
                 self.global_period_check.configure(state="disabled")
-                self.validation_status_var.set("Belum dikonfigurasi")
+                self._set_validation_status(
+                    "Belum dikonfigurasi", "StatusWarning.TLabel"
+                )
                 self._validation_lines = (value.warning,)
                 self.validation_summary.show_lines(self._validation_lines)
                 self.active_config_var.set(
@@ -486,7 +488,7 @@ class AttendancePage(BasePage):
                     + (f" • {fields}" if fields else "")
                     + f" • Diperbarui: {summary.last_updated or '-'}"
                 )
-                self.validation_status_var.set("Siap")
+                self._set_validation_status("Siap", "StatusReady.TLabel")
             self._toggle_output_override()
             self._apply_global_state()
 
@@ -644,7 +646,7 @@ class AttendancePage(BasePage):
         self._resolved = resolved
         self._cancellation = AttendanceCancellationToken()
         self._running = True
-        self.validation_status_var.set("Sedang berjalan")
+        self._set_validation_status("Sedang berjalan", "StatusRunning.TLabel")
         self._set_busy(True, "Attendance sedang berjalan...")
         self.cancel_button.configure(state="normal")
         self.cancel_button.pack(side="left", padx=(8, 0))
@@ -671,7 +673,7 @@ class AttendancePage(BasePage):
                 self._last_result = task_result.value
                 self._show_result(task_result.value)
             else:
-                self.validation_status_var.set("Gagal")
+                self._set_validation_status("Gagal", "StatusError.TLabel")
                 self.result_panel.grid()
                 self.result_summary.show_lines(
                     (
@@ -727,17 +729,17 @@ class AttendancePage(BasePage):
         )
         self.validation_summary.show_lines(self._validation_lines)
         if value.valid:
-            self.validation_status_var.set(
+            self._set_validation_status(
                 f"Siap • {value.active_mdb_count} sumber {value.workflow} aktif"
             )
         else:
-            self.validation_status_var.set("Perlu perhatian")
+            self._set_validation_status("Perlu perhatian")
         self.validation_detail_button.configure(state="normal")
 
     def _show_validation_error(self, message: str) -> None:
         self._validation_lines = (message,)
         self.validation_summary.show_lines(self._validation_lines)
-        self.validation_status_var.set("Perlu perhatian")
+        self._set_validation_status("Perlu perhatian", "StatusWarning.TLabel")
         self.validation_detail_button.configure(state="normal")
 
     def show_validation_detail(self) -> None:
@@ -784,13 +786,31 @@ class AttendancePage(BasePage):
             )
         )
         self.result_panel.grid()
-        self.validation_status_var.set(
+        self._set_validation_status(
             "Gagal"
             if not result.success and not result.cancelled
             else "Siap"
             if result.success
             else "Dibatalkan"
         )
+
+    def _set_validation_status(self, text: str, style: str | None = None) -> None:
+        if style is None:
+            normalized = text.casefold()
+            if normalized.startswith("siap"):
+                style = "StatusReady.TLabel"
+            elif normalized.startswith("gagal"):
+                style = "StatusError.TLabel"
+            elif normalized.startswith(("perlu perhatian", "belum dikonfigurasi")):
+                style = "StatusWarning.TLabel"
+            elif normalized.startswith("sedang berjalan"):
+                style = "StatusRunning.TLabel"
+            elif normalized.startswith(("dibatalkan", "belum diperiksa")):
+                style = "StatusInfo.TLabel"
+            else:
+                style = "CompactStatus.TLabel"
+        self.validation_status_var.set(text)
+        self.validation_status.configure(style=style)
 
     def _append_log(self, event: AttendanceLogEvent) -> None:
         stamp = event.timestamp or "session"
@@ -878,7 +898,7 @@ class AttendancePage(BasePage):
         if not self._running:
             self._last_result = None
             self.result_panel.grid_remove()
-            self.validation_status_var.set("Belum diperiksa")
+            self._set_validation_status("Belum diperiksa", "StatusInfo.TLabel")
 
     def return_settings(self) -> None:
         if not self._running and self.context.navigate:

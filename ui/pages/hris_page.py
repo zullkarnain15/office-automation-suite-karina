@@ -193,12 +193,15 @@ class HRISPage(BasePage):
             command=self.calibrate_profile,
         )
         self.calibrate_button.grid(row=2, column=3, sticky="w", padx=(6, 0))
-        ttk.Label(
+        self.profile_status_label = ttk.Label(
             profile,
             textvariable=self.profile_status_var,
             wraplength=280,
-            style="CompactText.TLabel",
-        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(6, 0))
+            style="StatusInfo.TLabel",
+        )
+        self.profile_status_label.grid(
+            row=3, column=0, columnspan=4, sticky="w", pady=(6, 0)
+        )
 
         login = ttk.Frame(panel, style="CompactBody.TFrame")
         login.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(12, 0))
@@ -296,12 +299,13 @@ class HRISPage(BasePage):
         panel = ttk.Frame(self.surface, style="CompactPanel.TFrame", padding=(12, 8))
         panel.grid(row=3, column=0, sticky="ew", pady=(0, 8))
         panel.columnconfigure(0, weight=1)
-        ttk.Label(
+        self.intervention_status_label = ttk.Label(
             panel,
             textvariable=self.intervention_status_var,
-            style="StatusWarning.TLabel",
+            style="CompactStatus.TLabel",
             wraplength=850,
-        ).grid(row=0, column=0, sticky="w")
+        )
+        self.intervention_status_label.grid(row=0, column=0, sticky="w")
         ttk.Label(
             panel, textvariable=self.intervention_file_var, style="CompactText.TLabel"
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
@@ -572,21 +576,21 @@ class HRISPage(BasePage):
         ):
             return
         self._set_busy(True, "Kalibrasi HRIS recorder profile...")
-        self.profile_status_var.set("Kalibrasi berjalan...")
+        self._set_profile_status("Kalibrasi berjalan...")
 
         def done(result) -> None:
             if self._disposed:
                 return
             self._set_busy(False)
             if not result.success:
-                self.profile_status_var.set("Kalibrasi gagal.")
+                self._set_profile_status("Kalibrasi gagal.")
                 self.validation_summary.show_lines(
                     [result.error or "Kalibrasi gagal."]
                 )
                 self.validation_summary.grid()
                 return
             self.profile_var.set(str(result.value))
-            self.profile_status_var.set("Profile tersimpan. Klik Validate untuk cek.")
+            self._set_profile_status("Profile tersimpan. Klik Validate untuk cek.")
             self.validation_summary.show_lines(
                 [
                     "Kalibrasi selesai.",
@@ -706,7 +710,7 @@ class HRISPage(BasePage):
     def _show_intervention(self, event: HRISInterventionRequest) -> None:
         self._disable_intervention()
         self._intervention_state = event.state
-        self.intervention_status_var.set(event.message)
+        self._set_intervention_status(event.message)
         self.intervention_file_var.set(
             f"File: {event.txt_file.name if event.txt_file else '-'}"
         )
@@ -779,8 +783,10 @@ class HRISPage(BasePage):
                     item.mapping_status,
                 ),
             )
-        self.profile_status_var.set(
-            value.profile.validation_status if value.profile else "Profile tidak tersedia."
+        self._set_profile_status(
+            value.profile.validation_status
+            if value.profile
+            else "Profile tidak tersedia."
         )
         self.validation_summary.show_lines(
             [
@@ -793,6 +799,28 @@ class HRISPage(BasePage):
             ]
         )
         self.validation_summary.grid()
+
+    def _set_profile_status(self, text: str) -> None:
+        normalized = text.casefold()
+        if normalized == "ready" or normalized.startswith("profile tersimpan"):
+            style = "StatusReady.TLabel"
+        elif normalized.startswith("kalibrasi berjalan"):
+            style = "StatusRunning.TLabel"
+        elif "gagal" in normalized or normalized == "error":
+            style = "StatusError.TLabel"
+        elif any(
+            token in normalized
+            for token in ("tidak tersedia", "not found", "mismatch")
+        ):
+            style = "StatusWarning.TLabel"
+        else:
+            style = "StatusInfo.TLabel"
+        self.profile_status_var.set(text)
+        self.profile_status_label.configure(style=style)
+
+    def _set_intervention_status(self, text: str) -> None:
+        self.intervention_status_var.set(text)
+        self.intervention_status_label.configure(style="CompactStatus.TLabel")
 
     def _show_result(self, value) -> None:
         self.result_panel.grid()

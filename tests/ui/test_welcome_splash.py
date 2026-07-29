@@ -59,6 +59,12 @@ def test_startup_shows_welcome_splash_with_image_and_copy(
     assert app._welcome_start_image is not None
     assert app._welcome_start_image.width() == 200
     assert app._welcome_start_image.height() == 80
+    assert app._welcome_shimmer_job is not None
+    title_style = app._welcome_title_label.cget("style")
+    glow_style = app._welcome_start_glow.cget("style")
+    app._advance_welcome_shimmer()
+    assert app._welcome_title_label.cget("style") != title_style
+    assert app._welcome_start_glow.cget("style") != glow_style
     texts = _label_texts(app._welcome_splash)
     assert "WELCOME TO" in texts
     assert "OFFICE AUTOMATION SUITE - KARINA" in texts
@@ -70,6 +76,7 @@ def test_startup_shows_welcome_splash_with_image_and_copy(
 
     app._start_from_welcome()
     assert not app._welcome_splash.winfo_exists()
+    assert app._welcome_shimmer_job is None
     assert app.navigation.active_page_id == "dashboard"
     assert app.startup_database_result.status == "NO_DATABASE"
     deadline = time.monotonic() + 2

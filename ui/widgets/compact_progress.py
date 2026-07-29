@@ -12,7 +12,7 @@ class CompactProgress(ttk.Frame):
         ttk.Label(self, text="Progress", style="CompactTitle.TLabel").grid(
             row=0, column=0, sticky="w"
         )
-        self.label = ttk.Label(self, text="Status: Siap", style="CompactText.TLabel")
+        self.label = ttk.Label(self, text="Status: Siap", style="StatusReady.TLabel")
         self.label.grid(row=0, column=1, sticky="w", padx=(10, 0))
         self.progress = ttk.Progressbar(
             self, mode="indeterminate", style="Teal.Horizontal.TProgressbar"
@@ -20,9 +20,9 @@ class CompactProgress(ttk.Frame):
         self.progress.grid(row=0, column=2, sticky="ew", padx=(12, 0))
 
     def start(self, message: str) -> None:
-        self.label.configure(text=message)
+        self.label.configure(text=message, style="StatusRunning.TLabel")
         self.progress.start(12)
 
     def stop(self) -> None:
         self.progress.stop()
-        self.label.configure(text="Status: Siap")
+        self.label.configure(text="Status: Siap", style="StatusReady.TLabel")

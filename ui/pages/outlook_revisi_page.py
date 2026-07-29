@@ -211,9 +211,12 @@ class OutlookRevisiPage(BasePage):
         status = ttk.Frame(row, style="CompactBody.TFrame")
         status.grid(row=0, column=0, sticky="w")
         ttk.Label(status, text="Validasi:", style="CompactText.TLabel").pack(side="left")
-        ttk.Label(
-            status, textvariable=self.validation_status_var, style="CompactStatus.TLabel"
-        ).pack(side="left", padx=(5, 0))
+        self.validation_status_label = ttk.Label(
+            status,
+            textvariable=self.validation_status_var,
+            style="CompactStatus.TLabel",
+        )
+        self.validation_status_label.pack(side="left", padx=(5, 0))
         self.validation_summary = ResultSummary(row, wraplength=700)
         self.validation_summary.grid(row=1, column=0, columnspan=2, sticky="ew")
         self.validation_summary.grid_remove()
@@ -552,7 +555,7 @@ class OutlookRevisiPage(BasePage):
                     [task_result.error or "Validation failed"]
                 )
                 self.validation_summary.grid()
-                self.validation_status_var.set("Perlu perhatian")
+                self._set_validation_status("Perlu perhatian", "StatusWarning.TLabel")
                 return
             resolved, validation = task_result.value
             self._show_validation(validation)
@@ -634,6 +637,7 @@ class OutlookRevisiPage(BasePage):
                         "Gunakan output/log/configuration fallback secara manual.",
                     ]
                 )
+                self._set_validation_status("Gagal", "StatusError.TLabel")
 
         self.services.task_runner.submit_reporting(
             work,
@@ -694,10 +698,9 @@ class OutlookRevisiPage(BasePage):
                 f"Send Mode / Effective: {outbound.send_mode} / "
                 f"{outbound.effective_mode}",
                 f"Summary Email: {outbound.summary_email_enabled}",
-                "Recipient scope: "
-                + (
-                    "; ".join(outbound.recipients) or "dynamic sender / none configured"
-                ),
+                f"Outbound Scope: {len(outbound.recipients)} configured address(es)",
+                f"Summary Recipients / Sender Master: "
+                f"{value.summary_recipient_count} / {value.sender_count}",
                 f"Warnings / Errors: {len(value.warnings)} / {len(value.errors)}",
                 *value.warnings,
                 *value.errors,
@@ -705,8 +708,9 @@ class OutlookRevisiPage(BasePage):
             ]
         )
         self.validation_summary.grid()
-        self.validation_status_var.set(
-            "Siap" if value.valid else "Perlu perhatian"
+        self._set_validation_status(
+            "Siap" if value.valid else "Perlu perhatian",
+            "StatusReady.TLabel" if value.valid else "StatusWarning.TLabel",
         )
 
     def _show_result(self, result) -> None:
@@ -742,15 +746,20 @@ class OutlookRevisiPage(BasePage):
             ]
         )
         self.result_panel.grid()
-        self.validation_status_var.set(
-            "Dibatalkan"
+        status_text, status_style = (
+            ("Dibatalkan", "StatusInfo.TLabel")
             if result.cancelled
-            else "Berhasil dengan peringatan"
+            else ("Berhasil dengan peringatan", "StatusWarning.TLabel")
             if result.success and result.warning_count
-            else "Berhasil"
+            else ("Berhasil", "StatusReady.TLabel")
             if result.success
-            else "Gagal"
+            else ("Gagal", "StatusError.TLabel")
         )
+        self._set_validation_status(status_text, status_style)
+
+    def _set_validation_status(self, text: str, style: str) -> None:
+        self.validation_status_var.set(text)
+        self.validation_status_label.configure(style=style)
 
     def _append_log(self, event: OutlookRevisiLogEvent) -> None:
         stamp = event.timestamp or "session"

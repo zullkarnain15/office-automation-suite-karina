@@ -6,7 +6,7 @@ import logging
 import tkinter as tk
 from pathlib import Path
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageSequence, ImageTk
 
 
 class IconManager:
@@ -23,6 +23,10 @@ class IconManager:
         self._cache: dict[
             tuple[str, int | tuple[int, int] | None],
             tk.PhotoImage | None,
+        ] = {}
+        self._animation_cache: dict[
+            tuple[str, int | tuple[int, int] | None],
+            tuple[tk.PhotoImage, ...],
         ] = {}
 
     def resolve(self, icon_name: str) -> Path:
@@ -65,6 +69,36 @@ class IconManager:
         self._cache[cache_key] = image
         return image
 
+    def load_animation(
+        self,
+        icon_name: str,
+        *,
+        size: int | tuple[int, int] | None = None,
+    ) -> tuple[tk.PhotoImage, ...]:
+        cache_key = (icon_name, size)
+        if cache_key in self._animation_cache:
+            return self._animation_cache[cache_key]
+        path = self.widget_icon_path(icon_name)
+        if not path.is_file():
+            self.logger.warning("UI animation icon is missing: %s", path)
+            self._animation_cache[cache_key] = ()
+            return ()
+        try:
+            with Image.open(path) as source:
+                frames = tuple(
+                    self._prepare_frame(frame, size)
+                    for frame in ImageSequence.Iterator(source)
+                )
+        except (OSError, RuntimeError) as exc:
+            self.logger.warning(
+                "UI animation icon cannot be used; fallback enabled: %s (%s)",
+                path,
+                exc,
+            )
+            frames = ()
+        self._animation_cache[cache_key] = frames
+        return frames
+
     def _load_scaled_png(
         self,
         path: Path,
@@ -76,6 +110,18 @@ class IconManager:
             if image.size != target_size:
                 image = image.resize(target_size, Image.Resampling.NEAREST)
             return ImageTk.PhotoImage(image, master=self.master)
+
+    def _prepare_frame(
+        self,
+        frame: Image.Image,
+        size: int | tuple[int, int] | None,
+    ) -> tk.PhotoImage:
+        image = frame.convert("RGBA")
+        if size is not None:
+            target_size = (size, size) if isinstance(size, int) else size
+            if image.size != target_size:
+                image = image.resize(target_size, Image.Resampling.NEAREST)
+        return ImageTk.PhotoImage(image, master=self.master)
 
     def widget_icon_path(self, icon_name: str) -> Path:
         source = self.resolve(icon_name)
@@ -93,3 +139,4 @@ class IconManager:
 
     def clear(self) -> None:
         self._cache.clear()
+        self._animation_cache.clear()

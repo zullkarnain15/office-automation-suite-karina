@@ -54,6 +54,8 @@ class OASKUnifiedApp:
         self._configure_window()
         self.style = StyleManager().apply(self.root)
         self._welcome_starting = False
+        self._welcome_shimmer_job = None
+        self._welcome_shimmer_phase = 0
         self.startup_database_result = None
         self._build_welcome_splash()
         if self.context.app_services is None:
@@ -177,11 +179,12 @@ class OASKUnifiedApp:
             text="WELCOME TO",
             style="WelcomeEyebrow.TLabel",
         ).pack(anchor="w")
-        ttk.Label(
+        self._welcome_title_label = ttk.Label(
             text,
             text="OFFICE AUTOMATION SUITE - KARINA",
             style="WelcomeTitle.TLabel",
-        ).pack(anchor="w", pady=(5, 4))
+        )
+        self._welcome_title_label.pack(anchor="w", pady=(5, 4))
         ttk.Label(
             text,
             text="BY HR SERVICES",
@@ -192,19 +195,23 @@ class OASKUnifiedApp:
             textvariable=self._welcome_status_var,
             style="WelcomeStatus.TLabel",
         ).pack(anchor="w", pady=(14, 8))
+        self._welcome_start_glow = ttk.Frame(text, style="WelcomeStartGlow1.TFrame")
+        self._welcome_start_glow.pack(anchor="w")
         self._welcome_start_button = ttk.Button(
-            text,
+            self._welcome_start_glow,
             image=self._welcome_start_image,
             command=self._start_from_welcome,
             style="WelcomeStart.TButton",
             cursor="hand2",
             takefocus=True,
         )
-        self._welcome_start_button.pack(anchor="w")
+        self._welcome_start_button.pack(padx=3, pady=3)
         self._welcome_splash = splash
+        self._start_welcome_shimmer()
         self.root.update_idletasks()
 
     def _dismiss_welcome_splash(self) -> None:
+        self._stop_welcome_shimmer()
         if self._welcome_return_binding:
             self.root.unbind("<Return>", self._welcome_return_binding)
             self._welcome_return_binding = None
@@ -214,6 +221,61 @@ class OASKUnifiedApp:
         except tk.TclError:
             return
         self._welcome_icon_manager.clear()
+
+    def _start_welcome_shimmer(self) -> None:
+        if self._welcome_shimmer_job is not None:
+            return
+        self._apply_welcome_shimmer()
+        self._welcome_shimmer_job = self.root.after(180, self._advance_welcome_shimmer)
+
+    def _advance_welcome_shimmer(self) -> None:
+        self._welcome_shimmer_job = None
+        try:
+            if not self._welcome_splash.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        self._welcome_shimmer_phase = (self._welcome_shimmer_phase + 1) % 10
+        self._apply_welcome_shimmer()
+        self._welcome_shimmer_job = self.root.after(180, self._advance_welcome_shimmer)
+
+    def _apply_welcome_shimmer(self) -> None:
+        title_styles = (
+            "WelcomeTitle.TLabel",
+            "WelcomeTitleShimmer1.TLabel",
+            "WelcomeTitleShimmer2.TLabel",
+            "WelcomeTitleShimmer3.TLabel",
+            "WelcomeTitleShimmer4.TLabel",
+            "WelcomeTitleShimmer5.TLabel",
+            "WelcomeTitle.TLabel",
+            "WelcomeTitle.TLabel",
+            "WelcomeTitle.TLabel",
+            "WelcomeTitle.TLabel",
+        )
+        glow_styles = (
+            "WelcomeStartGlow1.TFrame",
+            "WelcomeStartGlow2.TFrame",
+            "WelcomeStartGlow3.TFrame",
+            "WelcomeStartGlow4.TFrame",
+        )
+        try:
+            self._welcome_title_label.configure(
+                style=title_styles[self._welcome_shimmer_phase]
+            )
+            self._welcome_start_glow.configure(
+                style=glow_styles[self._welcome_shimmer_phase % len(glow_styles)]
+            )
+        except tk.TclError:
+            return
+
+    def _stop_welcome_shimmer(self) -> None:
+        if self._welcome_shimmer_job is not None:
+            try:
+                self.root.after_cancel(self._welcome_shimmer_job)
+            except tk.TclError:
+                pass
+            self._welcome_shimmer_job = None
+        self._welcome_shimmer_phase = 0
 
     @staticmethod
     def _default_context() -> AppContext:
@@ -367,6 +429,7 @@ class OASKUnifiedApp:
             )
             return False
         self._closing = True
+        self._stop_welcome_shimmer()
         if self.context.app_services is not None:
             self.context.app_services.task_runner.shutdown()
         self.icon_manager.clear()

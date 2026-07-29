@@ -444,7 +444,7 @@ class OutlookRevisiAdapter:
         try:
             staged = stage_hris_txt_files(
                 txt_files,
-                request.output_root,
+                cls._hris_staging_root(request.output_root),
                 request.workflow,
             )
         except Exception as exc:
@@ -460,6 +460,13 @@ class OutlookRevisiAdapter:
             )
         )
         return 0
+
+    @staticmethod
+    def _hris_staging_root(output_root: Path) -> Path:
+        normalized_name = re.sub(r"[\s_-]+", "", output_root.name.casefold())
+        if normalized_name == "outlookrevisi":
+            return output_root.parent
+        return output_root
 
     @contextmanager
     def _runtime_configuration(
