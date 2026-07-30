@@ -12,6 +12,7 @@ class BackupReason(StrEnum):
     BEFORE_RESET = "BEFORE_RESET"
     BEFORE_RELOCATION = "BEFORE_RELOCATION"
     BEFORE_UPGRADE = "BEFORE_UPGRADE"
+    PRE_UPDATE = "pre_update"
 
 
 class RecoveryStatus(StrEnum):

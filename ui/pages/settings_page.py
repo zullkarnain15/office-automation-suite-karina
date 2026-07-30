@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from ui.pages.base_page import BasePage
+from ui.pages.settings.application_update_section import ApplicationUpdateSection
 from ui.pages.settings.configuration_section import ConfigurationSection
 from ui.pages.settings.general_section import GeneralSection
 from ui.pages.settings.module_configuration_section import (
@@ -42,6 +43,7 @@ class SettingsPage(BasePage):
             ("Import / Export", ConfigurationSection),
             ("Storage & Database", StorageSection),
             ("Backup & Recovery", RecoverySection),
+            ("Application Update", ApplicationUpdateSection),
             ("HRIS Recorder Profiles", RecorderProfilesSection),
         )
         self.sections = {}
@@ -200,6 +202,13 @@ class SettingsPage(BasePage):
         else:
             self.progress_panel.stop()
             self._set_status("Ready")
+            self._refresh_section_action_states()
+
+    def _refresh_section_action_states(self) -> None:
+        for section in getattr(self, "sections", {}).values():
+            callback = getattr(section, "refresh_action_state", None)
+            if callable(callback):
+                callback()
 
     def _set_status(self, message: str) -> None:
         if self.context.set_status is not None:

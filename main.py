@@ -13,6 +13,7 @@ Application Entry Point
 
 from __future__ import annotations
 
+import argparse
 from functools import partial
 import tkinter as tk
 from tkinter import messagebox
@@ -493,12 +494,42 @@ def main() -> None:
     from shared.database import StartupDatabaseMigrationError
     from ui.app import create_app
 
+    arguments = _parse_startup_arguments()
+    if arguments.post_update:
+        from shared.update.health_check import PostUpdateHealthCheck
+
+        try:
+            PostUpdateHealthCheck(application_version=APP_VERSION).run(
+                arguments.update_transaction,
+                create_ui_shell=False,
+            )
+            logger.info("Post-update health check succeeded.")
+        except Exception as exc:
+            logger.exception("Post-update health check failed.")
+            return
+    elif arguments.post_rollback:
+        logger.warning(
+            "Update rollback completed for transaction: %s",
+            arguments.update_transaction,
+        )
+
     try:
         app = create_app()
     except StartupDatabaseMigrationError:
         logger.error("Application stopped because database migration failed.")
         return
     app.run()
+
+
+def _parse_startup_arguments():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--post-update", action="store_true")
+    parser.add_argument("--post-rollback", action="store_true")
+    parser.add_argument("--update-transaction")
+    arguments, _unknown = parser.parse_known_args()
+    if (arguments.post_update or arguments.post_rollback) and not arguments.update_transaction:
+        raise SystemExit("--update-transaction wajib untuk mode post-update/post-rollback.")
+    return arguments
 
 
 if __name__ == "__main__":

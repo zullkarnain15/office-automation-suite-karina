@@ -1,5 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
+
+project_root = Path.cwd()
+updater_exe = project_root / 'dist' / 'updater' / 'OAS-K-Updater.exe'
 
 datas = [
     ('assets', 'assets'),
@@ -23,6 +28,11 @@ datas = [
     ('shared/database/migrations', 'shared/database/migrations'),
 ]
 binaries = []
+if not updater_exe.is_file():
+    raise SystemExit(
+        'OAS-K-Updater.exe tidak ditemukan. Jalankan py tools\\build_updater.py sebelum build OAS-K.'
+    )
+binaries.append((str(updater_exe), 'updater'))
 hiddenimports = [
     'hris.batch_uploader',
     'hris.browser',

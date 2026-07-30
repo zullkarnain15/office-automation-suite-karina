@@ -71,7 +71,7 @@ class Adapter:
         return self.result
 
 
-def make_database(root: Path) -> Path:
+def make_database(root: Path, *, hris_use_global_period: bool = True) -> Path:
     database = root / "database" / "OAS-K.db"
     database.parent.mkdir()
     SchemaManager().initialize_database(database, "ui6")
@@ -106,10 +106,11 @@ def make_database(root: Path) -> Path:
                 verification_timeout_seconds, verification_poll_seconds,
                 verification_success_texts, verification_failure_texts,
                 manual_verification_on_unknown, manual_verification_on_error, updated_at
-            ) VALUES (1,1,1,'https://hris.test','msedge',0,1,
+            ) VALUES (1,1,?,'https://hris.test','msedge',0,1,
                 'recorder_profiles/hris/ho.json',1,1,0,0,1200,800,100,1,1,10,1,
                 'Submitted','Failed',1,1,'2026-07-21T00:00:00')
-            """
+            """,
+            (int(hris_use_global_period),),
         )
         for workflow, sequence, control in (
             ("HO", 1, "001"),
@@ -182,6 +183,23 @@ def test_global_and_manual_period(tmp_path: Path):
         "2026-07-31",
     )
     assert (manual.period_start, manual.period_end) == ("2026-07-02", "2026-07-03")
+
+
+def test_global_period_request_uses_global_dates_even_when_hris_default_is_off(
+    tmp_path: Path,
+):
+    database = make_database(tmp_path, hris_use_global_period=False)
+    service = HRISService(Storage(tmp_path, database), Adapter())
+
+    resolved = service.resolve_request(
+        make_request(tmp_path, use_global_period=True, period_start=None, period_end=None)
+    )
+
+    assert (resolved.period_start, resolved.period_end) == (
+        "2026-07-01",
+        "2026-07-31",
+    )
+    assert resolved.used_global_period is True
 
 
 @pytest.mark.parametrize(

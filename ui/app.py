@@ -88,6 +88,7 @@ class OASKUnifiedApp:
         )
         self.context.navigate = self.navigate
         self.context.set_status = self._set_status_message
+        self.context.request_close = self.close
         self.sidebar.command = self.navigate
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.bind("<Configure>", self._capture_window_state, add="+")

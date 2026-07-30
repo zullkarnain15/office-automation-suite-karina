@@ -121,7 +121,7 @@ class HRISService:
             raise ValueError("Folder tidak memiliki file TXT.")
         if request.use_global_period:
             start, end = defaults.global_period_start, defaults.global_period_end
-            if not defaults.use_global_period or not start or not end:
+            if not start or not end:
                 raise ValueError("Global period HRIS belum tersedia.")
         else:
             start, end = request.period_start, request.period_end

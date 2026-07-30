@@ -44,6 +44,7 @@ def test_tk_shell_full_smoke(tk_root: tk.Tk) -> None:
             "Import / Export",
             "Storage & Database",
             "Backup & Recovery",
+            "Application Update",
             "HRIS Recorder Profiles",
     )
     tk_root.geometry("1100x680")
@@ -107,6 +108,7 @@ def test_opening_settings_with_fake_registry_has_zero_side_effects(
         "Import / Export",
         "Storage & Database",
         "Backup & Recovery",
+        "Application Update",
         "HRIS Recorder Profiles",
     )
     assert calls == []

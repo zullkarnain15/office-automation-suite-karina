@@ -10,6 +10,7 @@ from typing import Any
 
 NavigationCallback = Callable[[str], bool]
 StatusCallback = Callable[[str], None]
+CloseCallback = Callable[[], bool]
 
 
 @dataclass(slots=True)
@@ -22,3 +23,4 @@ class AppContext:
     app_services: Any | None = None
     navigate: NavigationCallback | None = None
     set_status: StatusCallback | None = None
+    request_close: CloseCallback | None = None

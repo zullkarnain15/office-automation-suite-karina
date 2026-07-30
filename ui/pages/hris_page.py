@@ -477,7 +477,7 @@ class HRISPage(BasePage):
         self.fallback_frame.grid_remove()
 
     def on_show(self) -> None:
-        if not self._defaults_loaded and not self._busy:
+        if not self._busy and not self._running:
             self._load_defaults()
 
     def _load_defaults(self) -> None:
@@ -508,7 +508,10 @@ class HRISPage(BasePage):
                 self.start_entry.set_iso(value.global_period_start)
             if value.global_period_end:
                 self.end_entry.set_iso(value.global_period_end)
-            self.global_period_var.set(value.use_global_period)
+            self.global_period_var.set(
+                value.use_global_period
+                and bool(value.global_period_start and value.global_period_end)
+            )
             if value.recorder_profile:
                 self.profile_var.set(str(value.recorder_profile))
             self._apply_global_period_state()
@@ -521,8 +524,9 @@ class HRISPage(BasePage):
         )
 
     def refresh_active_configuration(self) -> None:
-        self._defaults_loaded = False
-        self._load_defaults()
+        if not self._busy:
+            self._defaults_loaded = False
+            self._load_defaults()
 
     def refresh_source(self) -> None:
         raw = self.source_var.get().strip()

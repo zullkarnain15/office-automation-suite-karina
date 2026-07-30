@@ -1,4 +1,4 @@
-"""Six-section, confirmation, busy-state, and no-auto-run contracts."""
+"""Settings section, confirmation, busy-state, and no-auto-run contracts."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def _task_page():
     return page, runner, errors
 
 
-def test_settings_declares_six_sections_in_final_order() -> None:
+def test_settings_declares_sections_in_final_order() -> None:
     source = (
         PROJECT_ROOT / "ui" / "pages" / "settings_page.py"
     ).read_text(encoding="utf-8")
@@ -78,6 +78,7 @@ def test_settings_declares_six_sections_in_final_order() -> None:
         "Import / Export",
         "Storage & Database",
         "Backup & Recovery",
+        "Application Update",
         "HRIS Recorder Profiles",
     )
     declarations = source[source.index("sections = (") :]
@@ -96,6 +97,7 @@ def test_settings_sections_are_split_into_modules() -> None:
         "storage_section.py",
         "configuration_section.py",
         "recovery_section.py",
+        "application_update_section.py",
         "recorder_profiles_section.py",
     }
     assert expected <= {path.name for path in root.glob("*.py")}

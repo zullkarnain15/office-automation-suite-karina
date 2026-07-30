@@ -27,7 +27,7 @@ APP_NAME: str = "OAS-K"
 APP_FULL_NAME: str = "Office Automation Suite - Karina"
 COMPANY_NAME: str = "OTO Finance"
 
-APP_VERSION: str = "1.0.0"
+APP_VERSION: str = "1.0.1"
 APP_STATUS: str = "Development"
 BUILD_NUMBER: str = "001"
 
