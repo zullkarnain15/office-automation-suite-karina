@@ -53,7 +53,7 @@ APP_PANEL = CARD_COLOR
 APP_TEXT = TEXT_PRIMARY
 APP_MUTED_TEXT = TEXT_SECONDARY
 APP_ACCENT = SECONDARY_COLOR
-APP_ACCENT_HOVER = PRIMARY_COLOR
+APP_ACCENT_HOVER = "#36A397"
 APP_SUCCESS = SUCCESS_COLOR
 APP_SUCCESS_ACTIVE = "#257A4C"
 APP_BORDER = BORDER_COLOR
@@ -404,8 +404,8 @@ def legacy_main() -> None:
             partial(coming_soon, module_name),
         )
 
-        button_bg = APP_SUCCESS if is_available else APP_ACCENT
-        button_active_bg = APP_SUCCESS_ACTIVE if is_available else PRIMARY_COLOR
+        button_bg = APP_ACCENT
+        button_active_bg = APP_ACCENT_HOVER
 
         tk.Button(
             card,
@@ -504,7 +504,7 @@ def main() -> None:
                 create_ui_shell=False,
             )
             logger.info("Post-update health check succeeded.")
-        except Exception as exc:
+        except Exception:
             logger.exception("Post-update health check failed.")
             return
     elif arguments.post_rollback:

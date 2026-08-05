@@ -178,6 +178,17 @@ class OutlookRevisiEngine:
         cancelled = self._is_cancel_requested()
         previous_pending = {}
         messages = []
+        detected_workflows: dict[int, str] = {}
+
+        def detect_workflow(message: OutlookMessage) -> str:
+            key = id(message)
+            if key not in detected_workflows:
+                detected_workflows[key] = self._detect_message_workflow(
+                    configuration,
+                    message,
+                )
+            return detected_workflows[key]
+
         if not cancelled:
             previous_pending = self._load_pending_sent_copies(
                 output_root,
@@ -193,13 +204,9 @@ class OutlookRevisiEngine:
             messages = client.fetch_messages(
                 attachment_folder=attachments_folder,
                 limit=self.message_limit,
-                message_filter=lambda message: bool(
-                    self._detect_message_workflow(configuration, message)
-                ),
-                attachment_filter=lambda message: (
-                    self._detect_message_workflow(configuration, message)
-                    == self.workflow
-                ),
+                message_filter=lambda message: bool(detect_workflow(message)),
+                attachment_filter=lambda message: detect_workflow(message)
+                == self.workflow,
             )
         history = self._load_history(output_root, self.workflow)
         message_results: list[OutlookProcessMessageResult] = []
@@ -222,6 +229,7 @@ class OutlookRevisiEngine:
                 client=client,
                 message=message,
                 job_folder=job_folder,
+                detected_workflow=detected_workflows.get(id(message)),
             )
             message_results.append(result)
 
@@ -399,9 +407,14 @@ class OutlookRevisiEngine:
         client: OutlookComClient,
         message: OutlookMessage,
         job_folder: Path,
+        detected_workflow: str | None = None,
     ) -> OutlookProcessMessageResult:
         errors: list[str] = []
-        detected_workflow = self._detect_message_workflow(configuration, message)
+        if detected_workflow is None:
+            detected_workflow = self._detect_message_workflow(
+                configuration,
+                message,
+            )
         output_files: list[Path] = []
         processed_time = datetime.now()
 
@@ -488,8 +501,15 @@ class OutlookRevisiEngine:
             errors,
         )
         allowed_path_set = {path.resolve() for path in attachment_paths}
-        attachment_results = [
-            OutlookAttachmentProcessResult(
+        attachment_results: list[OutlookAttachmentProcessResult] = []
+        attachment_result_by_path: dict[
+            Path,
+            OutlookAttachmentProcessResult,
+        ] = {}
+        for attachment in message.attachments:
+            resolved_path = attachment.path.resolve()
+            accepted = resolved_path in allowed_path_set
+            attachment_result = OutlookAttachmentProcessResult(
                 original_file_name=attachment.file_name,
                 saved_file_name=attachment.path.name,
                 path=attachment.path,
@@ -499,19 +519,18 @@ class OutlookRevisiEngine:
                     if attachment.path.exists()
                     else 0
                 ),
-                file_status=(
-                    "ACCEPTED"
-                    if attachment.path.resolve() in allowed_path_set
-                    else "IGNORED_UNSUPPORTED"
-                ),
+                file_status="ACCEPTED" if accepted else "IGNORED_UNSUPPORTED",
                 error_message=(
                     ""
-                    if attachment.path.resolve() in allowed_path_set
+                    if accepted
                     else "Attachment extension is not configured for this workflow."
                 ),
             )
-            for attachment in message.attachments
-        ]
+            attachment_results.append(attachment_result)
+            attachment_result_by_path.setdefault(
+                resolved_path,
+                attachment_result,
+            )
         validation_attachment = "PASS" if attachment_paths else "FAIL"
         if not attachment_paths:
             failure_code = failure_code or "ATTACHMENT_INVALID"
@@ -527,13 +546,8 @@ class OutlookRevisiEngine:
                 records.extend(parse_result.records)
                 anomalies.extend(parse_result.anomalies)
                 parse_issues.extend(parse_result.errors)
-                attachment_result = next(
-                    (
-                        item
-                        for item in attachment_results
-                        if item.path.resolve() == attachment_path.resolve()
-                    ),
-                    None,
+                attachment_result = attachment_result_by_path.get(
+                    attachment_path.resolve()
                 )
                 if attachment_result is not None:
                     attachment_result.row_read = parse_result.row_read
@@ -567,15 +581,20 @@ class OutlookRevisiEngine:
                 max_lines=max_lines,
                 job_id=job_folder.name,
             )
+            outputs_by_source: dict[Path, set[Path]] = {}
+            for record in records:
+                if record.output_file is None:
+                    continue
+                outputs_by_source.setdefault(
+                    record.source_file.resolve(),
+                    set(),
+                ).add(record.output_file)
             for attachment_result in attachment_results:
                 attachment_result.output_txt = sorted(
-                    {
-                        record.output_file
-                        for record in records
-                        if record.source_file.resolve()
-                        == attachment_result.path.resolve()
-                        and record.output_file is not None
-                    },
+                    outputs_by_source.get(
+                        attachment_result.path.resolve(),
+                        set(),
+                    ),
                     key=str,
                 )
 

@@ -45,6 +45,18 @@ class MigrationManager:
                 "Add Outlook payroll period",
                 "v1_to_v2.sql",
             ),
+            MigrationStep(
+                2,
+                3,
+                "Add Att Data Repair settings",
+                "v2_to_v3.sql",
+            ),
+            MigrationStep(
+                3,
+                4,
+                "Add Att Data Repair special time defaults",
+                "v3_to_v4.sql",
+            ),
         )
 
     def get_current_version(self) -> int:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from shared.database import SQLiteConnectionFactory
+from shared.database import REQUIRED_TABLES, SQLiteConnectionFactory
 from shared.storage import get_database_path
 from shared.storage.exceptions import RegistryAccessError
 from shared.storage.registry import windows_registry
@@ -109,7 +109,7 @@ def test_cli_initialize_uses_explicit_temp_without_registry(
     assert '"registry_updated": false' in result.stdout
 
 
-def test_bootstrap_schema_remains_exactly_24_tables(
+def test_bootstrap_schema_has_required_table_count(
     bootstrapped_root: Path,
 ) -> None:
     with SQLiteConnectionFactory().connect(
@@ -124,7 +124,7 @@ def test_bootstrap_schema_remains_exactly_24_tables(
             """
         ).fetchone()[0]
 
-    assert count == 24
+    assert count == len(REQUIRED_TABLES)
 
 
 def test_restore_reset_and_full_import_are_not_exposed() -> None:

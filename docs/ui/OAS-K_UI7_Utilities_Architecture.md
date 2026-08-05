@@ -2,7 +2,7 @@
 
 ## Scope
 
-UI7 activates one sidebar entry, **Utilities**, with exactly two internal workspaces:
+UI7 activates one sidebar entry, **Utilities**, with three internal workspaces:
 
 1. **Comparison Result** — Attendance is the main source and Outlook Revisi is the supporting revision source.
 2. **Attachment Consolidation** — explicitly scans an Outlook Revisi attachment folder and produces the existing HRIS-compatible TXT/report artifacts.
@@ -17,7 +17,7 @@ The dependency flow is:
 
 The page imports only UI models and services. Engine imports are isolated in `ui/adapters`. `AppServices` owns the service instances; no engine is stored directly in `AppContext`.
 
-The landing renders two lightweight summaries only. It does not resolve storage, load SQLite, inspect a folder, create output, create a job, or run an engine. Defaults are loaded asynchronously only after a workspace is opened.
+The landing renders three lightweight summaries only. It does not resolve storage, load SQLite, inspect a folder/file, create output, create a job, or run an engine. Defaults are loaded asynchronously only after a workspace is opened.
 
 ## SQLite configuration
 
@@ -66,3 +66,50 @@ Dashboard already aggregates `UTILITIES`; History reads the same normalized job,
 The workspace provides source/output browsing, explicit inspect/validate, confirmation before job creation, process log, result detail, open-output/report/log actions, retry-as-new-job, Settings routing, and an Advanced per-run TXT limit. There is no auto-retry and no automatic source correction or deletion.
 
 No schema, `main.py`, legacy workbook, configuration template, Attendance/Outlook/HRIS business engine, build, dist, or EXE path is part of UI7.
+
+## Sprint 7 Att Data Repair Addendum
+
+The third Utilities workspace is **Att Data Repair**. It reads Attachment
+Consolidation `.xlsx` Excel reports, repairs attendance records, and produces
+HRIS TXT plus an Excel audit report.
+
+`UtilitiesService.load_defaults()` now also reads `att_data_repair_settings`
+read-only: `enabled`, `use_global_output`, `use_global_period`, `generate_txt`,
+`generate_excel_report`, `txt_max_rows`, and `updated_at`.
+
+`AttDataRepairService` resolves active SQLite settings through
+`AttDataRepairConfigurationService`, applies per-job UI overrides for
+`Generate TXT` and `Generate Excel Report`, and builds the existing
+`AttDataRepairJobRequest`.
+
+`AttDataRepairAdapter` uses `AttDataRepairReportReader.read()` for
+non-destructive workbook preflight and `AttDataRepairEngine.run_job()` for
+execution. `AttDataRepairJobAudit.safe_record()` is called from the service
+layer after the engine returns.
+
+The UI never reads the source workbook directly, never applies repair rules,
+and never writes Att Data Repair settings. Source Report uses a file picker
+filtered to `*.xlsx`; folder input, `.xls`, and `.xlsm` are rejected by service
+validation. Global/local period and global/local output are resolved before the
+engine request is created. The UI passes only an output root; the engine creates
+`Utilities\Att_Data_Repair\YYYY-MM\YYYY-MM-DD_XX`.
+
+Status mapping:
+
+| Core status | UI status | History unified status |
+| --- | --- | --- |
+| SUCCESS | Berhasil | COMPLETED |
+| PARTIAL_SUCCESS | Berhasil dengan peringatan | COMPLETED_WITH_WARNING |
+| NO_VALID_RECORDS | Tidak ada data valid | COMPLETED_WITH_WARNING |
+| FAILED | Gagal | FAILED |
+| CANCELLED | Dibatalkan before engine start | Not a core engine status |
+
+Cancellation uses `threading.Event` through typed tokens. Att Data Repair
+supports safe pre-engine cancellation checkpoints in the service/adapter; once
+`run_job()` starts, cancellation waits until the engine reaches the next safe
+service boundary. Cancellation never terminates a thread.
+
+Att Data Repair records feature code `Att Data Repair` and leaves workflow
+unset because source records may contain both HO and Branch output in one run.
+Controlled file roles include `HRIS_TXT`, `EXCEL_REPORT`, `PROCESS_LOG`, and
+`SUMMARY_JSON`.

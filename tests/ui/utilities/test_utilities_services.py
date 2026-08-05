@@ -69,6 +69,18 @@ def make_database(tmp_path: Path) -> Path:
             "(attachment_settings_id,use_global_output,txt_max_lines,updated_at) "
             "VALUES (1,1,2500,'2026-07-01T00:00:00')"
         )
+        connection.execute(
+            """
+            UPDATE att_data_repair_settings
+            SET use_global_output = 1,
+                use_global_period = 1,
+                generate_txt = 1,
+                generate_excel_report = 1,
+                txt_max_rows = 7777,
+                updated_at = '2026-07-01T00:00:00'
+            WHERE att_data_repair_settings_id = 1
+            """
+        )
     return database
 
 
@@ -104,7 +116,7 @@ class AttachmentAdapter:
         return self.result
 
 
-def test_landing_has_exactly_two_active_features_without_database(
+def test_landing_has_three_active_features_without_database(
     tmp_path: Path,
 ) -> None:
     service = UtilitiesService(Storage(tmp_path, tmp_path / "missing.db", False))
@@ -112,7 +124,9 @@ def test_landing_has_exactly_two_active_features_without_database(
     assert tuple(item.feature for item in summaries) == (
         UtilitiesFeature.COMPARISON_RESULT,
         UtilitiesFeature.ATTACHMENT_CONSOLIDATION,
+        UtilitiesFeature.ATT_DATA_REPAIR,
     )
+    assert summaries[2].title == "Att Data Repair"
     assert not tmp_path.joinpath("missing.db").exists()
 
 
@@ -123,6 +137,8 @@ def test_defaults_are_read_only_and_resolve_global_values(tmp_path: Path) -> Non
     assert defaults.output_root == tmp_path / "global-output"
     assert defaults.period_start == "2026-07-01"
     assert defaults.attachment_txt_max_lines == 2500
+    assert defaults.att_data_repair_txt_max_rows == 7777
+    assert defaults.att_data_repair_generate_txt is True
     assert database.stat().st_mtime_ns == before
 
 

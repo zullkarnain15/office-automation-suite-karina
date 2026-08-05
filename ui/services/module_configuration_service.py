@@ -79,6 +79,7 @@ class ModuleConfigurationService:
                 sections = (
                     ("Comparison Result", self._rows(connection, "comparison_settings")),
                     ("Attachment Consolidation", self._rows(connection, "attachment_consolidation_settings")),
+                    ("Att Data Repair", self._safe_rows(connection, "att_data_repair_settings")),
                 )
                 title = "Utilities"
         return ModuleConfigurationDetail(module, title, sections)
@@ -87,6 +88,20 @@ class ModuleConfigurationService:
     def _rows(connection, table: str, clause: str = "") -> tuple[dict, ...]:
         rows = connection.execute(f'SELECT * FROM "{table}" {clause}').fetchall()
         return tuple(dict(row) for row in rows)
+
+    @classmethod
+    def _safe_rows(cls, connection, table: str, clause: str = "") -> tuple[dict, ...]:
+        if not cls._table_exists(connection, table):
+            return ()
+        return cls._rows(connection, table, clause)
+
+    @staticmethod
+    def _table_exists(connection, table: str) -> bool:
+        row = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        ).fetchone()
+        return row is not None
 
     @staticmethod
     def _profile_rows(connection) -> tuple[dict, ...]:
@@ -175,14 +190,41 @@ class ModuleConfigurationService:
     def _utilities_summary(self, connection) -> ModuleConfigurationSummary:
         comparison = connection.execute("SELECT * FROM comparison_settings LIMIT 1").fetchone()
         attachment = connection.execute("SELECT * FROM attachment_consolidation_settings LIMIT 1").fetchone()
-        if comparison is None and attachment is None:
+        att_data_repair = (
+            connection.execute("SELECT * FROM att_data_repair_settings LIMIT 1").fetchone()
+            if self._table_exists(connection, "att_data_repair_settings")
+            else None
+        )
+        if comparison is None and attachment is None and att_data_repair is None:
             return self._missing("UTILITIES", "Utilities")
-        updated = max(str(row["updated_at"]) for row in (comparison, attachment) if row)
+        updated = max(
+            str(row["updated_at"])
+            for row in (comparison, attachment, att_data_repair)
+            if row
+        )
         return ModuleConfigurationSummary(
             "UTILITIES", "Utilities", ActiveConfigurationStatus.ACTIVE, _SOURCE,
-            (("Comparison Result", "Aktif" if comparison else "Belum Dikonfigurasi"), ("Attachment Consolidation", "Aktif" if attachment else "Belum Dikonfigurasi"), ("TXT Max Lines", str(attachment["txt_max_lines"]) if attachment else "-")),
+            (
+                ("Comparison Result", "Aktif" if comparison else "Belum Dikonfigurasi"),
+                ("Attachment Consolidation", "Aktif" if attachment else "Belum Dikonfigurasi"),
+                (
+                    "Att Data Repair",
+                    self._att_data_repair_status(att_data_repair),
+                ),
+                ("TXT Max Lines", str(attachment["txt_max_lines"]) if attachment else "-"),
+                (
+                    "Att Data Repair TXT Max Rows",
+                    str(att_data_repair["txt_max_rows"]) if att_data_repair else "-",
+                ),
+            ),
             updated,
         )
+
+    @staticmethod
+    def _att_data_repair_status(row) -> str:
+        if row is None:
+            return "Belum Dikonfigurasi"
+        return "Aktif" if row["enabled"] else "Nonaktif"
 
     @staticmethod
     def _missing(module: str, title: str) -> ModuleConfigurationSummary:

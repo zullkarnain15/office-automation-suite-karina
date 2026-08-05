@@ -220,11 +220,15 @@ class _AttendanceService:
 def _interactive_page(tk_root, tmp_path: Path, *, confirm: bool):
     attendance = _AttendanceService(tmp_path)
     confirmations = []
+    completions = []
     services = SimpleNamespace(
         attendance_service=attendance,
         task_runner=_ImmediateRunner(),
         dialog_service=SimpleNamespace(
             confirm=lambda title, message: confirmations.append(message) or confirm,
+            completion=lambda module, message, details=(): completions.append(
+                (module, message, details)
+            ),
             warning=lambda *args: None,
             select_file=lambda **kwargs: None,
             select_folder=lambda **kwargs: None,
@@ -245,11 +249,11 @@ def _interactive_page(tk_root, tmp_path: Path, *, confirm: bool):
     page.start_var.set("07/01/2026")
     page.end_var.set("07/31/2026")
     page.output_var.set(str(tmp_path / "output"))
-    return page, attendance, confirmations
+    return page, attendance, confirmations, completions
 
 
 def test_confirmation_precedes_job_creation(tk_root, tmp_path: Path) -> None:
-    page, attendance, confirmations = _interactive_page(
+    page, attendance, confirmations, completions = _interactive_page(
         tk_root, tmp_path, confirm=False
     )
 
@@ -258,12 +262,15 @@ def test_confirmation_precedes_job_creation(tk_root, tmp_path: Path) -> None:
     assert confirmations
     assert attendance.preflight_calls[0][1] is True
     assert attendance.run_calls == []
+    assert completions == []
 
 
 def test_success_restores_busy_navigation_and_streams_result(
     tk_root, tmp_path: Path
 ) -> None:
-    page, attendance, confirmations = _interactive_page(tk_root, tmp_path, confirm=True)
+    page, attendance, confirmations, completions = _interactive_page(
+        tk_root, tmp_path, confirm=True
+    )
 
     page.run_attendance()
 
@@ -271,6 +278,9 @@ def test_success_restores_busy_navigation_and_streams_result(
     assert not page._busy and not page._running and page.can_navigate_away()
     assert "Fixture log" in page.log_text.get("1.0", "end")
     assert page._last_result.success
+    assert completions
+    assert completions[0][0] == "Attendance"
+    assert "berhasil diproses" in completions[0][1]
 
 
 def test_attendance_validation_status_uses_visual_state_styles(
@@ -326,7 +336,7 @@ def test_attendance_validation_status_uses_visual_state_styles(
 
 
 def test_failed_background_task_restores_busy_state(tk_root, tmp_path: Path) -> None:
-    page, attendance, _ = _interactive_page(tk_root, tmp_path, confirm=True)
+    page, attendance, *_ = _interactive_page(tk_root, tmp_path, confirm=True)
 
     def fail(*args, **kwargs):
         raise RuntimeError("fixture worker failed")

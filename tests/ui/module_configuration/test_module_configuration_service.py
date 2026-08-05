@@ -72,6 +72,11 @@ def configured_database(tmp_path: Path) -> Path:
             INSERT INTO attachment_consolidation_settings
                 (attachment_settings_id, txt_max_lines, updated_at)
             VALUES (1, 10000, '2026-07-21');
+            UPDATE att_data_repair_settings
+            SET enabled = 1,
+                txt_max_rows = 4321,
+                updated_at = '2026-07-22'
+            WHERE att_data_repair_settings_id = 1;
             """
         )
     return database
@@ -95,6 +100,9 @@ def test_four_module_summaries_are_read_from_sqlite(tmp_path: Path) -> None:
     assert outlook.status == ActiveConfigurationStatus.ACTIVE
     assert ("HO Run Controls", "1 aktif") in hris.fields
     assert ("TXT Max Lines", "10000") in utilities.fields
+    assert ("Att Data Repair", "Aktif") in utilities.fields
+    assert ("Att Data Repair TXT Max Rows", "4321") in utilities.fields
+    assert utilities.last_updated == "2026-07-22"
 
 
 def test_missing_database_is_read_only_and_reports_unavailable(tmp_path: Path) -> None:
@@ -115,5 +123,6 @@ def test_details_are_read_only_and_cover_each_module(tmp_path: Path) -> None:
     assert details["ATTENDANCE"].sections[1][0] == "Sumber Aktif"
     assert any(label == "Recipients" for label, _ in details["OUTLOOK_REVISI"].sections)
     assert any(label == "Assisted Steps" for label, _ in details["HRIS"].sections)
-    assert len(details["UTILITIES"].sections) == 2
+    assert len(details["UTILITIES"].sections) == 3
+    assert any(label == "Att Data Repair" for label, _ in details["UTILITIES"].sections)
     assert database.read_bytes() == before

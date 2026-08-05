@@ -90,24 +90,39 @@ class PreviewBuilder:
                 WorkbookIdentity.OUTLOOK_REVISI_LEGACY: map_outlook,
                 WorkbookIdentity.HRIS_LEGACY: map_hris,
             }.get(detection.identity)
-            if detection.identity == WorkbookIdentity.OAS_K_UNIFIED:
-                candidates = map_unified(workbook)
-            elif mapper is not None:
-                candidates = (mapper(workbook),)
-            else:
+            try:
+                if detection.identity == WorkbookIdentity.OAS_K_UNIFIED:
+                    candidates = map_unified(workbook)
+                elif mapper is not None:
+                    candidates = (mapper(workbook),)
+                else:
+                    code = (
+                        "WORKBOOK_AMBIGUOUS"
+                        if detection.identity == WorkbookIdentity.AMBIGUOUS
+                        else "WORKBOOK_UNKNOWN"
+                    )
+                    issues.append(
+                        ConfigImportIssue(
+                            code=code,
+                            severity=IssueSeverity.ERROR,
+                            module="UNKNOWN",
+                            message=(
+                                f"Workbook identity is {detection.identity.value}."
+                            ),
+                            current_value=str(detection.path),
+                        )
+                    )
+                    continue
+            except Exception as exc:
                 code = (
-                    "WORKBOOK_AMBIGUOUS"
-                    if detection.identity == WorkbookIdentity.AMBIGUOUS
-                    else "WORKBOOK_UNKNOWN"
+                    "WORKBOOK_MAPPING_FAILED"
                 )
                 issues.append(
                     ConfigImportIssue(
                         code=code,
                         severity=IssueSeverity.ERROR,
                         module="UNKNOWN",
-                        message=(
-                            f"Workbook identity is {detection.identity.value}."
-                        ),
+                        message=f"Workbook mapping failed: {exc}",
                         current_value=str(detection.path),
                     )
                 )

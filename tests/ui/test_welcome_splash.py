@@ -23,7 +23,7 @@ def _label_texts(widget) -> set[str]:
 
 def test_welcome_png_assets_have_expected_transparent_dimensions() -> None:
     folder = PROJECT_ROOT / "assets" / "icons" / "png"
-    with Image.open(folder / "welcome.png") as image:
+    with Image.open(folder / "app.png") as image:
         assert (image.size, image.mode) == ((500, 500), "RGBA")
     with Image.open(folder / "start_button_pxl.png") as image:
         assert (image.size, image.mode) == ((500, 200), "RGBA")
@@ -53,6 +53,7 @@ def test_startup_shows_welcome_splash_with_image_and_copy(
     tk_root.update_idletasks()
 
     assert app._welcome_splash.winfo_exists()
+    assert app._welcome_splash.cget("style") == "WelcomeSplash.TFrame"
     assert app._welcome_image is not None
     assert app._welcome_image.width() == 140
     assert app._welcome_image.height() == 140

@@ -793,6 +793,18 @@ class AttendancePage(BasePage):
             if result.success
             else "Dibatalkan"
         )
+        if result.success:
+            completion = getattr(self.services.dialog_service, "completion", None)
+            if callable(completion):
+                completion(
+                    "Attendance",
+                    "Attendance berhasil diproses. Output sudah tersimpan dan siap digunakan.",
+                    (
+                        f"Valid: {result.record_counts.get('valid', 0)} | Anomaly: {result.record_counts.get('anomaly', 0)}",
+                        f"TXT: {txt_files} file | Report: {reports} file | Durasi: {duration_text}",
+                        f"Output: {result.output_root}",
+                    ),
+                )
 
     def _set_validation_status(self, text: str, style: str | None = None) -> None:
         if style is None:

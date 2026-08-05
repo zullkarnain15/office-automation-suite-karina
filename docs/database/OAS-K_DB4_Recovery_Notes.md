@@ -1,10 +1,10 @@
 # OAS-K DB4 Recovery Notes
 
-Status: COMPLETED
-Schema: v1 unchanged (24 tables)
-Engine/GUI integration: Not implemented
-Production Registry/Data Root used by tests: No
-Executable build: Not performed
+- Status: COMPLETED
+- Schema: v1 unchanged (24 tables)
+- Engine/GUI integration: Not implemented
+- Production Registry/Data Root used by tests: No
+- Executable build: Not performed
 
 ## 1. Scope
 

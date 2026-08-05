@@ -34,8 +34,9 @@ def test_all_unified_sheet_names_fit_excel_limit(tmp_path: Path) -> None:
     workbook = load_workbook(output, read_only=True)
     try:
         assert all(len(name) <= 31 for name in workbook.sheetnames)
-        assert workbook.sheetnames[-1] == "Attachment_Consolidation"
-        assert len(workbook.sheetnames[-1]) == 24
+        assert workbook.sheetnames[-2] == "Attachment_Consolidation"
+        assert workbook.sheetnames[-1] == "Att_Data_Repair"
+        assert len(workbook.sheetnames[-2]) == 24
         assert (
             workbook["Attachment_Consolidation"]["A1"].value
             == "Attachment Consolidation Settings"
@@ -211,6 +212,7 @@ def test_global_period_keys_are_not_duplicated_in_module_settings(
             "HRIS_Settings",
             "Comparison_Settings",
             "Attachment_Consolidation",
+            "Att_Data_Repair",
         ):
             keys = {
                 workbook[sheet_name].cell(row, 1).value

@@ -49,7 +49,10 @@ class SystemHealthPage(BasePage):
         actions = ttk.Frame(container, style="OASK.TFrame")
         actions.grid(row=0, column=0, sticky="e", pady=(0, SPACE_SM))
         self.run_button = ttk.Button(
-            actions, text="Run Checks", style="Primary.TButton", command=self.run_checks
+            actions,
+            text="Run Checks",
+            style="AttendancePrimary.TButton",
+            command=self.run_checks,
         )
         self.run_button.pack(side="left")
         ttk.Button(

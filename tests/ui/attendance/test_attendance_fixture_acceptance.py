@@ -7,7 +7,7 @@ from pathlib import Path
 from openpyxl import Workbook
 
 from config.app_config import APP_VERSION, PROJECT_ROOT
-from shared.database import SchemaManager, SQLiteConnectionFactory
+from shared.database import REQUIRED_TABLES, SchemaManager, SQLiteConnectionFactory
 from shared.database.repositories import GlobalSettingsRepository
 from shared.storage import get_database_path
 from shared.storage.registry import FakeRegistryBackend, StorageRegistryService
@@ -233,7 +233,7 @@ def test_fixture_attendance_manual_acceptance(tk_root, tmp_path: Path) -> None:
         ).fetchone()[0]
     assert statuses == ["COMPLETED", "CANCELLED", "FAILED"]
     assert file_count == 10
-    assert table_count == 24
+    assert table_count == len(REQUIRED_TABLES)
     assert len(confirmations) == 3
     assert len(opened) == 2
     assert backend.write_count == 1  # Explicit test pointer setup only.

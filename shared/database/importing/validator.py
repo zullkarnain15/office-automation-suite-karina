@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from datetime import time
 from urllib.parse import urlsplit
 
 from shared.database.importing.models import (
@@ -100,7 +101,7 @@ def _validate_outlook(
         issues.append(_error("OUTLOOK_SETTINGS_REQUIRED", "OUTLOOK_REVISI"))
         return
     settings = settings_rows[0]
-    mailbox = str(settings["mailbox_smtp"])
+    mailbox = str(settings.get("mailbox_smtp") or "").strip()
     if not EMAIL_PATTERN.fullmatch(mailbox):
         issues.append(
             _error(
@@ -110,7 +111,7 @@ def _validate_outlook(
                 value=mailbox,
             )
         )
-    if not str(settings["source_folder"]).strip():
+    if not str(settings.get("source_folder") or "").strip():
         issues.append(_error("OUTLOOK_SOURCE_FOLDER_REQUIRED", "OUTLOOK_REVISI"))
     try:
         normalize_payroll_period(settings.get("payroll_period"))
@@ -191,7 +192,7 @@ def _validate_hris(
         issues.append(_error("HRIS_SETTINGS_REQUIRED", "HRIS"))
         return
     settings = settings_rows[0]
-    parsed = urlsplit(str(settings["hris_url"]))
+    parsed = urlsplit(str(settings.get("hris_url") or "").strip())
     if not parsed.scheme:
         issues.append(
             _error("HRIS_URL_INVALID", "HRIS", field="hris_url")
@@ -244,6 +245,112 @@ def _validate_utilities(
     rows = mapped.tables.get("attachment_consolidation_settings", ())
     if rows and int(rows[0]["txt_max_lines"]) <= 0:
         issues.append(_error("UTILITIES_TXT_MAX_LINES_INVALID", "UTILITIES"))
+    att_rows = mapped.tables.get("att_data_repair_settings", ())
+    if att_rows:
+        _validate_att_data_repair(att_rows[0], issues)
+
+
+def _validate_att_data_repair(
+    settings: dict[str, object],
+    issues: list[ConfigImportIssue],
+) -> None:
+    for field in (
+        "enabled",
+        "generate_txt",
+        "generate_excel_report",
+        "use_global_period",
+        "use_global_output",
+    ):
+        if int(settings[field]) not in (0, 1):
+            issues.append(_error("ATT_DATA_REPAIR_BOOLEAN_INVALID", "UTILITIES", field=field))
+    duration = int(settings["minimum_duration_minutes"])
+    if duration < 1 or duration > 1440:
+        issues.append(
+            _error(
+                "ATT_DATA_REPAIR_MINIMUM_DURATION_INVALID",
+                "UTILITIES",
+                field="minimum_duration_minutes",
+                value=duration,
+            )
+        )
+    txt_max = int(settings["txt_max_rows"])
+    if txt_max < 1:
+        issues.append(
+            _error(
+                "ATT_DATA_REPAIR_TXT_MAX_ROWS_INVALID",
+                "UTILITIES",
+                field="txt_max_rows",
+                value=txt_max,
+            )
+        )
+    for start_field, end_field, code in (
+        (
+            "weekday_default_in",
+            "weekday_default_out",
+            "ATT_DATA_REPAIR_WEEKDAY_TIME_RANGE_INVALID",
+        ),
+        (
+            "saturday_default_in",
+            "saturday_default_out",
+            "ATT_DATA_REPAIR_SATURDAY_TIME_RANGE_INVALID",
+        ),
+        (
+            "sunday_invalid_default_in",
+            "sunday_invalid_default_out",
+            "ATT_DATA_REPAIR_SUNDAY_TIME_RANGE_INVALID",
+        ),
+    ):
+        try:
+            start = _strict_hhmm(settings[start_field])
+            end = _strict_hhmm(settings[end_field])
+        except ValueError as exc:
+            issues.append(
+                _error(
+                    "ATT_DATA_REPAIR_TIME_INVALID",
+                    "UTILITIES",
+                    field=start_field,
+                    message=str(exc),
+                )
+            )
+            continue
+        if end <= start:
+            issues.append(_error(code, "UTILITIES", field=end_field))
+    for field in (
+        "saturday_missing_out_default",
+        "midnight_time_out_default",
+    ):
+        try:
+            _strict_hhmm(settings[field])
+        except ValueError as exc:
+            issues.append(
+                _error(
+                    "ATT_DATA_REPAIR_TIME_INVALID",
+                    "UTILITIES",
+                    field=field,
+                    message=str(exc),
+                )
+            )
+    if not int(settings["generate_txt"]) and not int(settings["generate_excel_report"]):
+        issues.append(
+            _error(
+                "ATT_DATA_REPAIR_OUTPUT_DISABLED",
+                "UTILITIES",
+                message=(
+                    "Minimal salah satu dari Generate_TXT atau "
+                    "Generate_Excel_Report harus TRUE."
+                ),
+            )
+        )
+
+
+def _strict_hhmm(value: object) -> time:
+    text = str(value).strip()
+    if not re.fullmatch(r"\d{2}:\d{2}", text):
+        raise ValueError(f"Jam harus memakai format HH:MM: {value!r}")
+    hour, minute = (int(part) for part in text.split(":"))
+    if hour > 23 or minute > 59:
+        raise ValueError(f"Jam berada di luar 00:00-23:59: {value!r}")
+    return time(hour, minute)
 
 
 def _duplicates(

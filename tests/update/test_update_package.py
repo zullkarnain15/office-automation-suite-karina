@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from shared.database.connection_factory import SQLiteConnectionFactory
+from shared.database.constants import SCHEMA_VERSION
+from shared.database.database_validator import DatabaseValidator
 from shared.database.models import JobHistoryRecord
 from shared.database.repositories import JobRepository
 from shared.database.schema_manager import SchemaManager
@@ -20,6 +22,7 @@ from shared.update.exceptions import (
     UpdateBusyError,
     UpdateStagingError,
 )
+from shared.update.health_check import PostUpdateHealthCheck
 from shared.update.models import UpdatePackageInfo
 from shared.update.staging_service import UpdateStagingService
 
@@ -73,15 +76,108 @@ def test_unsupported_package_format_rejected(tmp_path: Path) -> None:
     assert any("package_format" in error for error in result.errors)
 
 
-def test_migration_request_rejected(tmp_path: Path) -> None:
-    package = build_package(tmp_path, manifest_updates={"migration_required": True})
-    result = UpdatePackageValidator().validate(package, current_version=CURRENT_VERSION)
-    assert not result.valid
-    assert any("migration_required" in error for error in result.errors)
+def test_migration_request_accepts_supported_schema_range(tmp_path: Path) -> None:
+    package = build_package(
+        tmp_path,
+        manifest_updates={
+            "database_schema_from": SCHEMA_VERSION - 1,
+            "database_schema_to": SCHEMA_VERSION,
+            "migration_required": True,
+        },
+    )
+    result = UpdatePackageValidator(
+        active_schema_version=SCHEMA_VERSION - 1
+    ).validate(package, current_version=CURRENT_VERSION)
+    assert result.valid
+
+
+def test_prepare_update_accepts_schema2_database_and_creates_valid_backup(
+    tmp_path: Path,
+) -> None:
+    data_root = initialized_data_root(tmp_path)
+    layout = resolve_storage_layout(data_root)
+    _downgrade_current_database_to_schema2(layout.database_path)
+    package = build_package(
+        tmp_path,
+        manifest_updates={
+            "database_schema_from": 2,
+            "database_schema_to": 2,
+            "migration_required": False,
+        },
+    )
+
+    result = ApplicationUpdateService().prepare_update(
+        package,
+        current_version=CURRENT_VERSION,
+        data_root=data_root,
+    )
+
+    assert result.status == "STAGED"
+    assert result.backup_path.is_file()
+    backup_validation = DatabaseValidator(expected_version=2).validate(
+        result.backup_path
+    )
+    assert backup_validation.is_valid, backup_validation.errors
+
+
+def test_schema3_release_prepares_backs_up_migrates_and_preserves_data(
+    tmp_path: Path,
+) -> None:
+    data_root = _initialized_schema3_data_root(tmp_path)
+    layout = resolve_storage_layout(data_root)
+    package = build_package(
+        tmp_path,
+        manifest_updates={
+            "version": "1.0.7",
+            "minimum_current_version": "1.0.4",
+            "database_schema_from": 3,
+            "database_schema_to": 4,
+            "migration_required": True,
+        },
+    )
+
+    prepared = ApplicationUpdateService().prepare_update(
+        package,
+        current_version="1.0.4",
+        data_root=data_root,
+    )
+
+    assert prepared.status == "STAGED"
+    assert prepared.backup_path is not None
+    backup_validation = DatabaseValidator(expected_version=3).validate(
+        prepared.backup_path
+    )
+    assert backup_validation.is_valid, backup_validation.errors
+    assert prepared.transaction_path is not None
+
+    health = PostUpdateHealthCheck(application_version="1.0.7").run(
+        prepared.transaction_path,
+        create_ui_shell=False,
+    )
+
+    assert health.status == "SUCCESS"
+    assert health.database_schema_version == 4
+    with SQLiteConnectionFactory().connect(
+        layout.database_path,
+        read_only=True,
+    ) as connection:
+        marker = connection.execute(
+            "SELECT output_root, updated_by FROM global_settings "
+            "WHERE global_settings_id = 1"
+        ).fetchone()
+        settings = connection.execute(
+            "SELECT saturday_missing_out_default, midnight_time_out_default "
+            "FROM att_data_repair_settings WHERE att_data_repair_settings_id = 1"
+        ).fetchone()
+    assert tuple(marker) == (r"C:\ProductionData\Output", "Production v1.0.4")
+    assert tuple(settings) == ("11:00", "23:59")
 
 
 def test_database_schema_mismatch_rejected(tmp_path: Path) -> None:
-    package = build_package(tmp_path, manifest_updates={"database_schema_to": 3})
+    package = build_package(
+        tmp_path,
+        manifest_updates={"database_schema_to": SCHEMA_VERSION + 1},
+    )
     result = UpdatePackageValidator().validate(package, current_version=CURRENT_VERSION)
     assert not result.valid
     assert any("database_schema_from" in error for error in result.errors)
@@ -239,8 +335,8 @@ def default_manifest(**updates):
         "version": TARGET_VERSION,
         "minimum_current_version": "1.0.0",
         "package_type": "application_only",
-        "database_schema_from": 2,
-        "database_schema_to": 2,
+        "database_schema_from": SCHEMA_VERSION,
+        "database_schema_to": SCHEMA_VERSION,
         "migration_required": False,
         "created_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "entry_executable": "OAS-K.exe",
@@ -286,6 +382,59 @@ def initialized_data_root(tmp_path: Path) -> Path:
     layout.backup_root.mkdir(parents=True)
     SchemaManager().initialize_database(layout.database_path, "1.0.0")
     return data_root
+
+
+def _initialized_schema3_data_root(tmp_path: Path) -> Path:
+    data_root = tmp_path / "schema3_data_root"
+    layout = resolve_storage_layout(data_root)
+    layout.database_root.mkdir(parents=True)
+    layout.backup_root.mkdir(parents=True)
+    manager = SchemaManager()
+    with SQLiteConnectionFactory().connect(
+        layout.database_path,
+        create_parent=True,
+    ) as connection:
+        for statement in manager._sql_statements(
+            manager.schema_file.read_text(encoding="utf-8")
+        ):
+            connection.execute(statement)
+        for migration_name in ("v1_to_v2.sql", "v2_to_v3.sql"):
+            migration = manager.migrations_path / migration_name
+            for statement in manager._sql_statements(
+                migration.read_text(encoding="utf-8")
+            ):
+                connection.execute(statement)
+        connection.execute(
+            """
+            INSERT INTO database_metadata (
+                metadata_id, database_uuid, schema_version,
+                application_version, created_at, updated_at
+            ) VALUES (1, 'production-v104', 3, '1.0.4', CURRENT_TIMESTAMP,
+                      CURRENT_TIMESTAMP)
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO global_settings (
+                global_settings_id, output_root, period_start, period_end,
+                updated_at, updated_by
+            ) VALUES (1, ?, NULL, NULL, CURRENT_TIMESTAMP, 'Production v1.0.4')
+            """,
+            (r"C:\ProductionData\Output",),
+        )
+        connection.execute("PRAGMA user_version = 3")
+        connection.commit()
+    return data_root
+
+
+def _downgrade_current_database_to_schema2(database_path: Path) -> None:
+    with SQLiteConnectionFactory().connect(database_path) as connection:
+        connection.execute("DROP TABLE att_data_repair_settings")
+        connection.execute(
+            "UPDATE database_metadata SET schema_version = 2 WHERE metadata_id = 1"
+        )
+        connection.execute("PRAGMA user_version = 2")
+        connection.commit()
 
 
 def sha256(path: Path) -> str:

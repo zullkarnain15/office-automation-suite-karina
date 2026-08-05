@@ -30,9 +30,10 @@ APP_BORDER = "#C7D5E6"
 APP_TEXT = "#102A43"
 APP_MUTED = "#60758A"
 APP_PRIMARY = "#123B63"
-APP_ACCENT = "#198FA3"
+APP_ACCENT = "#2F8F83"
+APP_ACCENT_HOVER = "#36A397"
 APP_SUCCESS = "#43A58F"
-APP_WARNING = "#B45309"
+APP_WARNING = APP_ACCENT
 APP_LOG_BG = "#24384C"
 APP_LOG_FG = "#F4F7FB"
 DEFAULT_FONT = ("Segoe UI", 9)
@@ -347,6 +348,12 @@ class AttachmentConsolidationGUI:
             text="Browse",
             font=BUTTON_FONT,
             command=lambda: self._browse(variable),
+            bg=APP_ACCENT,
+            fg="white",
+            activebackground=APP_ACCENT_HOVER,
+            activeforeground="white",
+            relief="flat",
+            bd=0,
         ).grid(row=row, column=4, sticky="e", pady=2)
 
     def _button(self, parent, text, command, color):
@@ -357,7 +364,7 @@ class AttachmentConsolidationGUI:
             font=BUTTON_FONT,
             bg=color,
             fg="white",
-            activebackground=APP_PRIMARY,
+            activebackground=APP_ACCENT_HOVER,
             activeforeground="white",
             relief="flat",
             bd=0,

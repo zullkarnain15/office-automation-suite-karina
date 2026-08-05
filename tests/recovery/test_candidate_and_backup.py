@@ -43,7 +43,7 @@ def test_candidate_required_tables(data_root: Path) -> None:
         resolve_storage_layout(data_root).database_path
     )
     assert result.required_tables_ok
-    assert len(REQUIRED_TABLES) == 24
+    assert len(REQUIRED_TABLES) == 25
 
 
 def test_backup_database_succeeds(data_root: Path) -> None:

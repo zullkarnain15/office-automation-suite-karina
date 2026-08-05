@@ -28,6 +28,15 @@ class UtilitiesService:
                 "Konsolidasikan attachment Excel atau TXT ke output HRIS terstruktur.",
                 "Ready",
             ),
+            UtilitiesFeatureSummary(
+                UtilitiesFeature.ATT_DATA_REPAIR,
+                "Att Data Repair",
+                (
+                    "Periksa dan perbaiki data kehadiran dari report Attachment "
+                    "Consolidation, lalu hasilkan TXT HRIS dan Excel audit report."
+                ),
+                "Ready",
+            ),
         )
 
     def load_defaults(self) -> UtilitiesDefaults:
@@ -35,9 +44,9 @@ class UtilitiesService:
         database = status.database_path
         if not status.database_valid or database is None:
             return UtilitiesDefaults(
-                False,
-                database,
-                status.data_root,
+                database_available=False,
+                database_path=database,
+                data_root=status.data_root,
                 warning="Data Location belum siap. Atur melalui Settings.",
             )
         with self.factory.connect(database, read_only=True) as connection:
@@ -51,17 +60,64 @@ class UtilitiesService:
                 "FROM attachment_consolidation_settings "
                 "WHERE attachment_settings_id = 1"
             ).fetchone()
+            att_data_repair = connection.execute(
+                """
+                SELECT
+                    enabled,
+                    use_global_output,
+                    use_global_period,
+                    generate_txt,
+                    generate_excel_report,
+                    txt_max_rows,
+                    updated_at
+                FROM att_data_repair_settings
+                WHERE att_data_repair_settings_id = 1
+                """
+            ).fetchone()
         return UtilitiesDefaults(
-            True,
-            database,
-            status.data_root,
-            Path(global_value.output_root) if global_value and global_value.output_root else None,
-            global_value.period_start if global_value else None,
-            global_value.period_end if global_value else None,
-            bool(comparison["use_global_output"]) if comparison else True,
-            bool(comparison["use_global_period"]) if comparison else True,
-            comparison["updated_at"] if comparison else None,
-            bool(attachment["use_global_output"]) if attachment else True,
-            int(attachment["txt_max_lines"]) if attachment else 10000,
-            attachment["updated_at"] if attachment else None,
+            database_available=True,
+            database_path=database,
+            data_root=status.data_root,
+            output_root=Path(global_value.output_root)
+            if global_value and global_value.output_root
+            else None,
+            period_start=global_value.period_start if global_value else None,
+            period_end=global_value.period_end if global_value else None,
+            comparison_use_global_output=bool(comparison["use_global_output"])
+            if comparison
+            else True,
+            comparison_use_global_period=bool(comparison["use_global_period"])
+            if comparison
+            else True,
+            comparison_updated_at=comparison["updated_at"] if comparison else None,
+            attachment_use_global_output=bool(attachment["use_global_output"])
+            if attachment
+            else True,
+            attachment_txt_max_lines=int(attachment["txt_max_lines"])
+            if attachment
+            else 10000,
+            attachment_updated_at=attachment["updated_at"] if attachment else None,
+            att_data_repair_enabled=bool(att_data_repair["enabled"])
+            if att_data_repair
+            else True,
+            att_data_repair_use_global_output=bool(att_data_repair["use_global_output"])
+            if att_data_repair
+            else True,
+            att_data_repair_use_global_period=bool(att_data_repair["use_global_period"])
+            if att_data_repair
+            else True,
+            att_data_repair_generate_txt=bool(att_data_repair["generate_txt"])
+            if att_data_repair
+            else True,
+            att_data_repair_generate_excel_report=bool(
+                att_data_repair["generate_excel_report"]
+            )
+            if att_data_repair
+            else True,
+            att_data_repair_txt_max_rows=int(att_data_repair["txt_max_rows"])
+            if att_data_repair
+            else 10000,
+            att_data_repair_updated_at=att_data_repair["updated_at"]
+            if att_data_repair
+            else None,
         )

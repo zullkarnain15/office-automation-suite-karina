@@ -62,13 +62,13 @@ def test_import_incompatible_schema_rejected(
     data_root: Path,
     tmp_path: Path,
 ) -> None:
-    incompatible = tmp_path / "schema3.db"
+    incompatible = tmp_path / "schema5.db"
     SchemaManager().initialize_database(incompatible, "future")
     with sqlite3.connect(incompatible) as connection:
         connection.execute(
-            "UPDATE database_metadata SET schema_version=3 WHERE metadata_id=1"
+            "UPDATE database_metadata SET schema_version=5 WHERE metadata_id=1"
         )
-        connection.execute("PRAGMA user_version=3")
+        connection.execute("PRAGMA user_version=5")
     result = ImportDatabaseService().import_database(
         ImportDatabaseRequest(incompatible, data_root, confirm=True)
     )
@@ -175,7 +175,7 @@ def test_old_database_available_in_backup(data_root: Path) -> None:
     assert _version(result.pre_operation_backup) == "db4-active"
 
 
-def test_reset_database_has_24_tables(data_root: Path) -> None:
+def test_reset_database_has_required_tables(data_root: Path) -> None:
     result = ResetService().reset(
         ResetDatabaseRequest(data_root, "db4-reset", confirm=True)
     )
@@ -188,7 +188,7 @@ def test_reset_database_has_24_tables(data_root: Path) -> None:
             )
         }
     assert tables == set(REQUIRED_TABLES)
-    assert len(tables) == 24
+    assert len(tables) == len(REQUIRED_TABLES)
 
 
 def test_reset_history_starts_fresh_except_operation(data_root: Path) -> None:

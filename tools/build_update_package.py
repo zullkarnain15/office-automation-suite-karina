@@ -15,7 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from shared.database.constants import SCHEMA_VERSION
+from shared.database.constants import SCHEMA_VERSION  # noqa: E402
 
 APPLICATION_ID = "oas-k"
 APPLICATION_NAME = "Office Automation Suite - Karina"
@@ -72,7 +72,22 @@ def main(argv: list[str] | None = None) -> int:
         "--schema-version",
         default=SCHEMA_VERSION,
         type=int,
-        help="Database schema version this application-only package supports.",
+        help="Legacy shortcut for database_schema_from/to when explicit schema range is omitted.",
+    )
+    parser.add_argument(
+        "--database-schema-from",
+        type=int,
+        help="Minimum/source database schema version supported by this package.",
+    )
+    parser.add_argument(
+        "--database-schema-to",
+        type=int,
+        help="Target database schema version after the updated application starts.",
+    )
+    parser.add_argument(
+        "--migration-required",
+        action="store_true",
+        help="Declare that the updated application will migrate the database schema.",
     )
     parser.add_argument(
         "--output-dir",
@@ -88,7 +103,17 @@ def main(argv: list[str] | None = None) -> int:
             application_dir=args.application_dir,
             release_notes=args.release_notes,
             minimum_current_version=args.minimum_current_version,
-            schema_version=args.schema_version,
+            database_schema_from=(
+                args.database_schema_from
+                if args.database_schema_from is not None
+                else args.schema_version
+            ),
+            database_schema_to=(
+                args.database_schema_to
+                if args.database_schema_to is not None
+                else args.schema_version
+            ),
+            migration_required=args.migration_required,
             output_dir=args.output_dir,
         )
     except Exception as exc:
@@ -109,7 +134,9 @@ def build_update_package(
     application_dir: Path,
     release_notes: Path,
     minimum_current_version: str,
-    schema_version: int,
+    database_schema_from: int,
+    database_schema_to: int,
+    migration_required: bool,
     output_dir: Path,
 ) -> Path:
     application_dir = application_dir.resolve()
@@ -136,9 +163,9 @@ def build_update_package(
         "version": version,
         "minimum_current_version": minimum_current_version,
         "package_type": PACKAGE_TYPE,
-        "database_schema_from": schema_version,
-        "database_schema_to": schema_version,
-        "migration_required": False,
+        "database_schema_from": database_schema_from,
+        "database_schema_to": database_schema_to,
+        "migration_required": migration_required,
         "created_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "entry_executable": ENTRY_EXECUTABLE,
     }

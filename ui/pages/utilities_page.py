@@ -15,6 +15,10 @@ from ui.utilities_models import (
     AttachmentConsolidationLogEvent,
     AttachmentConsolidationProgressEvent,
     AttachmentConsolidationRunRequest,
+    AttDataRepairCancellationToken,
+    AttDataRepairLogEvent,
+    AttDataRepairProgressEvent,
+    AttDataRepairRunRequest,
     ComparisonCancellationToken,
     ComparisonLogEvent,
     ComparisonProgressEvent,
@@ -57,7 +61,7 @@ class UtilitiesPage(BasePage):
 
     def _build_landing(self) -> None:
         self.landing = ttk.Frame(self.host, style="OASK.TFrame")
-        self.landing.columnconfigure((0, 1), weight=1, uniform="utilities")
+        self.landing.columnconfigure((0, 1, 2), weight=1, uniform="utilities")
         summaries = self.services.utilities_service.landing_summaries()
         for column, summary in enumerate(summaries):
             panel = ttk.Frame(
@@ -67,7 +71,7 @@ class UtilitiesPage(BasePage):
                 row=0,
                 column=column,
                 sticky="nsew",
-                padx=(0, 8) if column == 0 else (8, 0),
+                padx=(0, 8) if column == 0 else (8, 8) if column == 1 else (8, 0),
             )
             panel.columnconfigure(0, weight=1)
             ttk.Label(panel, text=summary.title, style="CompactTitle.TLabel").grid(
@@ -105,6 +109,8 @@ class UtilitiesPage(BasePage):
         self.end_var = tk.StringVar()
         self.mode_var = tk.StringVar(value="EXCEL")
         self.subfolders_var = tk.BooleanVar(value=True)
+        self.generate_txt_var = tk.BooleanVar(value=True)
+        self.generate_excel_report_var = tk.BooleanVar(value=True)
         self.advanced_var = tk.BooleanVar(value=False)
         self.max_lines_var = tk.StringVar()
         self.config_status_var = tk.StringVar(value="Konfigurasi: Belum dimuat")
@@ -165,15 +171,19 @@ class UtilitiesPage(BasePage):
             source, text="Attendance Source", style="CompactTitle.TLabel"
         )
         self.source_a_label.grid(row=0, column=0, columnspan=3, sticky="w")
-        ttk.Entry(source, textvariable=self.source_a_var, style="Modern.TEntry").grid(
+        self.source_a_entry = ttk.Entry(
+            source, textvariable=self.source_a_var, style="Modern.TEntry"
+        )
+        self.source_a_entry.grid(
             row=1, column=0, columnspan=2, sticky="ew", pady=(5, 0)
         )
-        ttk.Button(
+        self.source_a_browse = ttk.Button(
             source,
             text="Browse",
             style="Attendance.TButton",
-            command=lambda: self._browse(self.source_a_var),
-        ).grid(row=1, column=2, padx=(6, 0), pady=(5, 0))
+            command=lambda: self._browse_source(self.source_a_var),
+        )
+        self.source_a_browse.grid(row=1, column=2, padx=(6, 0), pady=(5, 0))
         self.source_b_label = ttk.Label(
             source, text="Outlook Revisi Source", style="CompactText.TLabel"
         )
@@ -186,7 +196,7 @@ class UtilitiesPage(BasePage):
             source,
             text="Browse",
             style="Attendance.TButton",
-            command=lambda: self._browse(self.source_b_var),
+            command=lambda: self._browse_source(self.source_b_var),
         )
         self.source_b_browse.grid(row=3, column=2, padx=(6, 0))
 
@@ -206,10 +216,10 @@ class UtilitiesPage(BasePage):
         self.start_entry.grid(row=2, column=0, sticky="ew")
         self.end_entry = DateEntry(period, textvariable=self.end_var, width=11)
         self.end_entry.grid(row=2, column=1, sticky="ew", padx=(10, 0))
-        workflow = ttk.Frame(period, style="CompactBody.TFrame")
-        workflow.grid(row=3, column=0, columnspan=2, sticky="w", pady=(7, 0))
+        self.workflow_frame = ttk.Frame(period, style="CompactBody.TFrame")
+        self.workflow_frame.grid(row=3, column=0, columnspan=2, sticky="w", pady=(7, 0))
         SegmentedChoice(
-            workflow,
+            self.workflow_frame,
             variable=self.workflow_var,
             choices=(("HO", "HO"), ("BRANCH", "BRANCH")),
         ).pack(anchor="w")
@@ -234,7 +244,7 @@ class UtilitiesPage(BasePage):
             output,
             text="Browse",
             style="Attendance.TButton",
-            command=lambda: self._browse(self.output_var),
+            command=lambda: self._browse_output(self.output_var),
         )
         self.output_browse.grid(row=2, column=1, padx=(6, 0))
         self.attachment_options = ttk.Frame(output, style="CompactBody.TFrame")
@@ -247,6 +257,21 @@ class UtilitiesPage(BasePage):
         OptionChip(
             self.attachment_options, text="Subfolder", variable=self.subfolders_var
         ).pack(side="left", padx=(8, 0))
+        self.att_data_repair_options = ttk.Frame(output, style="CompactBody.TFrame")
+        self.att_data_repair_options.grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(7, 0)
+        )
+        OptionChip(
+            self.att_data_repair_options,
+            text="Generate TXT",
+            variable=self.generate_txt_var,
+        ).pack(side="left")
+        OptionChip(
+            self.att_data_repair_options,
+            text="Generate Excel Report",
+            variable=self.generate_excel_report_var,
+        ).pack(side="left", padx=(8, 0))
+        self.att_data_repair_options.grid_remove()
 
     def _build_action_row(self) -> None:
         row = ttk.Frame(self.workspace, style="CompactPanel.TFrame", padding=(12, 7))
@@ -346,6 +371,7 @@ class UtilitiesPage(BasePage):
         self.result_summary.grid(row=0, column=0, sticky="ew")
         recovery = ttk.Frame(self.result_panel, style="CompactBody.TFrame")
         recovery.grid(row=0, column=1, sticky="e", padx=(10, 0))
+        self.recovery_buttons = {}
         for text, command in (
             ("Buka Output", self.open_output),
             ("Buka Report", self.open_report),
@@ -364,6 +390,7 @@ class UtilitiesPage(BasePage):
             if self._open_folder_icon is not None and text != "Retry":
                 button.configure(image=self._open_folder_icon, compound="left")
             button.pack(side="left", padx=(6, 0))
+            self.recovery_buttons[text] = button
         self.result_panel.grid_remove()
 
     def _build_advanced(self) -> None:
@@ -393,21 +420,36 @@ class UtilitiesPage(BasePage):
             "Comparison Result"
             if feature == UtilitiesFeature.COMPARISON_RESULT
             else "Attachment Consolidation"
+            if feature == UtilitiesFeature.ATTACHMENT_CONSOLIDATION
+            else "Att Data Repair"
         )
         self.workspace_title.configure(text=title)
         is_comparison = feature == UtilitiesFeature.COMPARISON_RESULT
+        is_att_data_repair = feature == UtilitiesFeature.ATT_DATA_REPAIR
         if is_comparison:
             self.source_a_label.configure(text="Attendance Source")
             self.source_b_label.grid()
             self.source_b_entry.grid()
             self.source_b_browse.grid()
             self.attachment_options.grid_remove()
+            self.att_data_repair_options.grid_remove()
+            self.workflow_frame.grid()
+        elif is_att_data_repair:
+            self.source_a_label.configure(text="Source Folder / Report")
+            self.source_b_label.grid_remove()
+            self.source_b_entry.grid_remove()
+            self.source_b_browse.grid_remove()
+            self.attachment_options.grid_remove()
+            self.att_data_repair_options.grid()
+            self.workflow_frame.grid_remove()
         else:
             self.source_a_label.configure(text="Attachment Source")
             self.source_b_label.grid_remove()
             self.source_b_entry.grid_remove()
             self.source_b_browse.grid_remove()
             self.attachment_options.grid()
+            self.att_data_repair_options.grid_remove()
+            self.workflow_frame.grid()
         self.landing.grid_remove()
         self.workspace.grid(row=0, column=0, sticky="nsew")
         self._load_defaults()
@@ -447,7 +489,7 @@ class UtilitiesPage(BasePage):
                 f"Konfigurasi: Comparison Result - Updated: {updated or '-'}"
             )
             self.source_status_var.set("Source: Attendance + Outlook Revisi")
-        else:
+        elif self._feature == UtilitiesFeature.ATTACHMENT_CONSOLIDATION:
             self.global_output_var.set(value.attachment_use_global_output)
             self.max_lines_var.set(str(value.attachment_txt_max_lines))
             updated = value.attachment_updated_at
@@ -457,6 +499,22 @@ class UtilitiesPage(BasePage):
             self.source_status_var.set(
                 f"Source: Attachment folder - TXT max {value.attachment_txt_max_lines}"
             )
+        else:
+            self.global_output_var.set(value.att_data_repair_use_global_output)
+            self.global_period_var.set(value.att_data_repair_use_global_period)
+            self.generate_txt_var.set(value.att_data_repair_generate_txt)
+            self.generate_excel_report_var.set(
+                value.att_data_repair_generate_excel_report
+            )
+            self.max_lines_var.set(str(value.att_data_repair_txt_max_rows))
+            updated = value.att_data_repair_updated_at
+            state = "Enabled" if value.att_data_repair_enabled else "Disabled"
+            self.config_status_var.set(
+                f"Konfigurasi: Att Data Repair - {state} - Updated: {updated or '-'}"
+            )
+            self.source_status_var.set(
+                "Source: Excel Report Attachment Consolidation (.xlsx)"
+            )
         if value.warning:
             self.validation_summary.show_lines([value.warning])
             self.validation_summary.grid()
@@ -465,7 +523,9 @@ class UtilitiesPage(BasePage):
     def _service(self):
         if self._feature == UtilitiesFeature.COMPARISON_RESULT:
             return self.services.comparison_result_service
-        return self.services.attachment_consolidation_service
+        if self._feature == UtilitiesFeature.ATTACHMENT_CONSOLIDATION:
+            return self.services.attachment_consolidation_service
+        return self.services.att_data_repair_service
 
     def _request(self):
         output = (
@@ -483,6 +543,31 @@ class UtilitiesPage(BasePage):
                 self.end_entry.get_iso(),
                 self.global_output_var.get(),
                 output,
+            )
+        if self._feature == UtilitiesFeature.ATT_DATA_REPAIR:
+            source_text = self.source_a_var.get().strip()
+            source_path = Path(source_text) if source_text else None
+            source_report = (
+                source_path
+                if source_path is not None and not source_path.is_dir()
+                else None
+            )
+            source_folder = (
+                source_path
+                if source_path is not None and source_path.is_dir()
+                else None
+            )
+            return AttDataRepairRunRequest(
+                source_report,
+                self.global_period_var.get(),
+                self.start_entry.get_iso(),
+                self.end_entry.get_iso(),
+                self.global_output_var.get(),
+                output,
+                self.generate_txt_var.get(),
+                self.generate_excel_report_var.get(),
+                source_folder,
+                True,
             )
         override = None
         if self.advanced_var.get() and self.max_lines_var.get().strip():
@@ -516,6 +601,8 @@ class UtilitiesPage(BasePage):
         token = (
             ComparisonCancellationToken()
             if self._feature == UtilitiesFeature.COMPARISON_RESULT
+            else AttDataRepairCancellationToken()
+            if self._feature == UtilitiesFeature.ATT_DATA_REPAIR
             else AttachmentConsolidationCancellationToken()
         )
         self._set_busy(True, "Read-only validation...")
@@ -544,6 +631,12 @@ class UtilitiesPage(BasePage):
             "invalid_files",
             "duplicate_candidates",
             "subfolder_count",
+            "source_records",
+            "valid_records_sheet",
+            "invalid_records_sheet",
+            "discovery_files_scanned",
+            "discovered_valid_reports",
+            "discovered_invalid_reports",
         ):
             if hasattr(validation, name):
                 lines.append(
@@ -561,7 +654,13 @@ class UtilitiesPage(BasePage):
             and validation.valid
             and self.services.dialog_service.confirm(
                 "Run Utilities Job",
-                f"Workflow: {resolved.workflow}\n"
+                (
+                    f"Workflow: {resolved.workflow}\n"
+                    if getattr(resolved, "workflow", None)
+                    else ""
+                )
+                + f"Source: {getattr(resolved, 'source_report', getattr(resolved, 'source_folder', '-'))}\n"
+                f"Period: {getattr(resolved, 'period_start', '-')} - {getattr(resolved, 'period_end', '-')}\n"
                 f"Output: {resolved.output_root}\n\nMulai job baru?",
             )
         ):
@@ -571,6 +670,8 @@ class UtilitiesPage(BasePage):
         self._cancellation = (
             ComparisonCancellationToken()
             if self._feature == UtilitiesFeature.COMPARISON_RESULT
+            else AttDataRepairCancellationToken()
+            if self._feature == UtilitiesFeature.ATT_DATA_REPAIR
             else AttachmentConsolidationCancellationToken()
         )
         self._running = True
@@ -609,8 +710,18 @@ class UtilitiesPage(BasePage):
             return
         self._last_result = task.value
         value = task.value
+        engine_status = getattr(value, "status", "")
+        display_status = (
+            "CANCELLED"
+            if value.cancelled
+            else engine_status
+            if engine_status
+            else "SUCCESS"
+            if value.success
+            else "FAILED"
+        )
         lines = [
-            f"Status: {'CANCELLED' if value.cancelled else 'SUCCESS' if value.success else 'FAILED'}",
+            f"Status: {display_status}",
             f"Job ID: {value.job_id}",
             f"Output Files: {len(value.outputs)}",
             f"Warnings: {value.warning_count}",
@@ -627,10 +738,30 @@ class UtilitiesPage(BasePage):
             "duplicates",
             "output_txt_count",
             "report_count",
+            "source_records",
+            "final_records",
+            "changed_records",
+            "anomaly_records",
+            "txt_file_count",
         ):
             if hasattr(value, name):
                 lines.append(
                     f"{name.replace('_', ' ').title()}: {getattr(value, name)}"
+                )
+        if hasattr(value, "report_generated"):
+            lines.append(
+                "Excel Report: "
+                + ("Generated" if value.report_generated else "Not Generated")
+            )
+        if hasattr(value, "status") and value.status:
+            lines.append(f"Engine Status: {value.status}")
+            if value.status == "PARTIAL_SUCCESS":
+                lines.append(
+                    "Proses selesai dengan anomaly. Periksa Excel Report."
+                )
+            elif value.status == "NO_VALID_RECORDS":
+                lines.append(
+                    "Tidak ada record valid untuk TXT. Periksa sheet Anomaly pada Excel Report."
                 )
         if getattr(value, "status_breakdown", ()):
             lines.extend(f"{status}: {count}" for status, count in value.status_breakdown)
@@ -642,15 +773,22 @@ class UtilitiesPage(BasePage):
                     - datetime.fromisoformat(value.started_at)
                 ).total_seconds(),
             )
-            lines.append(f"Duration: {duration:.2f} seconds")
+            lines.append(
+                f"Duration: {duration:.2f} seconds ({duration / 60:.2f} minutes)"
+            )
         except ValueError:
             pass
         if value.error_summary:
             lines.append(value.error_summary)
         self.result_summary.show_lines(lines)
+        self._sync_recovery_buttons()
         status_text, status_style = (
             ("Dibatalkan", "StatusInfo.TLabel")
             if value.cancelled
+            else ("Tidak ada data valid", "StatusWarning.TLabel")
+            if engine_status == "NO_VALID_RECORDS"
+            else ("Berhasil dengan peringatan", "StatusWarning.TLabel")
+            if engine_status == "PARTIAL_SUCCESS"
             else ("Berhasil dengan peringatan", "StatusWarning.TLabel")
             if value.success and value.warning_count
             else ("Berhasil", "StatusReady.TLabel")
@@ -679,10 +817,22 @@ class UtilitiesPage(BasePage):
 
     def _stream_event(self, event) -> None:
         if isinstance(
-            event, (ComparisonProgressEvent, AttachmentConsolidationProgressEvent)
+            event,
+            (
+                ComparisonProgressEvent,
+                AttachmentConsolidationProgressEvent,
+                AttDataRepairProgressEvent,
+            ),
         ):
             self.progress.start(event.message)
-        elif isinstance(event, (ComparisonLogEvent, AttachmentConsolidationLogEvent)):
+        elif isinstance(
+            event,
+            (
+                ComparisonLogEvent,
+                AttachmentConsolidationLogEvent,
+                AttDataRepairLogEvent,
+            ),
+        ) or all(hasattr(event, name) for name in ("timestamp", "level", "stage", "message")):
             self._append_log(event)
 
     def cancel(self) -> None:
@@ -699,7 +849,17 @@ class UtilitiesPage(BasePage):
             cancellable=False,
         )
 
-    def _browse(self, variable: tk.StringVar) -> None:
+    def _browse_source(self, variable: tk.StringVar) -> None:
+        if self._feature == UtilitiesFeature.ATT_DATA_REPAIR:
+            path = self.services.dialog_service.select_folder(
+                title="Pilih Folder Source Report"
+            )
+        else:
+            path = self.services.dialog_service.select_folder(title="Pilih Folder")
+        if path:
+            variable.set(str(path))
+
+    def _browse_output(self, variable: tk.StringVar) -> None:
         path = self.services.dialog_service.select_folder(title="Pilih Folder")
         if path:
             variable.set(str(path))
@@ -732,6 +892,17 @@ class UtilitiesPage(BasePage):
         state = "disabled" if busy else "normal"
         self.validate_button.configure(state=state)
         self.run_button.configure(state=state)
+        self.source_a_entry.configure(state=state)
+        self.source_a_browse.configure(state=state)
+        self.source_b_entry.configure(state=state)
+        self.source_b_browse.configure(state=state)
+        if busy:
+            self.output_entry.configure(state="disabled")
+            self.output_browse.configure(state="disabled")
+            self.start_entry.set_state("disabled")
+            self.end_entry.set_state("disabled")
+        else:
+            self._apply_global_state()
         if busy:
             self.progress.start(message)
         else:
@@ -777,8 +948,31 @@ class UtilitiesPage(BasePage):
             None,
         )
 
+    def _sync_recovery_buttons(self) -> None:
+        output = self._last_result.output_folder if self._last_result else None
+        report = self._output_by_roles(
+            "COMPARISON_REPORT",
+            "CONSOLIDATION_REPORT",
+            "EXCEL_REPORT",
+        )
+        log = self._output_by_roles("PROCESS_LOG")
+        states = {
+            "Buka Output": output is not None and output.exists(),
+            "Buka Report": report is not None and report.exists(),
+            "Buka Log": log is not None and log.exists(),
+            "Retry": not self._running,
+        }
+        for text, enabled in states.items():
+            button = self.recovery_buttons.get(text)
+            if button is not None:
+                button.configure(state="normal" if enabled else "disabled")
+
     def open_report(self) -> None:
-        path = self._output_by_roles("COMPARISON_REPORT", "CONSOLIDATION_REPORT")
+        path = self._output_by_roles(
+            "COMPARISON_REPORT",
+            "CONSOLIDATION_REPORT",
+            "EXCEL_REPORT",
+        )
         if path is None or not self.services.file_system_service.open_folder(path):
             self.services.dialog_service.warning("Open Report", "Report belum tersedia.")
 
@@ -793,6 +987,7 @@ class UtilitiesPage(BasePage):
         if not self._running:
             self._last_result = None
             self.result_summary.show_lines(["Siap untuk job baru."])
+            self._sync_recovery_buttons()
 
     def open_settings(self) -> None:
         if not self._running and self.context.navigate:

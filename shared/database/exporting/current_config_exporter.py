@@ -23,10 +23,6 @@ from shared.database.exporting.constants import (
     SHEET_TABLES,
 )
 
-SENDER_WORKFLOW_BY_SHEET = {
-    "Outlook_HO_Senders": "HO",
-    "Outlook_Branch_Senders": "BRANCH",
-}
 from shared.database.exporting.exceptions import (
     ConfigExportError,
     WorkbookValidationError,
@@ -41,6 +37,11 @@ from shared.database.exporting.workbook_validator import (
 )
 from shared.database.importing.models import WorkbookIdentity
 from shared.database.time_utils import current_timestamp
+
+SENDER_WORKFLOW_BY_SHEET = {
+    "Outlook_HO_Senders": "HO",
+    "Outlook_Branch_Senders": "BRANCH",
+}
 
 _FORBIDDEN_COLUMN_TOKENS = (
     "password",
@@ -292,8 +293,22 @@ def _to_excel(value: Any, column: str) -> Any:
         "verification_enabled",
         "manual_verification_on_unknown",
         "manual_verification_on_error",
+        "enabled",
+        "generate_txt",
+        "generate_excel_report",
     }:
         return "TRUE" if bool(value) else "FALSE"
-    if column in {"run_control_id", "payroll_period"}:
+    if column in {
+        "run_control_id",
+        "payroll_period",
+        "weekday_default_in",
+        "weekday_default_out",
+        "saturday_default_in",
+        "saturday_default_out",
+        "saturday_missing_out_default",
+        "sunday_invalid_default_in",
+        "sunday_invalid_default_out",
+        "midnight_time_out_default",
+    }:
         return str(value)
     return value

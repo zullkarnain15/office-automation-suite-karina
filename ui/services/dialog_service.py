@@ -7,6 +7,9 @@ from collections.abc import Sequence
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
 
+from config.app_config import ASSETS_PATH
+from ui.dialogs.completion_popup import CompletionPopup
+
 
 class TkDialogService:
     def __init__(self, parent: tk.Misc) -> None:
@@ -69,6 +72,17 @@ class TkDialogService:
 
     def info(self, title: str, message: str) -> None:
         messagebox.showinfo(title, message, parent=self.parent)
+
+    def completion(
+        self, module_name: str, message: str, details: tuple[str, ...] = ()
+    ) -> None:
+        CompletionPopup(
+            self.parent,
+            module_name=module_name,
+            message=message,
+            details=details,
+            gif_path=ASSETS_PATH / "icons" / "png" / "pop_up.gif",
+        )
 
     def warning(self, title: str, message: str) -> None:
         messagebox.showwarning(title, message, parent=self.parent)

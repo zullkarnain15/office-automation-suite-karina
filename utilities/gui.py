@@ -16,7 +16,8 @@ APP_BORDER = "#C7D5E6"
 APP_TEXT = "#102A43"
 APP_MUTED = "#60758A"
 APP_PRIMARY = "#123B63"
-APP_ACCENT = "#198FA3"
+APP_ACCENT = "#2F8F83"
+APP_ACCENT_HOVER = "#36A397"
 APP_SUCCESS = "#43A58F"
 
 
@@ -124,9 +125,9 @@ class UtilitiesGUI:
             text=button_text,
             command=command,
             font=("Segoe UI", 10, "bold"),
-            bg=APP_SUCCESS if column == 0 else APP_ACCENT,
+            bg=APP_ACCENT,
             fg="white",
-            activebackground=APP_PRIMARY,
+            activebackground=APP_ACCENT_HOVER,
             activeforeground="white",
             relief="flat",
             bd=0,

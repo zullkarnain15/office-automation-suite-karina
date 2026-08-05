@@ -9,9 +9,11 @@ from pathlib import Path
 
 from shared.database.connection_factory import SQLiteConnectionFactory
 from shared.database.constants import SCHEMA_VERSION
+from shared.database.startup_migration import StartupDatabaseMigrator
 from shared.database.time_utils import current_timestamp
 from shared.logger import get_logger
 from shared.storage.data_root_manager import DataRootManager
+from shared.storage.path_resolver import resolve_storage_layout
 from shared.storage.registry import StorageRegistryService, WindowsRegistryBackend
 from shared.update.exceptions import UpdateHealthCheckError
 from shared.update.models import HealthCheckResult
@@ -51,9 +53,14 @@ class PostUpdateHealthCheck:
         errors: list[str] = []
         database_schema_version = None
         try:
-            registry = StorageRegistryService(WindowsRegistryBackend())
-            active_database = DataRootManager(registry).get_active_database_path()
-            database_path = active_database or data_root / "database" / "OAS-K.db"
+            layout = resolve_storage_layout(data_root)
+            database_path = layout.database_path
+            if not database_path.is_file():
+                registry = StorageRegistryService(WindowsRegistryBackend())
+                active_database = DataRootManager(registry).get_active_database_path()
+                database_path = active_database or database_path
+            backup_root = layout.backup_root
+            StartupDatabaseMigrator().ensure_current(database_path, backup_root)
             with self.connection_factory.connect(database_path, read_only=True) as connection:
                 quick = connection.execute("PRAGMA quick_check").fetchone()
                 checks["database_open"] = quick is not None and str(quick[0]).casefold() == "ok"

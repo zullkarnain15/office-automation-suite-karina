@@ -39,7 +39,7 @@ HEADER_HEIGHT: int = 70
 # =========================================================
 
 PRIMARY_COLOR: str = "#003366"       # OTO Finance Blue
-SECONDARY_COLOR: str = "#00509E"
+SECONDARY_COLOR: str = "#2F8F83"
 SUCCESS_COLOR: str = "#2E8B57"
 WARNING_COLOR: str = "#F4B400"
 ERROR_COLOR: str = "#D32F2F"

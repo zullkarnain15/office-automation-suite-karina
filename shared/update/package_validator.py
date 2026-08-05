@@ -221,15 +221,34 @@ class UpdatePackageValidator:
                 )
         if manifest.package_type != PACKAGE_TYPE_APPLICATION_ONLY:
             errors.append("package_type wajib application_only.")
-        if manifest.migration_required is not False:
-            errors.append("migration_required wajib false.")
-        if manifest.database_schema_from != manifest.database_schema_to:
-            errors.append("database_schema_from harus sama dengan database_schema_to.")
-        if manifest.database_schema_from != self.active_schema_version:
-            errors.append(
-                "Database schema package tidak kompatibel dengan database aktif: "
-                f"{manifest.database_schema_from} != {self.active_schema_version}."
-            )
+        if manifest.migration_required is True:
+            if manifest.database_schema_to != SCHEMA_VERSION:
+                errors.append(
+                    "Target schema package tidak sesuai aplikasi: "
+                    f"{manifest.database_schema_to} != {SCHEMA_VERSION}."
+                )
+            if manifest.database_schema_from > manifest.database_schema_to:
+                errors.append("database_schema_from tidak boleh lebih tinggi dari database_schema_to.")
+            if not (
+                manifest.database_schema_from
+                <= self.active_schema_version
+                <= manifest.database_schema_to
+            ):
+                errors.append(
+                    "Database schema package tidak kompatibel dengan database aktif: "
+                    f"{manifest.database_schema_from}-{manifest.database_schema_to} "
+                    f"tidak mencakup {self.active_schema_version}."
+                )
+        elif manifest.migration_required is False:
+            if manifest.database_schema_from != manifest.database_schema_to:
+                errors.append("database_schema_from harus sama dengan database_schema_to.")
+            if manifest.database_schema_from != self.active_schema_version:
+                errors.append(
+                    "Database schema package tidak kompatibel dengan database aktif: "
+                    f"{manifest.database_schema_from} != {self.active_schema_version}."
+                )
+        else:
+            errors.append("migration_required wajib boolean.")
         if manifest.entry_executable != ENTRY_EXECUTABLE:
             errors.append(f"entry_executable wajib {ENTRY_EXECUTABLE}.")
         try:

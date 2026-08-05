@@ -35,17 +35,7 @@ from openpyxl import load_workbook
 from attendance.engine import AttendanceProcessEngine
 from config.app_config import ATTENDANCE_ICON
 from config.app_config import DATE_FORMAT
-from config.ui_config import BACKGROUND_COLOR
-from config.ui_config import BORDER_COLOR
-from config.ui_config import BUTTON_FONT
-from config.ui_config import CARD_COLOR
-from config.ui_config import DEFAULT_FONT
 from config.ui_config import HEADER_FONT
-from config.ui_config import PRIMARY_COLOR
-from config.ui_config import SECONDARY_COLOR
-from config.ui_config import SUCCESS_COLOR
-from config.ui_config import TEXT_PRIMARY
-from config.ui_config import TEXT_SECONDARY
 from shared.config_manager import AttendanceConfigurationReader
 from shared.dialogs import Dialog
 from shared.logger import get_logger
@@ -66,11 +56,13 @@ APP_TEXT = "#102A43"
 APP_MUTED_TEXT = "#60758A"
 APP_ACCENT = "#198FA3"
 APP_ACCENT_HOVER = "#123B63"
+APP_BUTTON = "#2F8F83"
+APP_BUTTON_HOVER = "#36A397"
 APP_SUCCESS = "#43A58F"
 APP_SUCCESS_ACTIVE = "#2E8775"
 APP_SUCCESS_BORDER = "#247363"
-WORKFLOW_ACCENT = "#B45309"
-WORKFLOW_ACCENT_HOVER = "#92400E"
+WORKFLOW_ACCENT = APP_BUTTON
+WORKFLOW_ACCENT_HOVER = APP_BUTTON_HOVER
 APP_LOG_BG = "#24384C"
 APP_LOG_FG = "#F4F7FB"
 APP_SOFT_ACCENT = "#DDF3F3"
@@ -1556,9 +1548,9 @@ class AttendanceGUI:
         elif widget_class == "Button":
             self._safe_configure(
                 widget,
-                bg=APP_ACCENT,
+                bg=APP_BUTTON,
                 fg="#FFFFFF",
-                activebackground=APP_ACCENT_HOVER,
+                activebackground=APP_BUTTON_HOVER,
                 activeforeground="#FFFFFF",
                 relief="flat",
                 bd=0,

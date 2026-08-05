@@ -29,6 +29,7 @@ SHEET_ORDER = (
     "HRIS_Assisted_Steps",
     "Comparison_Settings",
     "Attachment_Consolidation",
+    "Att_Data_Repair",
 )
 
 SETTING_HEADERS = (
@@ -146,6 +147,23 @@ SETTING_DEFINITIONS: dict[str, tuple[SettingDefinition, ...]] = {
         SettingDefinition("use_global_output", True, True, "Gunakan output_root global.", "BOOLEAN"),
         SettingDefinition("txt_max_lines", 10000, True, "Maksimum baris TXT hasil konsolidasi.", "INTEGER"),
     ),
+    "Att_Data_Repair": (
+        SettingDefinition("enabled", True, True, "Aktifkan modul Att Data Repair.", "BOOLEAN"),
+        SettingDefinition("minimum_duration_minutes", 61, True, "Durasi minimum repair dalam menit.", "INTEGER"),
+        SettingDefinition("weekday_default_in", "09:30", True, "Jam masuk default Senin-Jumat.", "TIME"),
+        SettingDefinition("weekday_default_out", "17:00", True, "Jam keluar default Senin-Jumat.", "TIME"),
+        SettingDefinition("saturday_default_in", "09:30", True, "Jam masuk default Sabtu.", "TIME"),
+        SettingDefinition("saturday_default_out", "12:05", True, "Jam keluar default Sabtu.", "TIME"),
+        SettingDefinition("saturday_missing_out_default", "11:00", True, "Jam keluar saat Time_Out Sabtu kosong.", "TIME"),
+        SettingDefinition("sunday_invalid_default_in", "09:30", True, "Jam masuk default Minggu bila jam invalid.", "TIME"),
+        SettingDefinition("sunday_invalid_default_out", "12:05", True, "Jam keluar default Minggu bila jam invalid.", "TIME"),
+        SettingDefinition("midnight_time_out_default", "23:59", True, "Pengganti Time_Out saat nilainya 00:00.", "TIME"),
+        SettingDefinition("txt_max_rows", 10000, True, "Maksimum baris per TXT Att Data Repair.", "INTEGER"),
+        SettingDefinition("generate_txt", True, True, "Buat TXT HRIS.", "BOOLEAN"),
+        SettingDefinition("generate_excel_report", True, True, "Buat Excel report audit.", "BOOLEAN"),
+        SettingDefinition("use_global_period", True, True, "Gunakan periode global bila UI mendukung.", "BOOLEAN"),
+        SettingDefinition("use_global_output", True, True, "Gunakan output root global bila UI mendukung.", "BOOLEAN"),
+    ),
 }
 
 DATA_HEADERS: dict[str, tuple[str, ...]] = {
@@ -198,6 +216,7 @@ SHEET_TABLES = {
     "HRIS_Assisted_Steps": "hris_assisted_steps",
     "Comparison_Settings": "comparison_settings",
     "Attachment_Consolidation": "attachment_consolidation_settings",
+    "Att_Data_Repair": "att_data_repair_settings",
 }
 
 BOOLEAN_COLUMNS = {"is_active", "is_required"}

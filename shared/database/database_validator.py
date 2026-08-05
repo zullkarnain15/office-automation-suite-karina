@@ -126,7 +126,7 @@ class DatabaseValidator:
                     )
                     missing_tables = tuple(
                         name
-                        for name in REQUIRED_TABLES
+                        for name in self._required_tables()
                         if name not in available_tables
                     )
                     if missing_tables:
@@ -209,6 +209,16 @@ class DatabaseValidator:
                                 "Global settings must contain at most "
                                 "one singleton row."
                             )
+                    if "att_data_repair_settings" in available_tables:
+                        count_row = connection.execute(
+                            "SELECT COUNT(*) FROM att_data_repair_settings"
+                        ).fetchone()
+                        count = int(count_row[0]) if count_row is not None else 0
+                        if count != 1:
+                            errors.append(
+                                "Att Data Repair settings must contain exactly "
+                                "one singleton row."
+                            )
             except (OSError, sqlite3.Error, ValueError) as exc:
                 errors.append(f"Unable to validate SQLite database: {exc}")
 
@@ -253,6 +263,15 @@ class DatabaseValidator:
             (object_type,),
         ).fetchall()
         return {str(row[0]) for row in rows}
+
+    def _required_tables(self) -> tuple[str, ...]:
+        if self.expected_version < 3:
+            return tuple(
+                table
+                for table in REQUIRED_TABLES
+                if table != "att_data_repair_settings"
+            )
+        return REQUIRED_TABLES
 
     @staticmethod
     def _result(

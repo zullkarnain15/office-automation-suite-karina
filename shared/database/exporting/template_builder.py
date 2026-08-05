@@ -199,6 +199,8 @@ def _build_settings_sheet(sheet: object, sheet_name: str) -> None:
             sheet.cell(row_number, 2).number_format = "yyyy-mm-dd"
         if definition.value_type == "TEXT":
             sheet.cell(row_number, 2).number_format = "@"
+        if definition.value_type == "TIME":
+            sheet.cell(row_number, 2).number_format = "@"
         if definition.value_type == "BOOLEAN":
             _add_list_validation(sheet, f"B{row_number}", ("TRUE", "FALSE"))
         if definition.value_type == "WORKFLOW":

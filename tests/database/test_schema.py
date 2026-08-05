@@ -21,8 +21,8 @@ from shared.database.repositories import MetadataRepository
 
 
 def test_database_package_imports_without_side_effects() -> None:
-    assert database_package.SCHEMA_VERSION == 2
-    assert len(database_package.REQUIRED_TABLES) == 24
+    assert database_package.SCHEMA_VERSION == 4
+    assert len(database_package.REQUIRED_TABLES) == 25
 
 
 def test_initialize_database_creates_exact_schema_and_metadata(
@@ -46,7 +46,7 @@ def test_initialize_database_creates_exact_schema_and_metadata(
         ).fetchone()[0]
 
     assert {str(row[0]) for row in table_rows} == set(REQUIRED_TABLES)
-    assert len(table_rows) == 24
+    assert len(table_rows) == 25
     assert metadata.schema_version == SCHEMA_VERSION
     assert metadata.application_version == "test-1.0.0"
     assert user_version == SCHEMA_VERSION
@@ -166,12 +166,12 @@ def test_schema_mismatch_raises_without_reset(
         connection.execute(
             """
             UPDATE database_metadata
-            SET schema_version = 3, updated_at = ?
+            SET schema_version = 5, updated_at = ?
             WHERE metadata_id = 1
             """,
             ("2026-07-20T12:00:00",),
         )
-        connection.execute("PRAGMA user_version = 3")
+        connection.execute("PRAGMA user_version = 5")
 
     with pytest.raises(SchemaMismatchError, match="newer"):
         SchemaManager().ensure_compatible_schema(database_path)
@@ -184,7 +184,7 @@ def test_schema_mismatch_raises_without_reset(
             WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
             """
         ).fetchone()[0]
-    assert table_count == 24
+    assert table_count == 25
 
 
 def test_migration_manager_is_noop_for_current_schema(
@@ -192,10 +192,10 @@ def test_migration_manager_is_noop_for_current_schema(
 ) -> None:
     manager = MigrationManager(database_path)
 
-    assert manager.get_current_version() == 2
-    assert manager.get_target_version() == 2
+    assert manager.get_current_version() == 4
+    assert manager.get_target_version() == 4
     assert manager.requires_migration() is False
-    assert manager.migrate() == 2
+    assert manager.migrate() == 4
 
 
 def test_migration_v1_to_v2_adds_payroll_period_without_data_loss(
@@ -229,7 +229,7 @@ def test_migration_v1_to_v2_adds_payroll_period_without_data_loss(
 
     migration = MigrationManager(path)
     assert migration.requires_migration()
-    assert migration.migrate() == 2
+    assert migration.migrate() == 4
 
     with SQLiteConnectionFactory().connect(path, read_only=True) as connection:
         columns = {
@@ -240,9 +240,15 @@ def test_migration_v1_to_v2_adds_payroll_period_without_data_loss(
         row = connection.execute(
             "SELECT mailbox_smtp, payroll_period FROM outlook_settings"
         ).fetchone()
+        att_row = connection.execute(
+            "SELECT minimum_duration_minutes, txt_max_rows "
+            "FROM att_data_repair_settings "
+            "WHERE att_data_repair_settings_id = 1"
+        ).fetchone()
     assert "payroll_period" in columns
     assert row["mailbox_smtp"] == "karina.hr.1@oto.co.id"
     assert row["payroll_period"] is None
+    assert tuple(att_row) == (61, 10000)
 
 
 def test_validator_reports_integrity_and_unconfigured_global_settings(
@@ -253,7 +259,7 @@ def test_validator_reports_integrity_and_unconfigured_global_settings(
     assert result.is_valid is True
     assert result.integrity_ok is True
     assert result.foreign_keys_ok is True
-    assert result.schema_version == 2
+    assert result.schema_version == 4
     assert result.missing_tables == ()
     assert result.missing_indexes == ()
     assert "Global settings are not configured yet." in result.warnings

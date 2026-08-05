@@ -1,0 +1,374 @@
+Laporan Sprint 2 - Att Data Repair
+Office Automation Suite - Karina (OAS-K)
+
+1. Ringkasan Implementasi Sprint 2
+
+Fondasi Att Data Repair sudah dibuat sebagai package baru in-memory only. Sprint ini mencakup model data, reader report Attachment Consolidation, normalizer NIK/workflow/tanggal/waktu, validator request, repair rules inti, engine analyze(), dan unit tests.
+
+Sprint ini tidak mencakup:
+- Unified UI
+- integrasi Utilities Page
+- SQLite migration
+- perubahan template konfigurasi
+- TXT writer final
+- Excel report writer final
+- job folder manager
+- Process.log
+- summary.json
+- job history
+- build EXE
+
+Tidak ada GUI, database migration, template config, TXT writer, report writer final, job folder, log, summary, atau EXE build yang dibuat pada Sprint 2.
+
+2. File Baru
+
+- utilities/att_data_repair/__init__.py
+- utilities/att_data_repair/constants.py
+- utilities/att_data_repair/statuses.py
+- utilities/att_data_repair/models.py
+- utilities/att_data_repair/report_reader.py
+- utilities/att_data_repair/normalizer.py
+- utilities/att_data_repair/validator.py
+- utilities/att_data_repair/repair_rules.py
+- utilities/att_data_repair/engine.py
+- tests/test_att_data_repair.py
+
+3. File Existing yang Berubah
+
+Tidak ada file existing yang diubah untuk Sprint 2.
+
+File existing berikut sudah modified sebelum Sprint 2 dan tidak disentuh:
+- docs/database/OAS-K_DB4_Recovery_Notes.md
+
+File audit Sprint 1 berikut sudah ada dari permintaan sebelumnya dan tidak terkait implementasi Sprint 2:
+- Att_Data_Repair_Sprint1_Audit_Plan.txt
+
+4. Penjelasan Model Data
+
+Model Sprint 2 dibuat dengan dataclass dan contract eksplisit:
+
+- AttDataRepairRequest
+  Request in-memory untuk analisis. Memuat source_report, period_start, period_end, minimum_duration_minutes, dan default waktu harian.
+
+- SourceRecord
+  Row mentah dari Valid_Records atau Invalid_Records. Menjaga lineage minimal: source_workbook, source_sheet, source_file, relative_path, source_row, source_record_no, source_status, source_reason, dan raw_value.
+
+- TimeParseMetadata
+  Metadata parsing waktu: value, original_value, normalized, dan reason.
+
+- NormalizedRecord
+  Hasil normalisasi sebelum repair rules. Menyimpan workflow, nik, date_in, time_in, date_out, time_out, parsing_flags, invalid_codes, dan raw source.
+
+- RepairChange
+  Audit perubahan per field: record_id, field_name, original_value, final_value, change_code, reason.
+
+- RepairAnomaly
+  Record yang tidak masuk final: record_id, anomaly_code, reason, action, source lineage.
+
+- FinalRecord
+  Record final in-memory yang layak untuk Sprint berikutnya: workflow, NIK, date/time final, duration_minutes, source lineage, final_status, changes.
+
+- AttDataRepairAnalysisResult
+  Hasil analisis lengkap: final_records, changed_records, anomalies, change_log, source_counts, status_counts.
+
+Exception khusus:
+- AttDataRepairError
+- RequestValidationError
+- SourceWorkbookError
+- MissingRequiredSheetError
+- MissingRequiredColumnError
+
+5. Penjelasan Reader dan Preflight
+
+Reader berada di:
+- utilities/att_data_repair/report_reader.py
+
+Reader menggunakan openpyxl read-only:
+- load_workbook(..., read_only=True, data_only=True, keep_links=False)
+
+Reader selalu menutup workbook dan tidak melakukan save atau mutation.
+
+Kontrak source:
+- Sheet wajib Valid_Records
+- Sheet wajib Invalid_Records
+
+Header matching:
+- trim whitespace
+- case-insensitive
+- underscore/whitespace tolerant
+- tidak memakai fuzzy matching berlebihan
+
+Fatal preflight:
+- Missing Valid_Records -> MissingRequiredSheetError
+- Missing Invalid_Records -> MissingRequiredSheetError
+- Missing required header -> MissingRequiredColumnError
+- Source bukan .xlsx atau tidak dapat dibaca -> SourceWorkbookError / RequestValidationError
+
+Reader mengabaikan row kosong sepenuhnya, menjaga urutan record sumber, dan tidak menggabungkan duplikat.
+
+6. Urutan Repair Rules
+
+Pipeline engine:
+
+1. validate request
+2. reader preflight dan read source workbook
+3. normalize SourceRecord menjadi NormalizedRecord
+4. apply repair rules
+5. classify final/anomaly/changed/change log
+6. return AttDataRepairAnalysisResult in-memory
+
+Urutan rule per record:
+
+1. Workflow invalid:
+   anomaly INVALID_WORKFLOW, stop record.
+
+2. NIK invalid:
+   anomaly INVALID_NIK, stop record.
+
+3. Date_In invalid:
+   anomaly INVALID_DATE, stop record.
+
+4. Date_In di luar periode:
+   anomaly OUTSIDE_REPORT_PERIOD, stop record.
+
+5. Date_Out:
+   final Date_Out selalu mengikuti Date_In.
+   Jika berbeda atau invalid, catat DATE_OUT_ALIGNED_TO_DATE_IN.
+
+6. Time format:
+   Jika format jam diperbaiki, catat TIME_FORMAT_NORMALIZED.
+
+7. Kedua jam valid:
+   Jika Time_In > Time_Out, tukar dan catat TIME_IN_OUT_SWAPPED.
+   Jika durasi kurang dari minimum, pertahankan Time_In dan sesuaikan Time_Out.
+   Jika hasil melewati 23:59, gunakan default hari.
+
+8. Hanya Time_In valid:
+   Pertahankan Time_In.
+   Isi Time_Out dari default out hari atau minimum duration.
+   Jika melewati 23:59, gunakan default hari.
+
+9. Hanya Time_Out valid:
+   Pertahankan Time_Out.
+   Isi Time_In dari default in hari atau Time_Out - minimum duration.
+   Jika kurang dari 00:00 atau tidak logis, gunakan default hari.
+
+10. Kedua jam invalid:
+    Gunakan default hari.
+
+11. Minggu:
+    Jika kedua jam valid dan durasi valid, pertahankan.
+    Jika jam invalid, gunakan default Minggu 09:30-12:05.
+
+12. Duplikat NIK + tanggal:
+    Tidak merge, tidak deduplicate, semua record diproses mandiri.
+
+13. Semua perubahan menghasilkan RepairChange.
+
+14. Record masuk FinalRecord hanya jika workflow, NIK, tanggal, waktu final, urutan waktu, dan durasi minimum valid.
+
+15. Tidak ada approval PIC.
+
+7. Daftar Status/Anomaly/Change Code
+
+Final status:
+- VALID_UNCHANGED
+- REPAIRED
+
+Change code:
+- DATE_OUT_ALIGNED_TO_DATE_IN
+- TIME_FORMAT_NORMALIZED
+- TIME_IN_OUT_SWAPPED
+- PARTIAL_TIME_REPAIRED
+- DEFAULT_TIME_APPLIED
+- MINIMUM_DURATION_APPLIED
+
+Anomaly code:
+- INVALID_NIK
+- INVALID_DATE
+- OUTSIDE_REPORT_PERIOD
+- INVALID_WORKFLOW
+
+Fatal/preflight code:
+- MISSING_REQUIRED_SHEET
+- MISSING_REQUIRED_COLUMN
+- INVALID_SOURCE_WORKBOOK
+- INVALID_REQUEST
+
+8. Test yang Ditambahkan
+
+File test baru:
+- tests/test_att_data_repair.py
+
+Jumlah test:
+- 19 tests
+
+Coverage test utama:
+- reader membaca Valid_Records
+- reader membaca Invalid_Records
+- lineage dipertahankan
+- empty row diabaikan
+- missing Valid_Records fatal
+- missing Invalid_Records fatal
+- missing required header fatal
+- workbook sumber tidak dimodifikasi
+- NIK string valid
+- leading zero dipertahankan
+- NIK kosong/error menjadi anomaly
+- workflow HO/Branch/BRANCH valid
+- workflow kosong/unknown anomaly
+- Excel date cell valid
+- MM/DD/YYYY text
+- DD/MM/YYYY yang aman
+- ambiguous date anomaly
+- date tanpa tahun dengan satu tahun periode
+- date tanpa tahun pada periode lintas tahun anomaly
+- outside period anomaly
+- Date_Out berbeda/invalid disejajarkan ke Date_In
+- 7;20, 7.20, 7:2
+- datetime.time valid
+- invalid time dan spreadsheet error
+- In > Out ditukar
+- durasi 60 menit menjadi 61 menit
+- durasi 61 menit tidak berubah
+- hanya Time_In valid
+- hanya Time_Out valid
+- kedua jam invalid
+- adjustment melewati 23:59 memakai default
+- weekday, Saturday, Sunday defaults
+- duplicate NIK+tanggal tetap dua FinalRecord
+- changed_records dan change_log konsisten
+
+9. Perintah Test yang Dijalankan
+
+pytest tests/test_att_data_repair.py -q
+pytest tests/test_attachment_consolidation.py -q
+pytest tests/ui/utilities -q
+
+10. Hasil Test
+
+Att Data Repair:
+- 19 passed
+
+Attachment Consolidation regression:
+- 6 passed
+
+Utilities regression subset:
+- 17 passed
+
+11. Regression Test
+
+Regression Attachment Consolidation lulus:
+- pytest tests/test_attachment_consolidation.py -q
+- 6 passed
+
+Regression Utilities subset lulus:
+- pytest tests/ui/utilities -q
+- 17 passed
+
+Full project test tidak dijalankan karena Sprint 2 membatasi scope ke Att Data Repair dan regression relevan.
+
+12. Temuan atau Penyimpangan dari Audit Sprint 1
+
+Tidak ada penyimpangan substantif.
+
+Implementasi tetap mengikuti hasil audit Sprint 1:
+- package baru
+- tidak mengubah Attachment Consolidation
+- tidak mengubah outlook/parser.py
+- tidak mengubah attendance/engine.py
+- tidak menambah dependency
+- tidak menyentuh database schema
+- tidak menyentuh Unified Configuration Template
+- tidak menyentuh GUI
+- tidak membuat TXT output
+- tidak membuat Excel report output
+- tidak membuat job folder
+- tidak membuat Process.log
+- tidak membuat summary.json
+- tidak menulis job history
+- tidak build EXE
+
+13. Ambiguitas yang Tidak Diimplementasikan
+
+Belum diimplementasikan karena eksplisit di luar Sprint 2:
+- TXT naming final Att_Data_Repair_[Workflow]-[NNN]_[RRRR].txt
+- random code 4 digit shared per job
+- split TXT final
+- job folder structure
+- Process.log
+- summary.json
+- Excel report final
+- SQLite config
+- Unified Configuration Template
+- Unified UI integration
+- job_history/job_files/job_status_events integration
+
+14. Risiko Tersisa untuk Sprint 3
+
+Risiko utama:
+- TXT writer harus memenuhi naming requirement baru, berbeda dari OutlookTxtWriter dan AttendanceHRISTXTWriter.
+- Random 4 digit harus sama untuk seluruh pecahan TXT dalam satu job.
+- Job folder pattern masih perlu keputusan: mengikuti existing Utilities atau requirement konseptual Att_Data_Repair/YYYY-MM-DD_XX.
+- Excel report final harus menjaga audit detail tanpa mengubah source workbook.
+- Integrasi output harus tetap tidak mengganggu Attachment Consolidation.
+
+15. Git Diff --Stat
+
+Catatan:
+Pada saat laporan Sprint 2 selesai, file Sprint 2 masih untracked sehingga tidak muncul di git diff --stat default.
+
+Output git diff --stat yang terlihat saat itu:
+
+ docs/database/OAS-K_DB4_Recovery_Notes.md | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+Catatan penting:
+File docs/database/OAS-K_DB4_Recovery_Notes.md adalah perubahan existing sebelum Sprint 2 dan tidak disentuh.
+
+16. Git Status
+
+Git status saat laporan Sprint 2 selesai:
+
+ M docs/database/OAS-K_DB4_Recovery_Notes.md
+?? Att_Data_Repair_Sprint1_Audit_Plan.txt
+?? tests/test_att_data_repair.py
+?? utilities/att_data_repair/
+
+Setelah file laporan TXT ini dibuat, git status juga akan menampilkan:
+
+?? Att_Data_Repair_Sprint2_Report.txt
+
+17. Git Diff --Check
+
+git diff --check mendeteksi trailing whitespace pada:
+- docs/database/OAS-K_DB4_Recovery_Notes.md
+
+Detail:
+- baris 3: trailing whitespace
+- baris 4: trailing whitespace
+- baris 5: trailing whitespace
+- baris 6: trailing whitespace
+
+File tersebut sudah modified sebelum Sprint 2 dan tidak boleh disentuh, sehingga issue whitespace tersebut dilaporkan tetapi tidak diperbaiki.
+
+18. Definition of Done Sprint 2
+
+Terpenuhi:
+- package utilities/att_data_repair tersedia
+- model data tersedia
+- reader dapat membaca Valid_Records dan Invalid_Records
+- missing sheet/header menghentikan proses
+- normalisasi NIK, workflow, tanggal, dan waktu tersedia
+- repair rules inti berjalan
+- hasil diklasifikasikan menjadi Final Records, Changed Records, Anomaly, dan Change Log
+- duplikat NIK+tanggal tidak dihapus
+- tidak ada GUI baru
+- tidak ada database migration
+- tidak ada perubahan Unified Configuration Template
+- tidak ada TXT output
+- tidak ada Excel report output
+- tests baru lulus
+- regression Attachment Consolidation lulus
+- regression Utilities subset lulus
+- perubahan existing user tidak terganggu

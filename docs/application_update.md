@@ -4,10 +4,12 @@
 
 OAS-K supports manual, application-only updates. The application package is
 selected and staged from Settings, then a standalone updater process applies the
-staged application after OAS-K closes gracefully.
+staged application after OAS-K closes gracefully. The package never replaces
+the Data Root or carries a database file, but the new application may run a
+versioned database migration after the application files are replaced.
 
-No automatic download, GitHub API, token storage, database migration, or Data
-Root replacement is part of Sprint 2.
+Automatic download, GitHub API, token storage, and Data Root replacement are
+not part of this update flow.
 
 ## Folder Layout
 
@@ -57,9 +59,42 @@ The new application starts with:
 OAS-K.exe --post-update --update-transaction <transaction.json>
 ```
 
-It validates the target version, Application Root, Data Root, read-only database
-open, schema compatibility, logger write access, and a lightweight UI-shell
-construction path when enabled. It writes `healthcheck_success.json` atomically.
+It validates the target version, Application Root, and Data Root. It then finds
+the database belonging to the transaction Data Root, creates a pre-migration
+backup when the schema is old, runs every registered migration in sequence, and
+validates database integrity and schema compatibility. Logger write access and
+a lightweight UI-shell construction path are also checked when enabled. A
+successful run writes `healthcheck_success.json` atomically.
+
+If database migration or validation fails, the health check fails and the
+application updater requests application rollback. The pre-update and
+pre-migration database backups remain available for recovery; the updater never
+silently replaces the production database.
+
+## Release Database Gate
+
+Before packaging a release:
+
+1. Record the current production schema and the new app's `SCHEMA_VERSION`.
+2. Confirm every sequential migration script exists between those versions.
+3. Declare the supported schema in `manifest.json` using
+   `database_schema_from`, `database_schema_to`, and `migration_required`.
+4. Validate the package against the actual old schema, not only a newly created
+   development database.
+5. Run a temporary Data Root smoke test through prepare, backup, migration,
+   post-update health check, and final database validation.
+6. Verify existing production rows survive and any newly required table or row
+   is present after migration.
+
+Required automated checks:
+
+```powershell
+python -m pytest tests/update tests/database/test_startup_migration.py -q
+```
+
+The release is blocked if the package reports an unsupported active schema, a
+migration step is missing, backup fails, database integrity fails, or the final
+schema does not equal the app's `SCHEMA_VERSION`.
 
 ## Rollback
 
@@ -133,7 +168,7 @@ Manual simulated update should use a temporary Application Root and Data Root:
 
 ## Limitations
 
-Sprint 2 does not perform database migration, automatic download, GitHub API
-calls, Windows Service integration, Task Scheduler integration, elevation, or
-cleanup beyond STAGED cancellation. The updater is intentionally small and
-standard-library based.
+The updater does not perform automatic download, GitHub API calls, Windows
+Service integration, Task Scheduler integration, elevation, or cleanup beyond
+STAGED cancellation. Database migrations are sequential and versioned; a
+release cannot skip an unregistered schema step.

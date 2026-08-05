@@ -26,6 +26,7 @@ def test_opening_utilities_landing_has_zero_side_effects(
         services.utilities_service,
         services.comparison_result_service,
         services.attachment_consolidation_service,
+        services.att_data_repair_service,
     ):
         monkeypatch.setattr(
             service,
@@ -37,6 +38,8 @@ def test_opening_utilities_landing_has_zero_side_effects(
         (services.comparison_result_service, "run_job"),
         (services.attachment_consolidation_service, "preflight"),
         (services.attachment_consolidation_service, "run_job"),
+        (services.att_data_repair_service, "preflight"),
+        (services.att_data_repair_service, "run_job"),
     ):
         monkeypatch.setattr(
             service,

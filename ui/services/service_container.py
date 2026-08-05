@@ -27,6 +27,7 @@ class AppServices:
     utilities_service: Any = None
     comparison_result_service: Any = None
     attachment_consolidation_service: Any = None
+    att_data_repair_service: Any = None
 
 
 def build_default_app_services(
@@ -49,6 +50,7 @@ def build_default_app_services(
         AttachmentConsolidationAdapter,
     )
     from ui.adapters.comparison_result_adapter import ComparisonResultAdapter
+    from ui.adapters.att_data_repair_adapter import AttDataRepairAdapter
     from ui.services.attendance_service import AttendanceService
     from ui.services.database_settings_service import DatabaseSettingsService
     from ui.services.dashboard_service import DashboardService
@@ -60,6 +62,7 @@ def build_default_app_services(
         AttachmentConsolidationService,
     )
     from ui.services.comparison_result_service import ComparisonResultService
+    from ui.services.att_data_repair_service import AttDataRepairService
     from ui.services.utilities_service import UtilitiesService
     from ui.services.outlook_revisi_service import OutlookRevisiService
     from ui.services.module_configuration_service import ModuleConfigurationService
@@ -109,5 +112,8 @@ def build_default_app_services(
         ),
         attachment_consolidation_service=AttachmentConsolidationService(
             storage_service, AttachmentConsolidationAdapter()
+        ),
+        att_data_repair_service=AttDataRepairService(
+            storage_service, AttDataRepairAdapter()
         ),
     )

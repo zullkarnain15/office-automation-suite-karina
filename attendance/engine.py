@@ -35,15 +35,15 @@ from __future__ import annotations
 
 import json
 import secrets
+from collections import defaultdict
+from collections.abc import Iterator
+from datetime import date
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from config.app_config import DATE_FORMAT
 from config.app_config import TIME_FORMAT
-from collections import defaultdict
-from datetime import date
-from datetime import datetime
-from typing import Any
 
 from shared.logger import get_logger
 
@@ -646,14 +646,10 @@ class AttendanceHRISTXTWriter:
                 "generated_files": generated_files,
             }
 
-        chunks = self._chunk_records(
-            sorted_records,
-            max_rows_per_file,
-        )
         used_random_suffixes = self._existing_random_suffixes(output_folder)
 
         for file_index, records_chunk in enumerate(
-            chunks,
+            self._chunk_records(sorted_records, max_rows_per_file),
             start=1,
         ):
             random_suffix = self._unique_random_suffix(
@@ -743,14 +739,12 @@ class AttendanceHRISTXTWriter:
     def _chunk_records(
         records: list[dict[str, Any]],
         chunk_size: int,
-    ) -> list[list[dict[str, Any]]]:
+    ) -> Iterator[list[dict[str, Any]]]:
         """
-        Split records into chunks.
+        Yield records in chunks without retaining every slice at once.
         """
-        return [
-            records[index:index + chunk_size]
-            for index in range(0, len(records), chunk_size)
-        ]
+        for index in range(0, len(records), chunk_size):
+            yield records[index:index + chunk_size]
 
     @staticmethod
     def _create_job_id() -> str:
@@ -1247,42 +1241,31 @@ class AttendanceExcelReportWriter:
             color="FFFFFF",
         )
 
-        for cell in sheet[1]:
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = alignment_class(
-                horizontal="center",
-                vertical="center",
-            )
-
+        cell_alignment = alignment_class(
+            vertical="top",
+            wrap_text=True,
+        )
+        column_widths: dict[int, int] = {}
         for row in sheet.iter_rows():
             for cell in row:
-                cell.alignment = alignment_class(
-                    vertical="top",
-                    wrap_text=True,
-                )
+                if cell.row == 1:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                cell.alignment = cell_alignment
+                if cell.value is not None:
+                    column_widths[cell.column] = max(
+                        column_widths.get(cell.column, 0),
+                        len(str(cell.value)),
+                    )
 
-        for column_cells in sheet.columns:
-            max_length = 0
-            column_letter = get_column_letter(column_cells[0].column)
-
-            for cell in column_cells:
-                value = cell.value
-
-                if value is None:
-                    continue
-
-                max_length = max(
-                    max_length,
-                    len(str(value)),
-                )
-
+        for column, max_length in column_widths.items():
             adjusted_width = min(
                 max(max_length + 2, 12),
                 60,
             )
-
-            sheet.column_dimensions[column_letter].width = adjusted_width
+            sheet.column_dimensions[
+                get_column_letter(column)
+            ].width = adjusted_width
 
         sheet.freeze_panes = "A2"
         sheet.auto_filter.ref = sheet.dimensions

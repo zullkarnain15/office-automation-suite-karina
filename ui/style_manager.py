@@ -24,7 +24,6 @@ from ui.constants import (
     MAIN_HEADER,
     OLD_GOLD,
     PAGE_TITLE_FONT,
-    PRIMARY_ACTION,
     ROYAL_BLUE,
     SECTION_TITLE_FONT,
     SIDEBAR_ACTIVE,
@@ -33,6 +32,9 @@ from ui.constants import (
     SKY_BLUE,
     SMALL_FONT,
     SUCCESS,
+    TEAL,
+    TEAL_HOVER,
+    TEAL_PRESSED,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     WARNING,
@@ -85,8 +87,8 @@ class StyleManager:
         style.configure("Header.TFrame", background=MAIN_HEADER)
         style.configure(
             "TButton",
-            background=IVORY_WHITE,
-            foreground=TEXT_PRIMARY,
+            background=TEAL,
+            foreground=IVORY_WHITE,
             padding=(9, 6),
             bordercolor=BORDER,
             borderwidth=2,
@@ -97,9 +99,9 @@ class StyleManager:
         style.map(
             "TButton",
             background=[
-                ("pressed", "#DDD5BF"),
-                ("active", "#F4E2B9"),
-                ("focus", "#F4E2B9"),
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
                 ("disabled", "#D7D1C0"),
             ],
             foreground=[("disabled", "#77716A")],
@@ -292,69 +294,72 @@ class StyleManager:
             "Header.TLabel",
             background=MAIN_HEADER,
         )
+        welcome_background = "#081A33"
+        welcome_foreground = "#DCEBFF"
+        style.configure("WelcomeSplash.TFrame", background=welcome_background)
         style.configure(
             "WelcomeImage.TLabel",
-            background=MAIN_BACKGROUND,
+            background=welcome_background,
         )
         style.configure(
             "WelcomeEyebrow.TLabel",
-            background=MAIN_BACKGROUND,
-            foreground=OLD_GOLD,
+            background=welcome_background,
+            foreground="#8FB8FF",
             font=(display_family, 9),
         )
         style.configure(
             "WelcomeTitle.TLabel",
-            background=MAIN_BACKGROUND,
-            foreground=TEXT_PRIMARY,
+            background=welcome_background,
+            foreground=welcome_foreground,
             font=(display_family, 13, "bold"),
         )
         for name, foreground in (
-            ("WelcomeTitleShimmer1.TLabel", "#3B394A"),
-            ("WelcomeTitleShimmer2.TLabel", OLD_GOLD),
-            ("WelcomeTitleShimmer3.TLabel", FOREST_GREEN),
-            ("WelcomeTitleShimmer4.TLabel", OLD_GOLD),
-            ("WelcomeTitleShimmer5.TLabel", TEXT_PRIMARY),
+            ("WelcomeTitleShimmer1.TLabel", "#8FB8FF"),
+            ("WelcomeTitleShimmer2.TLabel", "#F4C95D"),
+            ("WelcomeTitleShimmer3.TLabel", "#7DD3FC"),
+            ("WelcomeTitleShimmer4.TLabel", "#F4C95D"),
+            ("WelcomeTitleShimmer5.TLabel", welcome_foreground),
         ):
             style.configure(
                 name,
-                background=MAIN_BACKGROUND,
+                background=welcome_background,
                 foreground=foreground,
                 font=(display_family, 13, "bold"),
             )
         style.configure(
             "WelcomeByline.TLabel",
-            background=MAIN_BACKGROUND,
-            foreground=ROYAL_BLUE,
+            background=welcome_background,
+            foreground="#9CC3FF",
             font=(display_family, 9),
         )
         style.configure(
             "WelcomeStatus.TLabel",
-            background=MAIN_BACKGROUND,
-            foreground=TEXT_SECONDARY,
+            background=welcome_background,
+            foreground="#E5EEF9",
             font=default_font,
         )
         style.configure(
             "WelcomeStart.TButton",
-            background=MAIN_BACKGROUND,
+            background=welcome_background,
             borderwidth=0,
             padding=0,
             relief="flat",
             focusthickness=1,
-            focuscolor=OLD_GOLD,
+            focuscolor="#F4C95D",
         )
         style.map(
             "WelcomeStart.TButton",
             background=[
-                ("active", MAIN_BACKGROUND),
-                ("pressed", MAIN_BACKGROUND),
-                ("disabled", MAIN_BACKGROUND),
+                ("active", welcome_background),
+                ("pressed", welcome_background),
+                ("disabled", welcome_background),
             ],
         )
         for name, border in (
-            ("WelcomeStartGlow1.TFrame", OLD_GOLD),
-            ("WelcomeStartGlow2.TFrame", "#FF5AA5"),
-            ("WelcomeStartGlow3.TFrame", "#FFE45E"),
-            ("WelcomeStartGlow4.TFrame", "#FF5AA5"),
+            ("WelcomeStartGlow1.TFrame", "#F4C95D"),
+            ("WelcomeStartGlow2.TFrame", "#3B82F6"),
+            ("WelcomeStartGlow3.TFrame", "#7DD3FC"),
+            ("WelcomeStartGlow4.TFrame", "#3B82F6"),
         ):
             style.configure(name, background=border)
         style.configure(
@@ -418,7 +423,7 @@ class StyleManager:
         )
         style.configure(
             "ChoiceSegmentSelected.TLabel",
-            background=ROYAL_BLUE,
+            background=TEAL,
             foreground=WHITE,
             bordercolor=OLD_GOLD,
             relief="solid",
@@ -438,7 +443,7 @@ class StyleManager:
         )
         style.configure(
             "OptionChipSelected.TLabel",
-            background=ROYAL_BLUE,
+            background=TEAL,
             foreground=IVORY_WHITE,
             bordercolor=OLD_GOLD,
             relief="solid",
@@ -517,7 +522,7 @@ class StyleManager:
         )
         style.configure(
             "Primary.TButton",
-            background=PRIMARY_ACTION,
+            background=TEAL,
             foreground=IVORY_WHITE,
             padding=(11, 7),
             font=button_font,
@@ -529,17 +534,17 @@ class StyleManager:
         style.map(
             "Primary.TButton",
             background=[
-                ("pressed", "#477D31"),
-                ("active", "#6DAF45"),
-                ("focus", "#6DAF45"),
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
                 ("disabled", "#A5B79A"),
             ],
             foreground=[("disabled", "#ECE5D0")],
         )
         style.configure(
             "Secondary.TButton",
-            background=WHITE,
-            foreground=MAIN_HEADER,
+            background=TEAL,
+            foreground=IVORY_WHITE,
             padding=(10, 7),
             font=button_font,
             bordercolor=BORDER,
@@ -550,16 +555,16 @@ class StyleManager:
         style.map(
             "Secondary.TButton",
             background=[
-                ("pressed", "#DDD5BF"),
-                ("active", "#F4E2B9"),
-                ("focus", "#F4E2B9"),
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
                 ("disabled", "#D7D1C0"),
             ],
             foreground=[("disabled", "#77716A")],
         )
         style.configure(
             "PrimaryAction.TButton",
-            background=PRIMARY_ACTION,
+            background=TEAL,
             foreground=IVORY_WHITE,
             padding=(11, 7),
             font=button_font,
@@ -571,17 +576,17 @@ class StyleManager:
         style.map(
             "PrimaryAction.TButton",
             background=[
-                ("pressed", "#477D31"),
-                ("active", "#6DAF45"),
-                ("focus", "#6DAF45"),
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
                 ("disabled", "#A5B79A"),
             ],
             foreground=[("disabled", "#ECE5D0")],
         )
         style.configure(
             "SecondaryAction.TButton",
-            background=WHITE,
-            foreground=MAIN_HEADER,
+            background=TEAL,
+            foreground=IVORY_WHITE,
             bordercolor=BORDER,
             padding=(10, 7),
             font=button_font,
@@ -592,16 +597,16 @@ class StyleManager:
         style.map(
             "SecondaryAction.TButton",
             background=[
-                ("pressed", "#DDD5BF"),
-                ("active", "#F4E2B9"),
-                ("focus", "#F4E2B9"),
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
                 ("disabled", "#D7D1C0"),
             ],
             foreground=[("disabled", "#77716A")],
         )
         style.configure(
             "DangerAction.TButton",
-            background=ERROR,
+            background=TEAL,
             foreground=IVORY_WHITE,
             padding=(10, 7),
             font=button_font,
@@ -613,8 +618,9 @@ class StyleManager:
         style.map(
             "DangerAction.TButton",
             background=[
-                ("pressed", "#922E2E"),
-                ("active", ERROR),
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
                 ("disabled", "#BCA2A2"),
             ],
             foreground=[("disabled", "#ECE5D0")],
@@ -679,6 +685,8 @@ class StyleManager:
         )
         style.configure(
             "Compact.TButton",
+            background=TEAL,
+            foreground=IVORY_WHITE,
             padding=(8, 5),
             borderwidth=2,
             bordercolor=BORDER,
@@ -686,10 +694,20 @@ class StyleManager:
             focuscolor=OLD_GOLD,
             font=(ui_family, 8),
         )
+        style.map(
+            "Compact.TButton",
+            background=[
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
+                ("disabled", "#D7D1C0"),
+            ],
+            foreground=[("disabled", "#77716A")],
+        )
         style.configure(
             "CompactSoft.TButton",
-            background=IVORY_WHITE,
-            foreground=MAIN_HEADER,
+            background=TEAL,
+            foreground=IVORY_WHITE,
             padding=(10, 5),
             borderwidth=2,
             bordercolor=BORDER,
@@ -700,16 +718,17 @@ class StyleManager:
         style.map(
             "CompactSoft.TButton",
             background=[
-                ("pressed", "#DDD5BF"),
-                ("active", "#F4E2B9"),
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
                 ("disabled", "#E7DFC9"),
             ],
             foreground=[("disabled", "#77716A")],
         )
         style.configure(
             "Attendance.TButton",
-            background=IVORY_WHITE,
-            foreground=MAIN_HEADER,
+            background=TEAL,
+            foreground=IVORY_WHITE,
             padding=(10, 5),
             borderwidth=2,
             bordercolor=BORDER,
@@ -720,9 +739,9 @@ class StyleManager:
         style.map(
             "Attendance.TButton",
             background=[
-                ("pressed", "#DDD5BF"),
-                ("active", "#F4E2B9"),
-                ("focus", "#F4E2B9"),
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
                 ("disabled", "#D7D1C0"),
             ],
             foreground=[("disabled", "#77716A")],
@@ -769,7 +788,7 @@ class StyleManager:
         )
         style.configure(
             "AttendanceDanger.TButton",
-            background=ERROR,
+            background=TEAL,
             foreground=IVORY_WHITE,
             padding=(10, 5),
             borderwidth=2,
@@ -778,9 +797,19 @@ class StyleManager:
             focuscolor=OLD_GOLD,
             font=button_font,
         )
+        style.map(
+            "AttendanceDanger.TButton",
+            background=[
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
+                ("disabled", "#D7D1C0"),
+            ],
+            foreground=[("disabled", "#77716A")],
+        )
         style.configure(
             "CompactPrimary.TButton",
-            background=PRIMARY_ACTION,
+            background=TEAL,
             foreground=IVORY_WHITE,
             padding=(9, 5),
             borderwidth=2,
@@ -792,14 +821,15 @@ class StyleManager:
         style.map(
             "CompactPrimary.TButton",
             background=[
-                ("pressed", "#477D31"),
-                ("active", "#6DAF45"),
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
                 ("disabled", "#A5B79A"),
             ],
         )
         style.configure(
             "CompactDanger.TButton",
-            background=ERROR,
+            background=TEAL,
             foreground=IVORY_WHITE,
             padding=(8, 5),
             borderwidth=2,
@@ -807,6 +837,16 @@ class StyleManager:
             focusthickness=1,
             focuscolor=OLD_GOLD,
             font=button_font,
+        )
+        style.map(
+            "CompactDanger.TButton",
+            background=[
+                ("pressed", TEAL_PRESSED),
+                ("active", TEAL_HOVER),
+                ("focus", TEAL_HOVER),
+                ("disabled", "#D7D1C0"),
+            ],
+            foreground=[("disabled", "#77716A")],
         )
         style.configure(
             "Teal.Horizontal.TProgressbar",

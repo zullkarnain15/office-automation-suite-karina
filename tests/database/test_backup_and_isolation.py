@@ -14,6 +14,7 @@ from shared.database import (
     BackupError,
     BackupManager,
     DatabaseValidator,
+    REQUIRED_TABLES,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -94,7 +95,7 @@ def test_manual_database_tool_uses_explicit_temp_paths(
     assert database_path.is_file()
     assert backup_path.is_file()
     assert f"Schema version: {SCHEMA_VERSION}" in completed.stdout
-    assert "Table count: 24" in completed.stdout
+    assert f"Table count: {len(REQUIRED_TABLES)}" in completed.stdout
     assert "Validation: PASS" in completed.stdout
 
 

@@ -4,6 +4,26 @@ from __future__ import annotations
 
 from shared.database.importing.models import WorkbookIdentity
 
+ATT_DATA_REPAIR_DEFAULT_SETTINGS: dict[str, object] = {
+    "att_data_repair_settings_id": 1,
+    "enabled": 1,
+    "minimum_duration_minutes": 61,
+    "weekday_default_in": "09:30",
+    "weekday_default_out": "17:00",
+    "saturday_default_in": "09:30",
+    "saturday_default_out": "12:05",
+    "saturday_missing_out_default": "11:00",
+    "sunday_invalid_default_in": "09:30",
+    "sunday_invalid_default_out": "12:05",
+    "midnight_time_out_default": "23:59",
+    "txt_max_rows": 10000,
+    "generate_txt": 1,
+    "generate_excel_report": 1,
+    "use_global_period": 1,
+    "use_global_output": 1,
+    "updated_by": "Default",
+}
+
 WORKBOOK_SIGNATURES: dict[WorkbookIdentity, frozenset[str]] = {
     WorkbookIdentity.ATTENDANCE_LEGACY: frozenset(
         {"General", "MDB_HO", "MDB_Branch", "Output", "Reference"}
@@ -58,6 +78,7 @@ MODULE_TABLES: dict[str, tuple[str, ...]] = {
     "UTILITIES": (
         "comparison_settings",
         "attachment_consolidation_settings",
+        "att_data_repair_settings",
     ),
     "GLOBAL": ("global_settings",),
 }
@@ -83,6 +104,7 @@ TABLE_KEYS: dict[str, tuple[str, ...]] = {
     "hris_assisted_steps": ("step_name",),
     "comparison_settings": ("comparison_settings_id",),
     "attachment_consolidation_settings": ("attachment_settings_id",),
+    "att_data_repair_settings": ("att_data_repair_settings_id",),
 }
 
 TABLE_PRIMARY_KEYS: dict[str, str] = {
@@ -164,6 +186,7 @@ UNIFIED_VERTICAL_SETTING_SHEETS: dict[str, tuple[str, str]] = {
         "UTILITIES",
         "attachment_consolidation_settings",
     ),
+    "Att_Data_Repair": ("UTILITIES", "att_data_repair_settings"),
 }
 
 UNIFIED_HORIZONTAL_SETTING_SHEETS: dict[str, tuple[str, str, str]] = {
@@ -189,6 +212,11 @@ UNIFIED_HORIZONTAL_SETTING_SHEETS: dict[str, tuple[str, str, str]] = {
         "attachment_consolidation_settings",
         "use_global_output",
     ),
+    "Att_Data_Repair": (
+        "UTILITIES",
+        "att_data_repair_settings",
+        "enabled",
+    ),
 }
 
 SINGLETON_IDS: dict[str, tuple[str, int]] = {
@@ -198,4 +226,5 @@ SINGLETON_IDS: dict[str, tuple[str, int]] = {
     "hris_settings": ("hris_settings_id", 1),
     "comparison_settings": ("comparison_settings_id", 1),
     "attachment_consolidation_settings": ("attachment_settings_id", 1),
+    "att_data_repair_settings": ("att_data_repair_settings_id", 1),
 }

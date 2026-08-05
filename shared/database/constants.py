@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 JOURNAL_MODE = "DELETE"
 SYNCHRONOUS_MODE = "FULL"
@@ -25,6 +25,7 @@ REQUIRED_TABLES: tuple[str, ...] = (
     "hris_assisted_steps",
     "comparison_settings",
     "attachment_consolidation_settings",
+    "att_data_repair_settings",
     "job_history",
     "job_files",
     "job_status_events",

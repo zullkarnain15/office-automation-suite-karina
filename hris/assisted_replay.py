@@ -48,6 +48,9 @@ class HRISAssistedReplayEngine:
         )
         self.automation = automation or self._load_pyautogui()
         self.excluded_step_names = excluded_step_names or set()
+        self.steps = tuple(
+            resolve_hris_macro_steps(configuration.assisted_steps)
+        )
         self.last_context: dict[str, Any] = {}
 
     def run_item(
@@ -56,8 +59,7 @@ class HRISAssistedReplayEngine:
         start_date: str,
         end_date: str,
     ) -> HRISAssistedReplayResult:
-        steps = resolve_hris_macro_steps(self.configuration.assisted_steps)
-        for step in steps:
+        for step in self.steps:
             if step.step_name in self.excluded_step_names:
                 continue
             self.last_context = {

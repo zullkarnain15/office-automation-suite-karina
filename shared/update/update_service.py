@@ -10,8 +10,10 @@ import tempfile
 from pathlib import Path
 
 from config.app_config import PROJECT_ROOT
+from shared.database.backup_manager import BackupManager
 from shared.database.connection_factory import SQLiteConnectionFactory
 from shared.database.constants import SCHEMA_VERSION
+from shared.database.database_validator import DatabaseValidator
 from shared.database.time_utils import current_timestamp
 from shared.logger import get_logger
 from shared.recovery.backup_service import DatabaseBackupService
@@ -56,6 +58,7 @@ class ApplicationUpdateService:
     ) -> None:
         self.validator = validator or UpdatePackageValidator()
         self.staging_service = staging_service or UpdateStagingService()
+        self._backup_service_provided = backup_service is not None
         self.backup_service = backup_service or DatabaseBackupService(
             audit_service=_PreUpdateBackupAudit()
         )
@@ -110,7 +113,8 @@ class ApplicationUpdateService:
             validation.info.manifest.version,
             layout.data_root,
         )
-        backup = self.backup_service.backup(
+        backup_service = self._backup_service_for_schema(active_schema_version)
+        backup = backup_service.backup(
             DatabaseBackupRequest(
                 layout.database_path,
                 layout.backup_root,
@@ -165,6 +169,19 @@ class ApplicationUpdateService:
             transaction_id=transaction.transaction_id,
             transaction_path=transaction.transaction_path,
             warnings=validation.warnings,
+        )
+
+    def _backup_service_for_schema(self, schema_version: int) -> DatabaseBackupService:
+        if self._backup_service_provided:
+            return self.backup_service
+        return DatabaseBackupService(
+            backup_manager=BackupManager(
+                validator=DatabaseValidator(
+                    self.connection_factory,
+                    expected_version=schema_version,
+                )
+            ),
+            audit_service=_PreUpdateBackupAudit(),
         )
 
     def _active_schema_version(self, database_path: Path) -> int:

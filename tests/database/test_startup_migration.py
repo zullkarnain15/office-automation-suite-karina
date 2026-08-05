@@ -66,10 +66,10 @@ def test_startup_migration_backs_up_and_preserves_production_data(
     )
 
     assert result.status == "MIGRATED"
-    assert (result.previous_version, result.current_version) == (1, 2)
+    assert (result.previous_version, result.current_version) == (1, 4)
     assert result.backup_path is not None and result.backup_path.is_file()
     assert result.backup_path.parent == backup_root
-    assert result.backup_path.name.startswith("OAS-K_before_schema_v2_")
+    assert result.backup_path.name.startswith("OAS-K_before_schema_v4_")
     assert DatabaseValidator(expected_version=1).validate(
         result.backup_path
     ).is_valid
@@ -88,7 +88,7 @@ def test_startup_migration_backs_up_and_preserves_production_data(
         None,
     )
     assert any("Mencadangkan" in message for message in messages)
-    assert any("v1 ke v2" in message for message in messages)
+    assert any("v1 ke v4" in message for message in messages)
 
 
 def test_current_database_is_noop_and_does_not_create_backup(

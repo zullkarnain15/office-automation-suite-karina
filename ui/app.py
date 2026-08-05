@@ -149,7 +149,7 @@ class OASKUnifiedApp:
             logger=self.context.logger,
         )
         self._welcome_image = self._welcome_icon_manager.load(
-            "welcome.png",
+            "app.png",
             size=140,
         )
         self._welcome_start_image = self._welcome_icon_manager.load(
@@ -157,14 +157,14 @@ class OASKUnifiedApp:
             size=(200, 80),
         )
 
-        splash = ttk.Frame(self.root, style="OASK.TFrame")
+        splash = ttk.Frame(self.root, style="WelcomeSplash.TFrame")
         splash.place(x=0, y=0, relwidth=1, relheight=1)
         splash.columnconfigure(0, weight=1)
         splash.columnconfigure(2, weight=1)
         splash.rowconfigure(0, weight=1)
         splash.rowconfigure(2, weight=1)
 
-        content = ttk.Frame(splash, style="OASK.TFrame")
+        content = ttk.Frame(splash, style="WelcomeSplash.TFrame")
         content.grid(row=1, column=1)
         if self._welcome_image is not None:
             ttk.Label(
@@ -173,7 +173,7 @@ class OASKUnifiedApp:
                 style="WelcomeImage.TLabel",
             ).grid(row=0, column=0, rowspan=4, padx=(0, 24))
 
-        text = ttk.Frame(content, style="OASK.TFrame")
+        text = ttk.Frame(content, style="WelcomeSplash.TFrame")
         text.grid(row=0, column=1, rowspan=4, sticky="w")
         ttk.Label(
             text,

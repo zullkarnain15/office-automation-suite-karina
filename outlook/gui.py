@@ -30,9 +30,11 @@ APP_TEXT = "#102A43"
 APP_MUTED_TEXT = "#60758A"
 APP_ACCENT = "#198FA3"
 APP_ACCENT_HOVER = "#123B63"
+APP_BUTTON = "#2F8F83"
+APP_BUTTON_HOVER = "#36A397"
 APP_SUCCESS = "#43A58F"
-WORKFLOW_ACCENT = "#B45309"
-WORKFLOW_ACCENT_HOVER = "#92400E"
+WORKFLOW_ACCENT = APP_BUTTON
+WORKFLOW_ACCENT_HOVER = APP_BUTTON_HOVER
 APP_LOG_BG = "#24384C"
 APP_LOG_FG = "#F4F7FB"
 APP_TITLE_FONT = ("Segoe UI", 24, "bold")
@@ -122,6 +124,13 @@ class OutlookRevisiGUI:
             config_frame,
             text="Browse",
             font=BUTTON_FONT,
+            bg=APP_BUTTON,
+            fg="white",
+            activebackground=APP_BUTTON_HOVER,
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            cursor="hand2",
             command=self._browse_configuration,
         ).grid(row=0, column=1, padx=(8, 0))
 
@@ -202,6 +211,8 @@ class OutlookRevisiGUI:
             font=BUTTON_FONT,
             bg=APP_SUCCESS,
             fg="white",
+            activebackground=APP_SUCCESS,
+            activeforeground="white",
             command=self._start_process,
         )
         self.run_button.grid(row=1, column=4, padx=(24, 0), pady=(8, 0))
@@ -595,10 +606,10 @@ class OutlookRevisiGUI:
         style.configure(
             "TProgressbar",
             troughcolor=APP_SURFACE,
-            background=APP_ACCENT,
+            background=APP_BUTTON,
             bordercolor=APP_BORDER,
-            lightcolor=APP_ACCENT,
-            darkcolor=APP_ACCENT,
+            lightcolor=APP_BUTTON,
+            darkcolor=APP_BUTTON,
         )
 
 

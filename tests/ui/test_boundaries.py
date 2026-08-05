@@ -45,6 +45,8 @@ def test_ui_source_has_no_engine_imports() -> None:
         if path in {
             PROJECT_ROOT / "ui" / "adapters" / "comparison_result_adapter.py",
             PROJECT_ROOT / "ui" / "adapters" / "attachment_consolidation_adapter.py",
+            PROJECT_ROOT / "ui" / "adapters" / "att_data_repair_adapter.py",
+            PROJECT_ROOT / "ui" / "services" / "att_data_repair_service.py",
         }:
             forbidden.remove("utilities")
         assert _import_roots(path).isdisjoint(forbidden), path

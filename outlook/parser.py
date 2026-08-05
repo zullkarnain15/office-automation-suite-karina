@@ -510,7 +510,7 @@ class OutlookTxtWriter:
         date_suffix = str(job_id).split("_", maxsplit=1)[0]
         limit = max(max_lines, 1)
         files: list[Path] = []
-        remaining = list(records)
+        next_record = 0
         existing_files = self._existing_output_files(
             output_path,
             safe_prefix,
@@ -522,19 +522,22 @@ class OutlookTxtWriter:
             current_count = self._line_count(current_file)
             available = max(limit - current_count, 0)
             if available:
-                chunk = remaining[:available]
+                chunk = records[:available]
                 self._write_chunk(current_file, chunk, mode="a")
                 files.append(current_file)
-                remaining = remaining[len(chunk):]
+                next_record = len(chunk)
 
-        file_index = self._next_output_index(
-            output_path,
-            safe_prefix,
-            date_suffix,
+        existing_indexes = (
+            self._output_index(path, safe_prefix, date_suffix)
+            for path in existing_files
         )
+        file_index = max(
+            (index for index in existing_indexes if index is not None),
+            default=0,
+        ) + 1
         used_random_suffixes = self._existing_random_suffixes(output_path)
-        for start in range(0, len(remaining), limit):
-            chunk = remaining[start:start + limit]
+        for start in range(next_record, len(records), limit):
+            chunk = records[start:start + limit]
             random_suffix = self._unique_random_suffix(
                 used_random_suffixes
             )

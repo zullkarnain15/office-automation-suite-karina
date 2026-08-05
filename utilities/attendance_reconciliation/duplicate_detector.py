@@ -36,11 +36,10 @@ def detect_machine_duplicates(
 
     for key, group in groups.items():
         variants: dict[tuple[object, ...], list[MachineRecord]] = defaultdict(list)
-        for record in group:
-            variants[record.values].append(record)
         complete_variants: dict[tuple[object, ...], list[MachineRecord]] = defaultdict(list)
         incomplete_records: list[MachineRecord] = []
         for record in group:
+            variants[record.values].append(record)
             if _is_complete_machine_record(record):
                 complete_variants[(record.machine_in, record.machine_out)].append(
                     record

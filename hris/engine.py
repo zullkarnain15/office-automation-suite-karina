@@ -80,6 +80,7 @@ class HRISUploadEngine:
         self.job_manager = HRISUploadJobManager()
         self.artifact_writer = HRISJobArtifactWriter()
         self.report_writer = HRISUploadReportWriter()
+        self.last_configuration: HRISConfiguration | None = None
         self._assisted_diagnostic_context: dict[str, object] = {}
 
     def prepare_upload_job(self) -> HRISUploadEngineResult:
@@ -95,6 +96,7 @@ class HRISUploadEngine:
 
         try:
             configuration = self._read_configuration()
+            self.last_configuration = configuration
 
             upload_plan = self._create_upload_plan(
                 configuration=configuration,

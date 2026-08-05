@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime
+from itertools import chain
 from pathlib import Path
 from threading import Event
 
@@ -74,7 +75,7 @@ class ReconciliationEngine:
             )
         warnings = [
             item.reason
-            for item in [*attendance.log_entries, *outlook.log_entries]
+            for item in chain(attendance.log_entries, outlook.log_entries)
             if item.status != "USED" and item.reason
         ]
         if outlook.reports_used == 0:
@@ -134,8 +135,8 @@ class ReconciliationEngine:
                 f"Attendance={len(scan.attendance.records)}, "
                 f"Outlook={len(scan.outlook.records)}."
             )
-            machines = detect_machine_duplicates(list(scan.attendance.records))
-            revisions = detect_revision_duplicates(list(scan.outlook.records))
+            machines = detect_machine_duplicates(scan.attendance.records)
+            revisions = detect_revision_duplicates(scan.outlook.records)
             process.write(
                 "Duplicate analysis completed: "
                 f"machine keys={len(machines.unique) + len(machines.conflicts)}, "
@@ -163,10 +164,10 @@ class ReconciliationEngine:
                 f"used={scan.attendance.reports_used}; Outlook found="
                 f"{scan.outlook.reports_found}, used={scan.outlook.reports_used}."
             )
-            for entry in [
-                *scan.attendance.log_entries,
-                *scan.outlook.log_entries,
-            ]:
+            for entry in chain(
+                scan.attendance.log_entries,
+                scan.outlook.log_entries,
+            ):
                 if entry.status != "USED":
                     process.write(
                         f"Skipped source [{entry.status}]: {entry.file_path.name}; "
@@ -258,7 +259,7 @@ class ReconciliationEngine:
         duplicates,
     ) -> dict[str, object]:
         statuses = Counter(item.status for item in comparisons)
-        machine_records = list(scan.attendance.records)
+        machine_records = scan.attendance.records
         return {
             "job_id": job_id,
             "engine_version": ENGINE_VERSION,

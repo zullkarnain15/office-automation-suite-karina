@@ -90,7 +90,8 @@ class AttachmentConsolidationEngine:
         current_scan = scan or self.scan(request, cancel_event, progress)
         if current_scan.request_fingerprint != request.fingerprint():
             raise ValueError("Input berubah. Jalankan Scan Files kembali.")
-        if not current_scan.processable_files:
+        processable_files = current_scan.processable_files
+        if not processable_files:
             raise ValueError("Tidak ada file yang dapat diproses.")
 
         if txt_max_lines is None:
@@ -140,7 +141,7 @@ class AttachmentConsolidationEngine:
         success = False
 
         try:
-            candidates = current_scan.processable_files
+            candidates = processable_files
             total = len(candidates)
             reader = (
                 self.excel_reader
@@ -229,7 +230,7 @@ class AttachmentConsolidationEngine:
             item.scanned.path.resolve()
             for item in file_results
         }
-        for scanned_file in current_scan.processable_files:
+        for scanned_file in processable_files:
             if scanned_file.path.resolve() in represented_paths:
                 continue
             file_results.append(

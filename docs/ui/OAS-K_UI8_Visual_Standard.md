@@ -13,6 +13,7 @@ and no game-like workflow.
 - Outline / primary text: `#33664d`
 - Royal blue / active navigation: `#4D72B8`
 - Forest green / primary action: `#5E9C3A`
+- Teal / standard buttons: `#2F8F83`
 - Old gold / accent and warning: `#D2A15A`
 - Ivory white / panels and controls: `#F7F1DD`
 - Soft background: `#EAE7DA`
@@ -39,8 +40,10 @@ Available central styles:
 - `RetroTertiary.TButton`
 
 Existing `PrimaryAction`, `SecondaryAction`, `DangerAction`, and compact styles
-remain supported. Buttons use compact padding so they stay near 30-34 px height
-at 100% scaling and do not dominate the workspace.
+remain supported. Standard non-Start/non-Run buttons use teal with white text.
+Start/Run actions and PNG Start buttons keep their dedicated treatment. Buttons
+use compact padding so they stay near 30-34 px height at 100% scaling and do not
+dominate the workspace.
 
 ## Sidebar
 

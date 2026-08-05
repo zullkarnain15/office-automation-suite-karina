@@ -15,6 +15,9 @@ def test_ui8_palette_constants_are_centralized() -> None:
     assert constants.ROYAL_BLUE == "#4D72B8"
     assert constants.FOREST_GREEN == "#5E9C3A"
     assert constants.OLD_GOLD == "#D2A15A"
+    assert constants.TEAL == "#2F8F83"
+    assert constants.TEAL_HOVER == "#36A397"
+    assert constants.TEAL_PRESSED == "#24746A"
     assert constants.IVORY_WHITE == "#F7F1DD"
     assert constants.SOFT_BACKGROUND == "#EAE7DA"
     assert constants.ERROR == constants.DANGER_RED
