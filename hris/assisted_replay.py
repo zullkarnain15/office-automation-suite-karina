@@ -10,9 +10,9 @@ from typing import Any, Callable
 
 from hris.click_profile import HRISClickProfileManager
 from shared.config_manager import (
-    HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES,
     HRISConfiguration,
     HRISAssistedStepConfig,
+    resolve_hris_macro_steps,
 )
 from shared.logger import get_logger
 
@@ -37,6 +37,7 @@ class HRISAssistedReplayEngine:
         page: Any | None = None,
         manual_recovery_callback: Callable[[str], None] | None = None,
         automation: Any | None = None,
+        excluded_step_names: set[str] | None = None,
     ) -> None:
         self.configuration = configuration
         self.profile_manager = HRISClickProfileManager(profile)
@@ -46,6 +47,10 @@ class HRISAssistedReplayEngine:
             configuration.upload.get("Manual_Recovery_Enabled", True)
         )
         self.automation = automation or self._load_pyautogui()
+        self.excluded_step_names = excluded_step_names or set()
+        self.steps = tuple(
+            resolve_hris_macro_steps(configuration.assisted_steps)
+        )
         self.last_context: dict[str, Any] = {}
 
     def run_item(
@@ -54,16 +59,9 @@ class HRISAssistedReplayEngine:
         start_date: str,
         end_date: str,
     ) -> HRISAssistedReplayResult:
-        steps_by_name = {
-            step.step_name: step for step in self.configuration.assisted_steps
-        }
-        post_upload_steps = [
-            steps_by_name[name]
-            for name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
-            if name in steps_by_name
-        ]
-        steps = post_upload_steps or self.configuration.assisted_steps
-        for step in steps:
+        for step in self.steps:
+            if step.step_name in self.excluded_step_names:
+                continue
             self.last_context = {
                 "current_step": step.step_name,
                 "action": step.action,

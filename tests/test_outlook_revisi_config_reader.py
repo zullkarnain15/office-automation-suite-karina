@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from openpyxl import Workbook
+from openpyxl import load_workbook
 
 from shared.config_manager import OutlookRevisiConfigurationReader
 
@@ -126,8 +127,8 @@ def test_reads_outlook_revisi_configuration_with_title_rows(tmp_path: Path) -> N
         "hr.one@example.com",
         "hr.two@example.com",
     ]
-    assert len(configuration.ho_senders) == 2
-    assert configuration.ho_senders[1].sender_email == ""
+    assert len(configuration.ho_senders) == 1
+    assert configuration.ho_senders[0].sender_email == "ho@example.com"
     assert configuration.branch_senders[0].branch_code == "AMU"
     assert configuration.attachment_rules[0].allowed_extensions == [
         ".xlsx",
@@ -135,6 +136,25 @@ def test_reads_outlook_revisi_configuration_with_title_rows(tmp_path: Path) -> N
     ]
     assert configuration.validation_rules[0].workflow == "All"
     assert configuration.reply_templates[0].trigger == "PROCESS_SUCCESS"
+
+
+def test_output_root_named_output_adds_outlook_revisi_folder(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "config" / "outlook" / "outlook.xlsx"
+    path.parent.mkdir(parents=True)
+    _create_workbook(path)
+
+    workbook = load_workbook(path)
+    workbook["General"]["B6"] = "output"
+    workbook.save(path)
+    workbook.close()
+
+    configuration = OutlookRevisiConfigurationReader(path).read()
+
+    assert configuration.get_output_root() == (
+        tmp_path / "output" / "Outlook-Revisi"
+    )
 
 
 def test_rejects_missing_outlook_sheet(tmp_path: Path) -> None:

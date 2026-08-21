@@ -1,0 +1,764 @@
+ATT DATA REPAIR - SPRINT 3 REPORT
+
+1. IDENTITAS SPRINT
+
+Project: Office Automation Suite - Karina (OAS-K)
+Repository: D:\Python Project\OfficeAutomationSuite-Karina
+Feature: Att Data Repair
+Sprint: Sprint 3 - Non-GUI Output Pipeline
+Tanggal dan waktu selesai: 2026-08-03 12:59:50 +07:00
+Laporan: D:\Python Project\OfficeAutomationSuite-Karina\Att_Data_Repair_Sprint3_Report.txt
+
+2. STATUS KESIAPAN
+
+READY WITH NOTES
+
+Catatan:
+- Implementasi Sprint 3 selesai dan seluruh test wajib yang diminta lulus.
+- git diff --check masih gagal karena trailing whitespace existing pada docs/database/OAS-K_DB4_Recovery_Notes.md. File tersebut sudah modified sebelum sprint dan tidak disentuh sesuai instruksi.
+- File Att Data Repair masih untracked sesuai kondisi Sprint sebelumnya, sehingga git diff --stat tidak menampilkan perubahan package/test baru.
+
+3. RINGKASAN IMPLEMENTASI
+
+Komponen yang dibuat:
+- Job folder manager collision-safe.
+- TXT HRIS writer dengan format canonical enam field quoted.
+- Split TXT maksimum 10.000 baris per file, terpisah per workflow.
+- Naming TXT Att_Data_Repair_[Workflow]-[NNN]_[RRRR].txt.
+- Unique code acak 4 digit per job, injectable untuk test.
+- Process.log UTF-8 dengan timestamp dan ringkasan proses.
+- summary.json UTF-8 atomic dengan schema_version 1.
+- Artifact metadata dan record-to-TXT assignment.
+- Orkestrasi run_job() end-to-end dari source report sampai output TXT.
+- Unit test dan regression test Sprint 3.
+
+Output yang sudah dapat dihasilkan:
+- <Output_Root>\Utilities\Att_Data_Repair\YYYY-MM-DD_XX\TXT
+- <Output_Root>\Utilities\Att_Data_Repair\YYYY-MM-DD_XX\Report
+- <Output_Root>\Utilities\Att_Data_Repair\YYYY-MM-DD_XX\Process.log
+- <Output_Root>\Utilities\Att_Data_Repair\YYYY-MM-DD_XX\summary.json
+- TXT HO dan Branch sesuai workflow final records.
+
+Hal di luar scope dan tidak dibuat:
+- Excel report writer final.
+- Isi workbook Guide, Summary, Final Records, dan audit report.
+- Unified UI dan integrasi Utilities Page.
+- SQLite migration, job_history, job_files, job_status_events.
+- Unified Configuration Template.
+- Build EXE dan packaging.
+- Dokumentasi user final.
+
+4. KONDISI REPOSITORY SEBELUM SPRINT 3
+
+git status --short sebelum Sprint 3, berdasarkan audit awal:
+
+ M docs/database/OAS-K_DB4_Recovery_Notes.md
+?? Att_Data_Repair_Sprint1_Audit_Plan.txt
+?? Att_Data_Repair_Sprint2_Report.txt
+?? tests/test_att_data_repair.py
+?? utilities/att_data_repair/
+
+Perubahan existing user:
+- docs/database/OAS-K_DB4_Recovery_Notes.md sudah modified sebelum Sprint 3.
+
+File yang tidak disentuh:
+- docs/database/OAS-K_DB4_Recovery_Notes.md.
+- Attachment Consolidation package.
+- Outlook parser.
+- Attendance engine.
+- Unified UI.
+- Database/schema files.
+- dist/ dan build output.
+
+5. FILE BARU
+
+utilities/att_data_repair/artifacts.py
+- Fungsi: model metadata output job.
+- Class/function utama: AttDataRepairJobRequest, JobPaths, TxtArtifact, TxtWriteResult, AttDataRepairJobResult.
+- Jumlah baris: 52.
+- Status git: untracked, karena folder utilities/att_data_repair masih untracked.
+
+utilities/att_data_repair/job_manager.py
+- Fungsi: reserve job folder harian.
+- Class/function utama: AttDataRepairJobManager, JOB_PATTERN.
+- Jumlah baris: 73.
+- Status git: untracked.
+
+utilities/att_data_repair/process_logger.py
+- Fungsi: writer Process.log UTF-8.
+- Class/function utama: AttDataRepairProcessLogger.
+- Jumlah baris: 30.
+- Status git: untracked.
+
+utilities/att_data_repair/summary_writer.py
+- Fungsi: atomic writer summary.json.
+- Class/function utama: AttDataRepairSummaryWriter.
+- Jumlah baris: 28.
+- Status git: untracked.
+
+utilities/att_data_repair/txt_writer.py
+- Fungsi: HRIS TXT formatter/writer/splitter khusus Att Data Repair.
+- Class/function utama: AttDataRepairTxtWriter, _format_hris_line, _chunks.
+- Jumlah baris: 156.
+- Status git: untracked.
+
+tests/test_att_data_repair_output.py
+- Fungsi: unit test Sprint 3 untuk output pipeline.
+- Class/function utama: FixedClock, CodeProvider, test_job_folder_sequence_and_structure, test_txt_format_workflow_split_assignment_and_no_header, test_run_job_end_to_end_partial_success_outputs_log_and_summary, dan test lain terkait collision/split/status/failure.
+- Jumlah baris: 286.
+- Status git: untracked.
+
+6. FILE EXISTING YANG BERUBAH
+
+Catatan: file berikut adalah existing dari fondasi Sprint 2, tetapi masih untracked di git. Perubahan dijelaskan relatif terhadap kondisi Sprint 2.
+
+utilities/att_data_repair/constants.py
+- Alasan: menambahkan konstanta output Sprint 3.
+- Ringkasan: FEATURE_FOLDER_NAME, TXT_FILENAME_PREFIX, ENGINE_VERSION, SUMMARY_SCHEMA_VERSION, DEFAULT_TXT_MAX_ROWS_PER_FILE, TXT_UNIQUE_CODE_MIN, TXT_UNIQUE_CODE_MAX.
+- Risiko regresi: rendah; konstanta lama tidak diganti.
+
+utilities/att_data_repair/statuses.py
+- Alasan: menambahkan status job output.
+- Ringkasan: JobStatus SUCCESS, PARTIAL_SUCCESS, NO_VALID_RECORDS, FAILED.
+- Risiko regresi: rendah; status Sprint 2 tetap ada.
+
+utilities/att_data_repair/models.py
+- Alasan: exception khusus output pipeline.
+- Ringkasan: JobFolderCreationError, OutputWriteError, TxtWriteError, UniqueCodeCollisionError, SummaryWriteError.
+- Risiko regresi: rendah; hierarchy AttDataRepairError dipertahankan.
+
+utilities/att_data_repair/engine.py
+- Alasan: orkestrasi run_job() tanpa merusak analyze().
+- Ringkasan: dependency injection untuk job manager, TXT writer, summary writer, clock; run_job(); helper status/log/summary/path payload.
+- Risiko regresi: sedang-rendah; analyze() tetap menjalankan pipeline Sprint 2 in-memory tanpa output file dan regression test 19 passed.
+
+utilities/att_data_repair/__init__.py
+- Alasan: expose public API Sprint 3.
+- Ringkasan: export model artifact dan exception output.
+- Risiko regresi: rendah.
+
+7. ARSITEKTUR OUTPUT PIPELINE
+
+AttDataRepairEngine:
+- analyze(request) tetap API Sprint 2 dan tidak membuat file.
+- run_job(job_request) menjadi entrypoint output pipeline non-GUI.
+- Engine melakukan validasi request, preflight source workbook, reserve folder, analisis, TXT writing, summary writing, logging, dan return AttDataRepairJobResult.
+
+AttDataRepairJobManager:
+- Membuat Utilities\Att_Data_Repair\YYYY-MM-DD_XX.
+- Membuat subfolder TXT dan Report.
+- Tidak membuat folder Original.
+
+AttDataRepairTxtWriter:
+- Menerima FinalRecord dari hasil analisis.
+- Grouping per workflow canonical HO dan Branch.
+- Generate satu unique code per job.
+- Plan semua filename sebelum write.
+- Write file secara atomic via temporary file di folder target.
+
+AttDataRepairProcessLogger:
+- Menulis log append UTF-8.
+- Format: YYYY-MM-DD HH:MM:SS | LEVEL | MESSAGE.
+- Mencatat ringkasan job, bukan semua record normal.
+
+AttDataRepairSummaryWriter:
+- Menulis summary.json melalui temporary file lalu replace.
+- Payload hanya berisi object JSON-safe: string, int, bool, dict, list, null.
+
+Artifact models:
+- JobPaths menyimpan path output.
+- TxtArtifact menyimpan metadata per file TXT.
+- TxtWriteResult menyimpan artifact list dan assignment.
+- AttDataRepairJobResult menyimpan status, timestamps, hasil analisis, artifacts, dan error_message bila gagal.
+
+8. STRUKTUR FOLDER AKTUAL
+
+Contoh aktual dibuat dengan clock 2026-08-03 09:00:00 dan code provider 4837 pada folder verifikasi sementara. Artifact sementara sudah dihapus setelah inspeksi agar status repo bersih.
+
+D:\Python Project\OfficeAutomationSuite-Karina\.codex_tmp\att_data_repair_sprint3_sample\Utilities\Att_Data_Repair\2026-08-03_01
+  TXT\
+    Att_Data_Repair_Branch-001_4837.txt
+    Att_Data_Repair_HO-001_4837.txt
+  Report\
+  Process.log
+  summary.json
+
+Hasil test juga memverifikasi:
+- TXT folder dibuat.
+- Report folder dibuat.
+- Original folder tidak dibuat.
+- Source workbook tidak berubah.
+
+9. JOB FOLDER SEQUENCE
+
+Algoritma:
+- Gunakan tanggal lokal dari injected clock atau datetime.now.
+- Feature root: <Output_Root>\Utilities\Att_Data_Repair.
+- Cari child folder dengan pattern YYYY-MM-DD_angka.
+- Filter hanya tanggal yang sama.
+- Ambil sequence terbesar lalu tambah 1.
+- mkdir job_folder dengan exist_ok=False.
+- Jika collision FileExistsError, sequence dinaikkan dan dicoba lagi.
+
+Collision handling:
+- Collision saat mkdir tidak overwrite.
+- Test memaksa _next_sequence kembali ke 1 saat _01 sudah ada dan hasilnya _02.
+
+Perilaku setelah 99:
+- Tidak dibatasi sampai 99.
+- Test dengan existing 2026-08-03_99 menghasilkan 2026-08-03_100.
+
+10. TXT FORMAT AKTUAL
+
+Format canonical:
+"MM/DD/YYYY","EMPID","MM/DD/YYYY","HH:MM","MM/DD/YYYY","HH:MM"
+
+Contoh row aktual:
+"08/03/2026","001234","08/03/2026","09:30","08/03/2026","17:00"
+
+Encoding:
+- UTF-8.
+
+Line ending:
+- "\n".
+- Cocok dengan Outlook writer existing yang memakai csv.writer lineterminator="\n".
+- Attendance writer existing juga menulis line dengan "\n".
+
+Header:
+- Tidak ada header.
+
+Formatter reference:
+- config.app_config.DATE_FORMAT = "%m/%d/%Y".
+- config.app_config.TIME_FORMAT = "%H:%M".
+- Outlook AttendanceRevisionRecord.to_txt_row() dan Outlook writer direferensikan untuk urutan enam field dan quoting.
+- Helper lama tidak direuse langsung karena naming dan artifact contract Sprint 3 berbeda.
+
+11. TXT NAMING
+
+Pola:
+Att_Data_Repair_[Workflow]-[NNN]_[RRRR].txt
+
+Contoh HO:
+Att_Data_Repair_HO-001_4837.txt
+
+Contoh Branch:
+Att_Data_Repair_Branch-001_4837.txt
+
+Arti NNN:
+- Nomor pecahan file per workflow.
+- Minimum 3 digit.
+- Mulai dari 001 untuk masing-masing workflow.
+- Jika lebih dari 999, format tetap bertambah tanpa overwrite, misalnya 1000.
+
+Arti RRRR:
+- Kode unik 4 digit per job.
+- Range 1000 sampai 9999.
+- Sama untuk semua file TXT dalam job yang sama.
+
+12. UNIQUE CODE
+
+Generator:
+- Default menggunakan secrets.SystemRandom().randint(1000, 9999).
+- Test menggunakan injected CodeProvider agar deterministik.
+
+Range:
+- TXT_UNIQUE_CODE_MIN = 1000.
+- TXT_UNIQUE_CODE_MAX = 9999.
+- Kode di luar range menghasilkan UniqueCodeCollisionError.
+
+Retry:
+- retry_limit default 100.
+- Seluruh filename diplan dulu untuk satu kode.
+- Jika satu target filename sudah ada, kode baru di-generate dan semua filename diplan ulang.
+
+Collision handling:
+- Existing final file tidak dioverwrite.
+- Test collision membuat Att_Data_Repair_HO-001_4837.txt lebih dulu, provider memberi 4837 lalu 5837, hasil akhir memakai 5837.
+- Test retry exhaustion menghasilkan UniqueCodeCollisionError.
+
+13. TXT SPLIT
+
+Limit:
+- DEFAULT_TXT_MAX_ROWS_PER_FILE = 10.000.
+- AttDataRepairJobRequest dapat override via txt_max_rows_per_file.
+
+Grouping workflow:
+- Split dilakukan terpisah untuk HO dan Branch.
+- Workflow tanpa FinalRecord tidak dibuatkan TXT.
+
+Order:
+- Urutan FinalRecords dipertahankan dalam masing-masing workflow.
+- Tidak sort berdasarkan NIK/tanggal.
+- Tidak merge record dengan NIK dan tanggal sama.
+
+Hasil test:
+- 0 record: 0 file.
+- 1 record: 1 file, 1 row.
+- 10.000 record: 1 file, 10.000 row.
+- 10.001 record: 2 file, 10.000 + 1 row.
+- 20.001 record: 3 file, 10.000 + 10.000 + 1 row.
+- Duplicate NIK+tanggal tetap ditulis sebagai dua row.
+- Jumlah artifact row sama dengan jumlah FinalRecords.
+
+14. PROCESS.LOG
+
+Format:
+YYYY-MM-DD HH:MM:SS | LEVEL | MESSAGE
+
+Informasi yang dicatat:
+- Job started.
+- Job ID.
+- Engine version.
+- Source report.
+- Period.
+- Output root.
+- Reader started/completed.
+- Source counts.
+- Analysis counts.
+- Workflow counts.
+- Anomaly count by code.
+- TXT unique code.
+- TXT filename dan row count.
+- Job status.
+- Job completed atau failed.
+- Error context saat failure.
+
+Contoh baris aktual:
+2026-08-03 09:00:00 | INFO | Job started.
+2026-08-03 09:00:00 | INFO | Job ID: 2026-08-03_01
+2026-08-03 09:00:00 | INFO | Engine version: 1.0.0
+2026-08-03 09:00:00 | INFO | Source report: D:\Python Project\OfficeAutomationSuite-Karina\.codex_tmp\att_data_repair_sprint3_sample\source.xlsx
+2026-08-03 09:00:00 | INFO | Analysis counts: final=2; changed=1; anomaly=1
+2026-08-03 09:00:00 | WARNING | Anomaly INVALID_NIK: 1
+2026-08-03 09:00:00 | INFO | TXT generated: Att_Data_Repair_HO-001_4837.txt; rows=1
+2026-08-03 09:00:00 | INFO | Job status: PARTIAL_SUCCESS
+2026-08-03 09:00:00 | INFO | Job completed.
+
+Kebijakan ukuran log:
+- Tidak menulis satu log per record normal.
+- Detail record/anomaly disiapkan untuk Excel report Sprint 4.
+
+15. SUMMARY.JSON
+
+Schema aktual:
+- schema_version: 1.
+- module: "Att Data Repair".
+- engine_version: "1.0.0".
+- job_id/status/timestamps.
+- period source dan output paths sebagai string.
+- counts source/final/changed/anomaly/workflow/anomaly_by_code/change_by_code.
+- txt generated/max_rows_per_file/unique_code/file_count/files.
+- report.generated false dengan reason Sprint 4.
+- error null untuk sukses/partial/no valid, string aman untuk FAILED.
+
+Contoh ringkas isi aktual:
+{
+  "schema_version": 1,
+  "module": "Att Data Repair",
+  "engine_version": "1.0.0",
+  "job_id": "2026-08-03_01",
+  "status": "PARTIAL_SUCCESS",
+  "counts": {
+    "source_total": 3,
+    "source_valid_sheet": 3,
+    "source_invalid_sheet": 0,
+    "final_total": 2,
+    "changed_total": 1,
+    "anomaly_total": 1,
+    "workflow": {
+      "HO": 1,
+      "Branch": 1
+    },
+    "anomaly_by_code": {
+      "INVALID_NIK": 1
+    },
+    "change_by_code": {
+      "MINIMUM_DURATION_APPLIED": 1,
+      "TIME_FORMAT_NORMALIZED": 2
+    }
+  },
+  "txt": {
+    "generated": true,
+    "max_rows_per_file": 10000,
+    "unique_code": 4837,
+    "file_count": 2,
+    "files": [
+      {
+        "workflow": "HO",
+        "sequence": 1,
+        "file_name": "Att_Data_Repair_HO-001_4837.txt",
+        "row_count": 1
+      },
+      {
+        "workflow": "Branch",
+        "sequence": 1,
+        "file_name": "Att_Data_Repair_Branch-001_4837.txt",
+        "row_count": 1
+      }
+    ]
+  },
+  "report": {
+    "generated": false,
+    "reason": "Excel report writer is scheduled for Sprint 4"
+  }
+}
+
+16. JOB STATUS LOGIC
+
+SUCCESS:
+- Ada FinalRecords.
+- Tidak ada anomaly.
+- Seluruh artifact wajib berhasil dibuat.
+
+PARTIAL_SUCCESS:
+- Ada FinalRecords.
+- Ada satu atau lebih anomaly.
+- FinalRecords valid tetap diekspor ke TXT.
+
+NO_VALID_RECORDS:
+- Tidak ada FinalRecords.
+- Job folder, TXT folder, Report folder, Process.log, dan summary.json tetap dibuat.
+- Tidak membuat TXT kosong.
+- Anomaly tetap dihitung.
+
+FAILED:
+- Terjadi error setelah job folder dibuat pada output pipeline.
+- Process.log mencatat ERROR.
+- summary.json status FAILED diusahakan tetap ditulis.
+- Result mengisi error_message dengan type dan message aman.
+
+17. ERROR HANDLING
+
+Atomic write:
+- TXT ditulis ke file temporary di folder target lalu rename ke final.
+- summary.json ditulis ke summary.json.tmp lalu replace.
+
+Temporary cleanup:
+- TXT temporary dihapus saat failure.
+- summary temporary dihapus saat failure.
+- Test memverifikasi tidak ada temporary TXT dan summary.json.tmp tertinggal setelah sukses.
+
+Existing file protection:
+- File final existing tidak dioverwrite.
+- Collision filename menyebabkan regenerate unique code.
+- Jika semua retry collision, UniqueCodeCollisionError dilempar.
+
+Behavior failure setelah job folder dibuat:
+- run_job mengembalikan AttDataRepairJobResult status FAILED.
+- Process.log tetap ada bila filesystem memungkinkan.
+- Failed summary ditulis dengan error type/message.
+- Job folder tidak dihapus otomatis karena log diperlukan untuk diagnosis.
+
+Fatal preflight sebelum job folder:
+- validate_request, output root validation, dan workbook read dilakukan sebelum reserve job folder.
+- Fatal source error dapat raise exception tanpa membuat folder kosong.
+
+18. MODEL BARU ATAU BERUBAH
+
+AttDataRepairJobRequest:
+- Field penting: analysis_request, output_root, txt_max_rows_per_file.
+- Kompatibilitas: tidak mengubah AttDataRepairRequest Sprint 2.
+
+JobPaths:
+- Field penting: output_root, utilities_root, feature_root, job_folder, txt_folder, report_folder, process_log, summary_json, job_id.
+
+TxtArtifact:
+- Field penting: workflow, sequence, unique_code, file_name, file_path, row_count, record_ids.
+
+TxtWriteResult:
+- Field penting: artifacts, record_txt_assignment, unique_code.
+
+AttDataRepairJobResult:
+- Field penting: job_id, status, paths, analysis_result, txt_artifacts, record_txt_assignment, started_at, completed_at, error_message.
+
+Exceptions:
+- JobFolderCreationError, OutputWriteError, TxtWriteError, UniqueCodeCollisionError, SummaryWriteError.
+- Semua berada dalam hierarchy AttDataRepairError.
+
+Kompatibilitas Sprint 2:
+- FinalRecord tidak diberi filename sehingga model analysis tetap bebas filesystem.
+- analyze() tetap mengembalikan AttDataRepairAnalysisResult dan tidak membuat output.
+
+19. TEST BARU
+
+Path:
+- tests/test_att_data_repair_output.py
+
+Jumlah test:
+- 14 passed.
+
+Kelompok kasus:
+- Job folder sequence, structure, invalid folder ignored, sequence 99 ke 100, mkdir collision.
+- TXT naming HO/Branch, unique code shared, collision regenerate, retry exhaustion.
+- TXT canonical format, quoted fields, leading zero NIK, no header, duplicate NIK/date retained.
+- TXT split 0, 1, 10.000, 10.001, 20.001.
+- Workflow separation.
+- Record-to-TXT assignment.
+- Process.log content and no per-record normal log.
+- summary.json schema/counts/artifacts/status/report placeholder false.
+- Atomic write cleanup.
+- End-to-end run_job partial success, success, no valid records, failed summary.
+
+20. PERINTAH TEST YANG DIJALANKAN
+
+pytest tests/test_att_data_repair.py -q
+pytest tests/test_att_data_repair_output.py -q
+pytest tests/test_attachment_consolidation.py -q
+pytest tests/ui/utilities -q
+git diff --check
+git diff --stat
+git status --short
+
+21. HASIL TEST
+
+pytest tests/test_att_data_repair.py -q
+- Passed: 19.
+- Failed: 0.
+- Skipped: 0.
+- Durasi: 1.66s.
+
+pytest tests/test_att_data_repair_output.py -q
+- Passed: 14.
+- Failed: 0.
+- Skipped: 0.
+- Durasi: 2.47s.
+
+pytest tests/test_attachment_consolidation.py -q
+- Passed: 6.
+- Failed: 0.
+- Skipped: 0.
+- Durasi: 1.77s.
+
+pytest tests/ui/utilities -q
+- Passed: 16.
+- Failed: 0.
+- Skipped: 1.
+- Durasi: 4.48s.
+
+22. DETAIL TEST GAGAL
+
+NONE
+
+23. REGRESSION TEST
+
+Sprint 2:
+- Command: pytest tests/test_att_data_repair.py -q
+- Result: 19 passed.
+- Kesimpulan: analyze() Sprint 2 tetap bekerja.
+
+Attachment Consolidation:
+- Command: pytest tests/test_attachment_consolidation.py -q
+- Result: 6 passed.
+- Kesimpulan: regression Attachment Consolidation lulus.
+
+Utilities:
+- Command: pytest tests/ui/utilities -q
+- Result: 16 passed, 1 skipped.
+- Kesimpulan: regression subset UI Utilities lulus dengan satu skipped existing.
+
+24. PENYIMPANGAN DARI PROMPT SPRINT 3
+
+Implementasi:
+- NONE.
+
+Pemeriksaan:
+- git diff --check exit code 1 karena trailing whitespace existing di docs/database/OAS-K_DB4_Recovery_Notes.md.
+- Alasan tidak diperbaiki: prompt secara eksplisit menyatakan file tersebut existing, tidak terkait Sprint 3, dan tidak perlu diperbaiki.
+- Dampak: tidak berdampak pada Att Data Repair output pipeline.
+
+Catatan teknis:
+- git diff --stat tidak menampilkan file Att Data Repair karena package/test masih untracked.
+- Ini sudah diperkirakan oleh prompt.
+
+25. BUG SPRINT 2 YANG DITEMUKAN
+
+NONE
+
+Tidak ada perubahan bugfix pada logic Sprint 2. Perubahan pada file Sprint 2 bersifat extension untuk output pipeline Sprint 3.
+
+26. AMBIGUITAS YANG BELUM DIIMPLEMENTASIKAN
+
+Masalah: Excel report writer final belum ada.
+- Dampak: Report folder kosong sesuai kontrak Sprint 3.
+- Rekomendasi: Sprint 4 menambahkan writer workbook final dan memakai TxtArtifact serta record_txt_assignment yang sudah tersedia.
+- Butuh keputusan user: tidak untuk Sprint 3, iya untuk detail layout Sprint 4.
+
+Masalah: Integrasi job history/database belum ada.
+- Dampak: status hanya tersedia dari return object, Process.log, dan summary.json.
+- Rekomendasi: Sprint setelah database integration dapat map AttDataRepairJobResult ke job_history/job_files/job_status_events.
+- Butuh keputusan user: iya bila skema/UX history akan dikunci.
+
+Masalah: UI belum ada.
+- Dampak: output pipeline dipakai secara programmatic melalui run_job().
+- Rekomendasi: buat adapter UI terpisah tanpa mengubah core engine.
+- Butuh keputusan user: iya untuk desain UX dan konfigurasi default.
+
+27. RISIKO TERSISA UNTUK SPRINT 4
+
+Level: Medium.
+- Risiko: Excel report writer Sprint 4 perlu menjaga memory untuk workbook besar.
+- Mitigasi: gunakan streaming/write-only openpyxl bila dataset besar, dan pakai artifact metadata yang sudah ada.
+
+Level: Low.
+- Risiko: summary source sheet counts memakai nama sheet canonical.
+- Mitigasi: reader Sprint 2 sudah mengunci required sheets; jika nanti ada alias sheet, summary mapping bisa ditambah tanpa mengubah writer.
+
+Level: Low.
+- Risiko: output root writability baru terbukti melalui create folder saat reserve/write.
+- Mitigasi: error khusus JobFolderCreationError/OutputWriteError sudah tersedia dan failure summary/log sudah diuji.
+
+28. GIT DIFF CHECK
+
+Command:
+git diff --check
+
+Hasil aktual:
+Exit code: 1
+
+Output:
+docs/database/OAS-K_DB4_Recovery_Notes.md:3: trailing whitespace.
++Status: COMPLETED
+docs/database/OAS-K_DB4_Recovery_Notes.md:4: trailing whitespace.
++Schema: v1 unchanged (24 tables)
+docs/database/OAS-K_DB4_Recovery_Notes.md:5: trailing whitespace.
++Engine/GUI integration: Not implemented
+docs/database/OAS-K_DB4_Recovery_Notes.md:6: trailing whitespace.
++Production Registry/Data Root used by tests: No
+warning: in the working copy of 'docs/database/OAS-K_DB4_Recovery_Notes.md', LF will be replaced by CRLF the next time Git touches it
+
+Klasifikasi:
+- Existing issue, bukan dari Sprint 3.
+- File tersebut tidak disentuh.
+
+29. GIT DIFF STAT
+
+Command:
+git diff --stat
+
+Hasil aktual:
+ docs/database/OAS-K_DB4_Recovery_Notes.md | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+warning: in the working copy of 'docs/database/OAS-K_DB4_Recovery_Notes.md', LF will be replaced by CRLF the next time Git touches it
+
+Catatan:
+- File Sprint 2/Sprint 3 untracked tidak muncul di git diff --stat.
+
+30. GIT STATUS AKHIR
+
+git status --short sebelum file laporan Sprint 3 dibuat:
+
+ M docs/database/OAS-K_DB4_Recovery_Notes.md
+?? Att_Data_Repair_Sprint1_Audit_Plan.txt
+?? Att_Data_Repair_Sprint2_Report.txt
+?? tests/test_att_data_repair.py
+?? tests/test_att_data_repair_output.py
+?? utilities/att_data_repair/
+
+git status --short setelah file laporan ini dibuat diharapkan menjadi:
+
+ M docs/database/OAS-K_DB4_Recovery_Notes.md
+?? Att_Data_Repair_Sprint1_Audit_Plan.txt
+?? Att_Data_Repair_Sprint2_Report.txt
+?? Att_Data_Repair_Sprint3_Report.txt
+?? tests/test_att_data_repair.py
+?? tests/test_att_data_repair_output.py
+?? utilities/att_data_repair/
+
+Pembedaan:
+- User/existing: docs/database/OAS-K_DB4_Recovery_Notes.md.
+- Sprint 1: Att_Data_Repair_Sprint1_Audit_Plan.txt.
+- Sprint 2: Att_Data_Repair_Sprint2_Report.txt, tests/test_att_data_repair.py, fondasi utilities/att_data_repair.
+- Sprint 3: tests/test_att_data_repair_output.py, file baru output pipeline dalam utilities/att_data_repair, dan laporan ini.
+
+31. FILE INVENTORY SPRINT 3
+
+utilities/att_data_repair/artifacts.py | 52 lines | 1650 bytes | untracked
+utilities/att_data_repair/job_manager.py | 73 lines | 3168 bytes | untracked
+utilities/att_data_repair/process_logger.py | 30 lines | 1232 bytes | untracked
+utilities/att_data_repair/summary_writer.py | 28 lines | 1108 bytes | untracked
+utilities/att_data_repair/txt_writer.py | 156 lines | 6121 bytes | untracked
+tests/test_att_data_repair_output.py | 286 lines | 12148 bytes | untracked
+
+File Sprint 2 yang diextend untuk Sprint 3:
+utilities/att_data_repair/__init__.py | 45 lines | 1146 bytes | untracked
+utilities/att_data_repair/constants.py | 64 lines | 1505 bytes | untracked
+utilities/att_data_repair/engine.py | 305 lines | 13316 bytes | untracked
+utilities/att_data_repair/models.py | 136 lines | 4801 bytes | untracked
+utilities/att_data_repair/statuses.py | 28 lines | 1149 bytes | untracked
+
+File Sprint 2 unchanged inventory:
+utilities/att_data_repair/normalizer.py | 245 lines | 9553 bytes | untracked
+utilities/att_data_repair/repair_rules.py | 303 lines | 10476 bytes | untracked
+utilities/att_data_repair/report_reader.py | 171 lines | 6579 bytes | untracked
+utilities/att_data_repair/validator.py | 33 lines | 1330 bytes | untracked
+tests/test_att_data_repair.py | 323 lines | 12785 bytes | untracked
+
+Report file ini:
+Att_Data_Repair_Sprint3_Report.txt | line/byte count NOT AVAILABLE saat konten sedang dibuat | untracked setelah dibuat.
+
+32. HAL YANG TIDAK DILAKUKAN
+
+Konfirmasi Sprint 3 tidak:
+- mengubah GUI.
+- mengubah SQLite.
+- mengubah template konfigurasi.
+- membuat Excel report final.
+- mengubah Attachment Consolidation.
+- mengubah Outlook parser.
+- mengubah Attendance engine.
+- membuat build EXE.
+- menjalankan PyInstaller.
+- mengubah dist/.
+- melakukan commit.
+- melakukan staging.
+- melakukan reset/checkout/clean/stash.
+- menghapus atau memindahkan perubahan user.
+- menyalin workbook sumber ke output.
+- membuat folder Original.
+- membuat approval PIC.
+
+33. DEFINITION OF DONE SPRINT 3
+
+PASS - analyze() Sprint 2 tetap bekerja.
+PASS - job folder mengikuti Output_Root/Utilities/Att_Data_Repair/YYYY-MM-DD_XX.
+PASS - folder TXT dan Report dibuat.
+PASS - folder Original tidak dibuat.
+PASS - TXT canonical HRIS berhasil dibuat.
+PASS - HO dan Branch dipisahkan.
+PASS - split maksimum 10.000 berjalan.
+PASS - naming file sesuai Att_Data_Repair_[Workflow]-[NNN]_[RRRR].txt.
+PASS - NNN minimum 3 digit.
+PASS - RRRR acak 4 digit.
+PASS - satu unique code digunakan untuk seluruh TXT satu job.
+PASS - collision tidak menyebabkan overwrite.
+PASS - Process.log dibuat.
+PASS - summary.json dibuat.
+PASS - NO_VALID_RECORDS tidak membuat TXT kosong.
+PASS - record-to-TXT assignment tersedia.
+PASS - temporary file tidak tertinggal setelah sukses.
+PASS - source workbook tidak berubah.
+PASS - Excel report final belum dibuat.
+PASS - Report folder tetap tersedia.
+PASS - GUI tidak berubah.
+PASS - database tidak berubah.
+PASS - template konfigurasi tidak berubah.
+PASS - regression Sprint 2 lulus.
+PASS - regression Attachment Consolidation lulus.
+PASS - regression Utilities lulus.
+PASS - file laporan Sprint 3 dibuat.
+PASS - tidak ada commit atau reset.
+PASS WITH NOTE - git diff --check hanya gagal pada trailing whitespace existing di docs/database/OAS-K_DB4_Recovery_Notes.md.
+
+34. REKOMENDASI SPRINT 4
+
+Output pipeline sudah aman menjadi dasar Excel report writer Sprint 4.
+
+Rekomendasi Sprint 4:
+- Bangun Excel report writer final sebagai komponen terpisah, bukan di TXT writer.
+- Gunakan AttDataRepairJobResult, TxtArtifact, dan record_txt_assignment sebagai sumber kolom report.
+- Isi workbook minimal Guide, Summary, Final Records, Change Log, Anomalies, dan Artifact list sesuai kebutuhan audit.
+- Pertahankan Report folder yang sudah dibuat Sprint 3.
+- Tambahkan regression test report writer tanpa mengubah analyze() dan TXT writer.
+- Baru setelah report writer stabil, lanjutkan adapter UI dan database integration dalam sprint terpisah.
+
+END OF REPORT

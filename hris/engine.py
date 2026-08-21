@@ -80,6 +80,7 @@ class HRISUploadEngine:
         self.job_manager = HRISUploadJobManager()
         self.artifact_writer = HRISJobArtifactWriter()
         self.report_writer = HRISUploadReportWriter()
+        self.last_configuration: HRISConfiguration | None = None
         self._assisted_diagnostic_context: dict[str, object] = {}
 
     def prepare_upload_job(self) -> HRISUploadEngineResult:
@@ -95,6 +96,7 @@ class HRISUploadEngine:
 
         try:
             configuration = self._read_configuration()
+            self.last_configuration = configuration
 
             upload_plan = self._create_upload_plan(
                 configuration=configuration,
@@ -244,6 +246,9 @@ class HRISFullUploadEngine:
         hris_password: str | None = None,
         close_browser_on_error: bool = True,
         manual_verification_callback: Callable[[str], str] | None = None,
+        manual_upload_callback: Callable[[object], None] | None = None,
+        profile_path_override: str | Path | None = None,
+        move_failed_files: bool = True,
     ) -> None:
         self.configuration_file = Path(configuration_file)
         self.txt_folder = Path(txt_folder)
@@ -258,6 +263,11 @@ class HRISFullUploadEngine:
         self.hris_password = hris_password
         self.close_browser_on_error = close_browser_on_error
         self.manual_verification_callback = manual_verification_callback
+        self.manual_upload_callback = manual_upload_callback
+        self.profile_path_override = (
+            Path(profile_path_override) if profile_path_override else None
+        )
+        self.move_failed_files = move_failed_files
 
         self.config_reader = HRISConfigurationReader(
             self.configuration_file,
@@ -430,6 +440,7 @@ class HRISFullUploadEngine:
             move_results = file_manager.move_uploaded_files(
                 artifacts=artifacts,
                 plan_items=batch_result.results,
+                move_failed_files=self.move_failed_files,
             )
 
             self.artifact_writer.update_summary_after_file_move(
@@ -482,7 +493,7 @@ class HRISFullUploadEngine:
                 failed_count=batch_result.failed_count,
                 diagnostic_folder=diagnostic_folder,
                 diagnostic_zip_file=(
-                    diagnostic_folder.parent / "Diagnostic.zip"
+                    diagnostic_folder.with_suffix(".zip")
                     if diagnostic_folder is not None
                     else None
                 ),
@@ -533,7 +544,7 @@ class HRISFullUploadEngine:
                 failed_count=0,
                 diagnostic_folder=diagnostic_folder,
                 diagnostic_zip_file=(
-                    diagnostic_folder.parent / "Diagnostic.zip"
+                    diagnostic_folder.with_suffix(".zip")
                     if diagnostic_folder is not None
                     else None
                 ),
@@ -591,15 +602,15 @@ class HRISFullUploadEngine:
         from hris.assisted_verifier import HRISAssistedResultVerifier
         from hris.batch_uploader import HRISBatchUploader
         from hris.click_profile import HRISClickProfileManager
-        from shared.config_manager import HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
+        from shared.config_manager import resolve_hris_macro_steps
 
-        post_upload_steps = [
-            step
-            for step in configuration.assisted_steps
-            if step.step_name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
-        ]
+        post_upload_steps = resolve_hris_macro_steps(
+            configuration.assisted_steps
+        )
 
-        profile_path = HRISClickProfileManager.resolve_profile_path(configuration)
+        profile_path = self.profile_path_override or (
+            HRISClickProfileManager.resolve_profile_path(configuration)
+        )
         if not profile_path.exists():
             raise FileNotFoundError(
                 f"HRIS click profile not found: {profile_path}. "
@@ -648,6 +659,7 @@ class HRISFullUploadEngine:
             profile=profile,
             page=page,
             manual_recovery_callback=self.manual_checkpoint_callback,
+            excluded_step_names={"upload"} if self.manual_upload_callback else None,
         )
         verifier = HRISAssistedResultVerifier(
             page=page,
@@ -673,6 +685,7 @@ class HRISFullUploadEngine:
             self._assisted_diagnostic_context[
                 "verification_message"
             ] = verification.message
+            self._record_assisted_verification(item, verification)
             if verification.submitted:
                 result.message = verification.message
                 return result
@@ -685,13 +698,25 @@ class HRISFullUploadEngine:
             page=page,
             manual_checkpoint_callback=self.manual_checkpoint_callback,
             post_upload_recorder_callback=run_post_upload_recorder,
+            manual_upload_callback=self.manual_upload_callback,
         )
         return batch_uploader.upload_batch(
             upload_plan=upload_plan,
             start_date=self.start_date,
             end_date=self.end_date,
-            stop_on_first_failure=True,
+            stop_on_first_failure=self._to_bool(
+                configuration.upload.get("Stop_On_First_Failure", True)
+            ),
         )
+
+    @staticmethod
+    def _record_assisted_verification(
+        item: object,
+        verification: object,
+    ) -> None:
+        """Persist assisted verification fields used by summary and report."""
+        item.verification_status = verification.status
+        item.process_instance = verification.process_instance
 
     @staticmethod
     def _to_bool(value: object) -> bool:

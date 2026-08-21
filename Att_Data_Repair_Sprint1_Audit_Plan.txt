@@ -1,0 +1,375 @@
+Audit Sprint 1 - Implementation Plan Att Data Repair
+Office Automation Suite - Karina (OAS-K)
+
+1. Ringkasan Eksekutif
+
+Att Data Repair dapat ditambahkan tanpa merombak modul lama, dengan syarat dibuat sebagai subfitur Utilities baru yang berdiri sendiri dan hanya melakukan reuse pada utilitas umum yang stabil. Risiko keseluruhan: sedang.
+
+Rekomendasi arsitektur utama: buat package baru utilities/att_data_repair/, reader khusus untuk report Attachment Consolidation, engine repair terpisah, TXT writer khusus naming Att Data Repair, report writer streaming openpyxl, dan integrasi Unified UI lewat adapter/service seperti Attachment Consolidation.
+
+Sprint 1 selesai sebagai audit saja. Tidak ada implementasi fitur, tidak ada build EXE, dan tidak ada commit.
+
+2. Peta Repository yang Relevan
+
+Path | Fungsi Saat Ini | Relevansi untuk Att Data Repair | Rencana
+utilities/attachment_consolidation/ | Engine konsolidasi attachment | Sumber report input | Jangan diubah
+utilities/attachment_consolidation/report_writer.py | Menulis Valid_Records dan Invalid_Records | Kontrak reader Att Data Repair | Reuse sebagai kontrak
+utilities/attachment_consolidation/job_manager.py | Folder job, TXT, Report, Process.log, summary.json | Pola output Utilities | Referensi, mungkin tiru
+outlook/parser.py | Parser attachment dan TXT HRIS writer | Format canonical HRIS TXT | Reuse format/model, jangan ubah
+attendance/engine.py | TXT writer Attendance, report, artifact writer | Pembanding naming/report | Referensi
+utilities/attendance_reconciliation/ | Utilities Comparison Result | Pola Utilities engine/report/log | Referensi
+ui/pages/utilities_page.py | Unified UI Utilities dua subfitur | Tempat integrasi UI | Extend minimal
+ui/utilities_models.py | Model request/result Utilities | Tambah model Att Data Repair
+ui/services/utilities_service.py | Landing/default Utilities | Extend default dan landing
+ui/services/_utilities_job_audit.py | job_history, job_files, job_status_events | Reuse
+shared/database/exporting/constants.py | Sheet/template config | Tambah Att_Data_Repair
+shared/database/importing/constants.py | Detector, table mapping, singleton | Extend dengan compatibility
+shared/database/schema/v1.sql dan migrations | Schema SQLite | Butuh migration baru
+tests/test_attachment_consolidation.py | Kontrak Attachment Consolidation | Jangan rusak
+tests/ui/utilities/* | Kontrak UI Utilities | Perlu update
+tests/database/* | Kontrak schema/template/import/export | Perlu update
+
+3. Kondisi Aktual Attachment Consolidation
+
+Class/function utama:
+- AttachmentConsolidationEngine
+- ConsolidationExcelReader
+- ConsolidationTXTReader
+- ConsolidationReportWriter
+- ConsolidationJobManager
+- AttachmentScanner
+
+Source reader:
+- Excel memakai OutlookAttachmentParser.parse_ho_excel().
+- TXT memakai OutlookAttachmentParser.parse_branch_txt().
+
+Exporter report aktual:
+- ConsolidationReportWriter.SHEET_ORDER:
+  Guide_Status
+  Valid_Records
+  Invalid_Records
+  File_Inventory
+  Process_Summary
+
+Kolom aktual Valid_Records:
+No, Source_File, Relative_Path, Source_Row, Workflow, NIK, Date_In, Time_In, Date_Out, Time_Out, Output_TXT, Status.
+
+Kolom aktual Invalid_Records:
+No, Source_File, Relative_Path, Source_Row, Workflow, NIK, Date_In, Time_In, Date_Out, Time_Out, Status_Code, Reason, Raw_Value.
+
+Status aktual:
+- File: READY, SUCCESS, PARTIAL_SUCCESS, FAILED, NO_VALID_RECORD, UNSUPPORTED_FORMAT, TEMPORARY_SKIPPED, HIDDEN_SYSTEM_SKIPPED, SYMLINK_SKIPPED, OUTPUT_SKIPPED, CANCELLED.
+- Row: VALID, COLUMN_COUNT, NIK_REQUIRED, DATE_FORMAT, TIME_FORMAT, MISSING_REQUIRED_COLUMN, ATTACHMENT_STRUCTURE_INVALID, FILE_READ_FAILED.
+
+Struktur output aktual:
+<output_root>/Utilities/Attachment_Consolidation/<Workflow>/<YYYY-MM>/<job_id>/
+- TXT
+- Report
+- Process.log
+- summary.json
+
+4. Kondisi Aktual Utilities GUI
+
+Unified UI Utilities ada di ui/pages/utilities_page.py. Saat ini landing hanya dua subfitur:
+- Comparison Result
+- Attachment Consolidation
+
+Pola global/local:
+- OptionChip untuk "Gunakan periode dari Settings" dan "Gunakan output dari Settings".
+- Jika global aktif, output entry readonly, browse disabled; date entry readonly.
+- Comparison Result memakai global period dan output.
+- Attachment Consolidation hanya memakai global output; period tidak dipakai engine.
+
+Pola lifecycle:
+- preflight read-only
+- validasi
+- dialog konfirmasi
+- run via TaskRunner
+- progress CompactProgress
+- process log panel
+- cancel token
+- recovery buttons: buka output/report/log/retry
+
+Catatan penting:
+Browse existing memilih folder. Att Data Repair membutuhkan source Excel file, jadi UI perlu file picker khusus, bukan folder picker.
+
+5. Kondisi Aktual Configuration dan SQLite
+
+Workbook template unified didefinisikan di shared/database/exporting/constants.py dengan SHEET_ORDER exact. Sheet Utilities saat ini:
+- Comparison_Settings
+- Attachment_Consolidation
+
+SQLite saat ini punya:
+- comparison_settings
+- attachment_consolidation_settings
+
+SCHEMA_VERSION saat audit adalah 2. Menambah tabel baru berarti perlu schema v3 dan migration baru, plus update REQUIRED_TABLES, validator, importer, exporter, template, dan tests.
+
+Backward compatibility belum otomatis untuk sheet unified baru jika sheet baru dijadikan signature wajib. Karena itu Att_Data_Repair harus diperlakukan optional untuk workbook lama saat import, dengan default Blueprint saat sheet tidak ada.
+
+6. Proposed Architecture Att Data Repair
+
+Komponen baru:
+- models.py: request/result/record/anomaly/change log/artifacts.
+- report_reader.py: read-only reader untuk Valid_Records dan Invalid_Records.
+- normalizer.py: NIK/date/time/workflow/spreadsheet-error normalization.
+- repair_rules.py: aturan bisnis fixed.
+- validator.py: preflight workbook/sheet/header/period/output.
+- txt_writer.py: HRIS TXT writer khusus naming requirement.
+- report_writer.py: Excel audit report streaming.
+- job_manager.py: reserve folder/output collision-safe.
+- engine.py: orchestration.
+- statuses.py: status code dan guide.
+- UI adapter/service/model extensions mengikuti pola Attachment Consolidation.
+
+Reuse:
+- openpyxl untuk Excel.
+- config.app_config.DATE_FORMAT dan TIME_FORMAT.
+- OutlookTxtWriter/AttendanceRevisionRecord.to_txt_row() sebagai referensi format, bukan writer langsung karena naming berbeda.
+- UtilitiesJobAudit untuk history.
+- shared.database.time_utils.current_timestamp.
+
+7. Proposed File Changes
+
+File baru yang disarankan:
+- utilities/att_data_repair/models.py
+- utilities/att_data_repair/report_reader.py
+- utilities/att_data_repair/normalizer.py
+- utilities/att_data_repair/repair_rules.py
+- utilities/att_data_repair/validator.py
+- utilities/att_data_repair/txt_writer.py
+- utilities/att_data_repair/report_writer.py
+- utilities/att_data_repair/job_manager.py
+- utilities/att_data_repair/engine.py
+- utilities/att_data_repair/statuses.py
+- utilities/att_data_repair/process_logger.py
+- utilities/att_data_repair/summary_writer.py
+- ui/adapters/att_data_repair_adapter.py
+- ui/services/att_data_repair_service.py
+- tests/test_att_data_repair*.py
+- tests/ui/utilities/test_att_data_repair*.py
+
+File existing yang kemungkinan perlu perubahan minimal:
+- ui/utilities_models.py: enum/model baru.
+- ui/services/utilities_service.py: landing/default settings baru.
+- ui/services/service_container.py: wire service/adapter.
+- ui/pages/utilities_page.py: tambah subfitur dan mode source file.
+- shared/database/exporting/constants.py: sheet/config definitions.
+- shared/database/importing/constants.py: table/module/singleton mapping.
+- shared/database/importing/unified/unified_mapper.py: mapping setting baru.
+- shared/database/importing/validator.py: validasi config.
+- shared/database/exporting/current_config_exporter.py: export current config.
+- shared/database/constants.py: schema/table requirements.
+- shared/database/migration_manager.py: migration step baru.
+- shared/database/migrations/v2_to_v3.sql: migration baru.
+- Tests database/template/UI Utilities.
+
+File yang tidak boleh disentuh untuk fitur ini:
+- utilities/attachment_consolidation/* kecuali nanti ada bug eksplisit.
+- outlook/parser.py bila hanya untuk menyesuaikan naming Att Data Repair.
+- attendance/engine.py.
+- dist/
+- build/
+- *.spec untuk EXE.
+
+8. Proposed Processing Pipeline
+
+1. Preflight:
+   cek file .xlsx, read-only, cek sheet Valid_Records dan Invalid_Records, cek header wajib.
+2. Resolve config:
+   global/local period dan output, TXT_Max_Rows, defaults time, generate flags.
+3. Read:
+   baca semua row kedua sheet, simpan Source_File, Source_Sheet, Source_Row, Relative_Path, Raw_Value.
+4. Normalize:
+   NIK, workflow, date, time, status source.
+5. Validate:
+   NIK, date dalam periode, workflow HO/Branch.
+6. Repair:
+   align Date_Out, normalize separator jam, swap time, default time, min duration 61 menit.
+7. Classify:
+   Final_Records, Changed_Records, Anomaly, Change_Log.
+8. Split workflow:
+   HO dan Branch dipisah; duplikat NIK+tanggal tidak di-merge.
+9. Export TXT:
+   max 10.000 rows/file; format HRIS 6 kolom quoted.
+10. Export report:
+   satu workbook audit.
+11. History/logging:
+   Process.log, summary.json, job_history, job_files, job_status_events.
+
+9. Proposed Excel Report Design
+
+Sheet:
+1. Guide
+2. Process_Summary
+3. Summary_Per_Karyawan
+4. Final_Records
+5. Changed_Records
+6. Anomaly
+7. Change_Log
+8. Source_Inventory
+
+Kolom inti:
+- Final_Records: lineage, workflow, NIK, Date_In, Time_In, Date_Out, Time_Out, TXT file, final status.
+- Changed_Records: before/after per record.
+- Anomaly: lineage, raw fields, reason, action.
+- Change_Log: record id, field, before, after, rule code.
+- Source_Inventory: workbook, sheet, row count, headers, status.
+
+Status code awal:
+- VALID_UNCHANGED
+- REPAIRED
+- NIK_INVALID
+- DATE_INVALID
+- DATE_OUT_ALIGNED_TO_DATE_IN
+- TIME_NORMALIZED
+- TIME_SWAPPED
+- DEFAULT_TIME_APPLIED
+- MIN_DURATION_ADJUSTED
+- WORKFLOW_INVALID
+- OUTSIDE_PERIOD
+- TXT_EXCLUDED
+
+Format:
+Header biru seperti existing, status hijau/kuning/merah/netral seperti report Outlook/Reconciliation.
+
+10. Proposed Configuration Design
+
+Sheet baru: Att_Data_Repair.
+
+Setting awal:
+- enabled = TRUE
+- minimum_duration_minutes = 61
+- weekday_default_in = 09:30
+- weekday_default_out = 17:00
+- saturday_default_in = 09:30
+- saturday_default_out = 12:05
+- sunday_invalid_default_in = 09:30
+- sunday_invalid_default_out = 12:05
+- txt_max_rows = 10000
+- txt_unique_code_length = 4
+- generate_excel_report = TRUE
+- generate_txt = TRUE
+- use_global_output = TRUE
+- use_global_period = TRUE
+
+SQLite mapping paling konsisten:
+- tabel singleton baru att_data_repair_settings.
+- perlu schema v3.
+
+Backward compatibility:
+Workbook lama tanpa sheet Att_Data_Repair harus tetap import dengan default internal, bukan gagal.
+
+11. Proposed GUI Integration
+
+Posisi:
+Kartu ketiga di Utilities landing bernama persis Att Data Repair.
+
+Input fields:
+- Source Report Excel hasil Attachment Consolidation.
+- Use Global Configuration atau mengikuti pola existing terpisah output/period.
+- Period Start.
+- Period End.
+- Output Root.
+- Generate TXT.
+- Generate Excel Report.
+- Validation summary.
+- Progress.
+- Process log.
+- Run/Cancel.
+- Open output/report/log.
+
+Behavior:
+- Jika global aktif: period dan output dari Global_Settings, field lokal readonly/disabled.
+- Jika lokal: user pilih periode dan output folder.
+- Source picker wajib file .xlsx.
+
+12. Proposed Test Strategy
+
+Minimal:
+- Unit tests parser reader Valid_Records/Invalid_Records.
+- Date tests: Excel date cell, text date, ambiguous date, outside period.
+- Time tests: 7;20, 7.20, invalid, Excel time.
+- Repair rule tests: align Date_Out, swap in/out, default day, min 61 menit, no night shift.
+- Duplicate record tests: NIK+tanggal sama tetap semua diproses.
+- Workflow tests: HO, Branch, invalid/empty.
+- TXT tests: HRIS format, split 10.000, 4 digit shared code, duplicate filename prevention.
+- Report tests: sheet order, changed/anomaly/change log linkage.
+- Configuration tests: template, import/export, old workbook compatibility.
+- Regression tests: Attachment Consolidation existing report dan TXT naming tetap tidak berubah.
+
+13. Risiko dan Mitigasi
+
+Rendah:
+- Reuse openpyxl, no dependency baru.
+- Format HRIS TXT sudah jelas.
+
+Sedang:
+- Menambah feature ketiga akan memecahkan tests yang saat ini assert exactly two active features.
+  Mitigasi: update kontrak tests sesuai fitur baru.
+- Sheet config baru berkonflik dengan exact SHEET_ORDER.
+  Mitigasi: template current exact, importer tolerant untuk workbook lama.
+- TXT naming baru berbeda dari writer existing.
+  Mitigasi: writer khusus Att Data Repair.
+
+Tinggi:
+- Migration SQLite v3 menyentuh bootstrap/validator/import/export.
+  Mitigasi: migration backup-first, tests schema/migration/roundtrip.
+- Parsing tanggal teks ambigu.
+  Mitigasi: gunakan periode sebagai guard, anomaly bila tidak pasti.
+
+14. Ambiguitas atau Konflik yang Ditemukan
+
+1. Struktur folder requirement konseptual Att_Data_Repair/YYYY-MM-DD_XX berbeda dari pola existing Utilities/<Feature>/<Workflow>/<YYYY-MM>/<timestamp>.
+   Rekomendasi: user perlu memutuskan apakah Att Data Repair boleh memakai pola existing atau harus memakai konsep baru.
+
+2. Existing TXT suffix random 3 digit berbeda per file; requirement Att Data Repair minta 4 digit sama untuk seluruh job.
+   Rekomendasi: writer khusus.
+
+3. Existing Attachment Consolidation workflow di engine/report memakai HO dan Branch; database/UI sebagian memakai BRANCH.
+   Rekomendasi: engine/output report gunakan Branch, UI/database boleh normalize internal.
+
+4. Existing Unified UI browse Utilities adalah folder picker; Att Data Repair butuh file picker.
+   Rekomendasi: branching UI per feature.
+
+5. Attachment Consolidation tidak punya ENGINE_VERSION; Reconciliation punya ENGINE_VERSION = 1.0.0.
+   Rekomendasi: Att Data Repair punya version constant sendiri.
+
+15. Rencana 7 Sprint
+
+Sprint 1:
+Audit dan implementation plan.
+
+Sprint 2:
+Desain kontrak data dan engine skeleton tanpa GUI besar: models, reader, normalizer, validator, rule tests.
+
+Sprint 3:
+Implement repair rules lengkap, TXT writer khusus, job manager/log/summary.
+
+Sprint 4:
+Excel report writer dan audit workbook lengkap.
+
+Sprint 5:
+Konfigurasi SQLite/template/import/export/migration v3/backward compatibility.
+
+Sprint 6:
+Unified UI integration, adapter/service, history integration, cancellation/progress.
+
+Sprint 7:
+Regression hardening, large file tests, packaging-risk review source-level saja, dokumentasi operasional.
+
+16. Definition of Done Sprint 1
+
+Terpenuhi untuk audit:
+- Tidak ada implementasi fitur.
+- Tidak ada refactor.
+- Tidak ada build EXE.
+- Tidak ada commit.
+
+Catatan setelah permintaan user berikutnya:
+File TXT ini dibuat sebagai artefak dokumen hasil audit, atas permintaan eksplisit user.
+
+Git status saat audit final sebelum file ini dibuat:
+M docs/database/OAS-K_DB4_Recovery_Notes.md
+
+File tersebut sudah modified sebelum/saat audit terdeteksi sebagai perubahan existing dan tidak disentuh oleh audit.

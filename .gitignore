@@ -14,6 +14,11 @@ build/
 dist/
 *.spec
 
+# Editor / tooling cache
+.vscode/
+.pytest_cache/
+.ruff_cache/
+
 # Logs / temp / output
 logs/
 temp/
@@ -26,10 +31,17 @@ summary.json
 # Local database files
 *.mdb
 *.accdb
+*.db
+*.sqlite
+*.sqlite3
+/database/
 
 # Local/private config
 Attendance Configuration/
 OAS-K_Attendance_Configuration.xlsx
+*.bak
+*.before_*
+*backup*.xlsx
 
 # OS files
 .DS_Store

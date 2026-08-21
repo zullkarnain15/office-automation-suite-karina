@@ -12,9 +12,9 @@ HRIS Job Artifact Writer
 
 Sprint 6.9:
 - Create HRIS job folder structure
-- Create Upload folder
-- Create Failed folder
-- Create Report/<JOB_ID> folder
+- Create Upload/YYYY-MM folder
+- Create Failed/YYYY-MM folder
+- Create Report/YYYY-MM folder
 - Create Upload_Process_<JOB_ID>.txt
 - Create Upload_Summary_<JOB_ID>.json
 
@@ -83,10 +83,11 @@ class HRISJobArtifactWriter:
             hris_output_root = output_root_path / "HRIS"
 
         workflow_root = hris_output_root / workflow_label
-        upload_folder = workflow_root / "Upload"
-        failed_folder = workflow_root / "Failed"
+        month_folder_name = self._month_folder_name(job_id)
+        upload_folder = workflow_root / "Upload" / month_folder_name
+        failed_folder = workflow_root / "Failed" / month_folder_name
         report_root = workflow_root / "Report"
-        job_report_folder = report_root / job_id
+        job_report_folder = report_root / month_folder_name
 
         process_log_file = job_report_folder / f"Upload_Process_{job_id}.txt"
         summary_json_file = job_report_folder / f"Upload_Summary_{job_id}.json"
@@ -390,6 +391,34 @@ class HRISJobArtifactWriter:
             item_dict["txt_file_path"] = str(item_dict["txt_file_path"])
 
         return item_dict
+
+    @staticmethod
+    def _job_folder_name(job_id: str) -> str:
+        """Return timestamp-only folder name while preserving the full job ID."""
+        value = str(job_id).strip()
+        parts = value.split("_")
+
+        if (
+            len(parts) >= 2
+            and len(parts[-2]) == 8
+            and parts[-2].isdigit()
+            and len(parts[-1]) == 6
+            and parts[-1].isdigit()
+        ):
+            return f"{parts[-2]}_{parts[-1]}"
+
+        return value
+
+    @classmethod
+    def _month_folder_name(cls, job_id: str) -> str:
+        """Return the YYYY-MM archive folder derived from the HRIS job ID."""
+        timestamp_label = cls._job_folder_name(job_id)
+        date_part = timestamp_label.split("_", maxsplit=1)[0]
+
+        if len(date_part) == 8 and date_part.isdigit():
+            return f"{date_part[:4]}-{date_part[4:6]}"
+
+        return datetime.now().strftime("%Y-%m")
 
     @staticmethod
     def _normalize_workflow(workflow: str) -> str:
