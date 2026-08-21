@@ -10,6 +10,7 @@ from tkinter import messagebox, ttk
 from ui.constants import COMPACT_LOG_BACKGROUND, LOG_FONT, LOG_TEXT
 from ui.dialogs.module_configuration_detail import ModuleConfigurationDetailDialog
 from ui.icon_manager import IconManager
+from ui.mascot_outcome import classify_mascot_outcome
 from ui.global_hotkey import WindowsGlobalHotkey
 from ui.hris_models import (
     HRISCancellationToken,
@@ -59,6 +60,12 @@ class HRISPage(BasePage):
         self.source_var = tk.StringVar()
         self.source_summary_var = tk.StringVar(value="TXT source: Belum dipilih")
         self.workflow_var = tk.StringVar(value="HO")
+        self.use_configured_source_var = tk.BooleanVar(value=True)
+        self._configured_sources: dict[str, Path | None] = {
+            "HO": None,
+            "BRANCH": None,
+        }
+        self.workflow_var.trace_add("write", self._source_type_changed)
         self.global_period_var = tk.BooleanVar(value=False)
         self.start_var = tk.StringVar()
         self.end_var = tk.StringVar()
@@ -112,15 +119,37 @@ class HRISPage(BasePage):
         ttk.Label(source, text="TXT Source", style="CompactTitle.TLabel").grid(
             row=0, column=0, columnspan=3, sticky="w"
         )
-        ttk.Label(
-            source, text="Folder TXT Attendance", style="CompactText.TLabel"
-        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(5, 2))
-        ttk.Entry(source, textvariable=self.source_var, style="Modern.TEntry").grid(
-            row=2, column=0, sticky="ew"
+        ttk.Label(source, text="Source Type", style="CompactText.TLabel").grid(
+            row=1, column=0, columnspan=3, sticky="w", pady=(5, 2)
         )
-        ttk.Button(
+        SegmentedChoice(
+            source,
+            variable=self.workflow_var,
+            choices=(("HO", "HO"), ("BRANCH", "BRANCH")),
+        ).grid(row=2, column=0, columnspan=3, sticky="w")
+        self.use_configured_source_check = ttk.Checkbutton(
+            source,
+            text="Gunakan folder global HRIS",
+            variable=self.use_configured_source_var,
+            command=self._apply_source_mode,
+        )
+        self.use_configured_source_check.grid(
+            row=3, column=0, columnspan=3, sticky="w", pady=(5, 2)
+        )
+        ttk.Label(
+            source, text="Folder TXT Aktif", style="CompactText.TLabel"
+        ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(5, 2))
+        self.source_entry = ttk.Entry(
+            source, textvariable=self.source_var, style="Modern.TEntry"
+        )
+        self.source_entry.grid(
+            row=5, column=0, sticky="ew"
+        )
+        self.source_browse_button = ttk.Button(
             source, text="Browse", style="Attendance.TButton", command=self.browse_source
-        ).grid(row=2, column=1, padx=(6, 0))
+        )
+        self.source_browse_button.grid(row=5, column=1, padx=(6, 0))
+        self._apply_source_mode()
 
         period = ttk.Frame(panel, style="CompactBody.TFrame")
         period.grid(row=0, column=1, sticky="nsew", padx=(0, 14))
@@ -151,13 +180,6 @@ class HRISPage(BasePage):
             period, textvariable=self.end_var, width=11
         )
         self.end_entry.grid(row=3, column=1, sticky="ew", padx=(10, 0))
-        workflow = ttk.Frame(period, style="CompactBody.TFrame")
-        workflow.grid(row=4, column=0, columnspan=2, sticky="w", pady=(7, 0))
-        SegmentedChoice(
-            workflow,
-            variable=self.workflow_var,
-            choices=(("HO", "HO"), ("BRANCH", "BRANCH")),
-        ).pack(anchor="w")
 
         profile = ttk.Frame(panel, style="CompactBody.TFrame")
         profile.grid(row=0, column=2, sticky="nsew")
@@ -514,6 +536,11 @@ class HRISPage(BasePage):
             )
             if value.recorder_profile:
                 self.profile_var.set(str(value.recorder_profile))
+            self._configured_sources = {
+                "HO": value.ho_txt_source_folder,
+                "BRANCH": value.branch_txt_source_folder,
+            }
+            self._apply_source_mode()
             self._apply_global_period_state()
             if value.warning:
                 self.validation_summary.show_lines([value.warning])
@@ -543,10 +570,24 @@ class HRISPage(BasePage):
         )
 
     def _request(self) -> HRISRunRequest:
+        raw_source = self.source_var.get().strip()
+        source_type = self.workflow_var.get().upper()
+        if not raw_source:
+            label = "HO" if source_type == "HO" else "Branch"
+            raise ValueError(
+                f"{label} TXT Source Folder belum dikonfigurasi. "
+                "Silakan atur melalui Settings → General."
+            )
+        source_folder = Path(raw_source).expanduser()
+        if not source_folder.is_dir():
+            label = "HO" if source_type == "HO" else "Branch"
+            raise ValueError(
+                f"{label} TXT Source Folder tidak tersedia: {source_folder}"
+            )
         fallback = self.fallback_path_var.get().strip()
         profile = self.profile_var.get().strip()
         return HRISRunRequest(
-            Path(self.source_var.get().strip()),
+            source_folder,
             self.workflow_var.get(),
             self.global_period_var.get(),
             self.start_entry.get_iso(),
@@ -661,6 +702,8 @@ class HRISPage(BasePage):
         self._resolved = resolved
         self._cancellation = HRISCancellationToken()
         self._running = True
+        if self.context.mascot_work_started:
+            self.context.mascot_work_started()
         self._set_busy(True, "HRIS job dimulai...")
         self.cancel_button.configure(state="normal")
         self.cancel_button.pack(side="left", padx=(8, 0))
@@ -675,6 +718,8 @@ class HRISPage(BasePage):
             )
 
         def done(result) -> None:
+            if self.context.mascot_work_finished:
+                self.context.mascot_work_finished(classify_mascot_outcome(result))
             if self._disposed:
                 return
             self._running = False
@@ -837,6 +882,20 @@ class HRISPage(BasePage):
                 value.error_summary or "",
             ]
         )
+        failed_count = sum(item.status != "SUCCESS" for item in value.files)
+        if value.success and not value.cancelled and not failed_count:
+            completion = getattr(self.services.dialog_service, "completion", None)
+            if callable(completion):
+                success_count = sum(item.status == "SUCCESS" for item in value.files)
+                completion(
+                    "HRIS",
+                    "HRIS berhasil diproses. Output sudah tersimpan.",
+                    (
+                        f"File berhasil: {success_count}",
+                        f"Workflow: {value.workflow}",
+                        f"Output: {value.output_folder or '-'}",
+                    ),
+                )
 
     def _wait_for_calibration_navigation(self, message: str) -> None:
         confirmed = threading.Event()
@@ -964,10 +1023,37 @@ class HRISPage(BasePage):
         )
 
     def browse_source(self) -> None:
+        if self.use_configured_source_var.get():
+            return
         path = self.services.dialog_service.select_folder(title="Pilih Folder TXT HRIS")
         if path:
             self.source_var.set(str(path))
             self.refresh_source()
+
+    def use_configured_source(self) -> None:
+        source_type = self.workflow_var.get().upper()
+        folder = self._configured_sources.get(source_type)
+        self.source_var.set(str(folder) if folder is not None else "")
+        if folder is None:
+            label = "HO" if source_type == "HO" else "Branch"
+            self.source_summary_var.set(
+                f"{label} TXT Source Folder belum dikonfigurasi."
+            )
+        else:
+            self.refresh_source()
+
+    def _source_type_changed(self, *_args) -> None:
+        if self.use_configured_source_var.get():
+            self.use_configured_source()
+
+    def _apply_source_mode(self) -> None:
+        if self.use_configured_source_var.get():
+            self.source_entry.configure(state="readonly")
+            self.source_browse_button.configure(state="disabled")
+            self.use_configured_source()
+        else:
+            self.source_entry.configure(state="normal")
+            self.source_browse_button.configure(state="normal")
 
     def select_profile(self) -> None:
         path = self.services.dialog_service.select_file(

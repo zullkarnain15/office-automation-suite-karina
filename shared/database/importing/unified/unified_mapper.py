@@ -175,6 +175,10 @@ def map_unified(
     has_split_sender_sheets = any(
         sheet_name in workbook.sheets for sheet_name in SENDER_WORKFLOW_BY_SHEET
     )
+    sender_rows_by_key: dict[
+        tuple[str, str, str, str],
+        tuple[dict[str, Any], str, int],
+    ] = {}
     for sheet_name, (
         module,
         table,
@@ -188,6 +192,7 @@ def map_unified(
         rows = []
         for raw in table_rows(sheet, required_header=required_header):
             row: dict[str, Any] = {}
+            row_invalid = False
             implied_workflow = SENDER_WORKFLOW_BY_SHEET.get(sheet_name)
             if implied_workflow is not None:
                 row["workflow"] = implied_workflow
@@ -196,12 +201,35 @@ def map_unified(
                     if column in EMPTY_TEXT_COLUMNS:
                         row[column] = ""
                     continue
-                row[column] = _normalize_column(
-                    table,
-                    column,
-                    cell.value,
-                    cell.number_format,
-                )
+                try:
+                    row[column] = _normalize_column(
+                        table,
+                        column,
+                        cell.value,
+                        cell.number_format,
+                    )
+                except (TypeError, ValueError) as exc:
+                    if table != "outlook_sender_master":
+                        raise
+                    module_issues[module].append(
+                        ConfigImportIssue(
+                            code="OUTLOOK_SENDER_ROW_INVALID",
+                            severity=IssueSeverity.ERROR,
+                            module=module,
+                            sheet=sheet_name,
+                            row_number=cell.row_number,
+                            field=column,
+                            message=(
+                                "Invalid Outlook sender value: "
+                                f"{exc}"
+                            ),
+                            current_value=cell.value,
+                        )
+                    )
+                    row_invalid = True
+                    break
+            if row_invalid:
+                continue
             if table in SINGLETON_IDS:
                 id_column, id_value = SINGLETON_IDS[table]
                 row[id_column] = id_value
@@ -209,6 +237,64 @@ def map_unified(
                 row["updated_at"] = timestamp
             if table not in SINGLETON_IDS and table != "global_settings":
                 row.setdefault("created_at", timestamp)
+            if table == "outlook_sender_master":
+                row.setdefault("is_active", 1)
+                if not str(row.get("sender_email") or "").strip():
+                    if row.get("is_active"):
+                        module_issues[module].append(
+                            ConfigImportIssue(
+                                code="ACTIVE_SENDER_EMAIL_MISSING",
+                                severity=IssueSeverity.ERROR,
+                                module=module,
+                                sheet=sheet_name,
+                                row_number=next(iter(raw.values())).row_number,
+                                field="sender_email",
+                                message="Active sender row has no email address.",
+                            )
+                        )
+                    continue
+                sender_key = _outlook_sender_key(row)
+                previous = sender_rows_by_key.get(sender_key)
+                if previous is not None:
+                    previous_sender, previous_sheet, previous_row = previous
+                    duplicate_identical = (
+                        _outlook_sender_meaningful(previous_sender)
+                        == _outlook_sender_meaningful(row)
+                    )
+                    module_issues[module].append(
+                        ConfigImportIssue(
+                            code=(
+                                "OUTLOOK_SENDER_DUPLICATE_IDENTICAL_IGNORED"
+                                if duplicate_identical
+                                else "OUTLOOK_SENDER_DUPLICATE"
+                            ),
+                            severity=(
+                                IssueSeverity.WARNING
+                                if duplicate_identical
+                                else IssueSeverity.ERROR
+                            ),
+                            module=module,
+                            sheet=sheet_name,
+                            row_number=next(iter(raw.values())).row_number,
+                            field="sender_email",
+                            message=(
+                                "Identical duplicate Outlook sender was ignored; "
+                                if duplicate_identical
+                                else "Conflicting duplicate Outlook sender; "
+                            )
+                            + (
+                                "first occurrence is at "
+                                f"{previous_sheet} row {previous_row}."
+                            ),
+                        )
+                    )
+                    continue
+                else:
+                    sender_rows_by_key[sender_key] = (
+                        row,
+                        sheet_name,
+                        next(iter(raw.values())).row_number,
+                    )
             rows.append(row)
         existing = module_tables[module].get(table, ())
         module_tables[module][table] = (*existing, *rows)
@@ -225,6 +311,23 @@ def map_unified(
             )
         )
     return tuple(result)
+
+
+def _outlook_sender_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        str(row.get("workflow") or "").strip().upper(),
+        str(row.get("company_code") or "").strip(),
+        str(row.get("branch_code") or "").strip(),
+        str(row.get("sender_email") or "").strip().casefold(),
+    )
+
+
+def _outlook_sender_meaningful(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in {"sender_id", "created_at", "updated_at"}
+    }
 
 
 def _complete_singleton(

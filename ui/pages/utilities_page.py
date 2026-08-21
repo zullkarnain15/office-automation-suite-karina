@@ -9,6 +9,7 @@ from tkinter import ttk
 
 from ui.constants import COMPACT_LOG_BACKGROUND, LOG_FONT, LOG_TEXT
 from ui.icon_manager import IconManager
+from ui.mascot_outcome import classify_mascot_outcome
 from ui.pages.base_page import BasePage
 from ui.utilities_models import (
     AttachmentConsolidationCancellationToken,
@@ -27,6 +28,13 @@ from ui.utilities_models import (
 )
 from ui.widgets import CompactProgress, DateEntry, ResultSummary
 from ui.widgets import OptionChip, SegmentedChoice
+
+
+FEATURE_TITLES = {
+    UtilitiesFeature.COMPARISON_RESULT: "Comparison Result",
+    UtilitiesFeature.ATTACHMENT_CONSOLIDATION: "Attachment Consolidation",
+    UtilitiesFeature.ATT_DATA_REPAIR: "Att Data Repair",
+}
 
 
 class UtilitiesPage(BasePage):
@@ -675,6 +683,8 @@ class UtilitiesPage(BasePage):
             else AttachmentConsolidationCancellationToken()
         )
         self._running = True
+        if self.context.mascot_work_started:
+            self.context.mascot_work_started()
         self.cancel_button.configure(state="normal")
         self.cancel_button.pack(side="left", padx=(8, 0))
         self._set_validation_status("Sedang berjalan", "StatusRunning.TLabel")
@@ -697,6 +707,13 @@ class UtilitiesPage(BasePage):
         )
 
     def _run_done(self, task) -> None:
+        if self.context.mascot_work_finished:
+            self.context.mascot_work_finished(
+                classify_mascot_outcome(
+                    task,
+                    warning_statuses=("PARTIAL_SUCCESS", "NO_VALID_RECORDS"),
+                )
+            )
         if self._disposed:
             return
         self._running = False
@@ -796,6 +813,23 @@ class UtilitiesPage(BasePage):
             else ("Gagal", "StatusError.TLabel")
         )
         self._set_validation_status(status_text, status_style)
+        if (
+            value.success
+            and not value.cancelled
+            and not value.warning_count
+            and engine_status not in {"PARTIAL_SUCCESS", "NO_VALID_RECORDS"}
+        ):
+            completion = getattr(self.services.dialog_service, "completion", None)
+            if callable(completion):
+                completion(
+                    FEATURE_TITLES.get(self._feature, "Utilities"),
+                    "Proses Utilities berhasil selesai. Output sudah tersimpan.",
+                    (
+                        f"Job: {value.job_id}",
+                        f"Output file: {len(value.outputs)}",
+                        f"Output: {value.output_folder or '-'}",
+                    ),
+                )
 
     def _set_validation_status(self, text: str, style: str | None = None) -> None:
         if style is None:

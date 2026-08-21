@@ -60,6 +60,12 @@ class GlobalSettingsDraft:
 
 
 @dataclass(frozen=True, slots=True)
+class HRISTxtSourceDraft:
+    ho_folder: str = ""
+    branch_folder: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class OutlookOperationalSettingsDraft:
     payroll_period: str = ""
     resubmit_deadline: str = ""
@@ -111,6 +117,14 @@ class DatabaseSettingsServiceProtocol(Protocol):
         *,
         operator: str | None = None,
     ) -> GlobalSettingsDraft: ...
+
+    def load_hris_txt_source_preferences(
+        self, database_path: Path
+    ) -> HRISTxtSourceDraft: ...
+
+    def save_hris_txt_source_preferences(
+        self, database_path: Path, draft: HRISTxtSourceDraft
+    ) -> HRISTxtSourceDraft: ...
 
     def load_outlook_operational_settings(
         self,

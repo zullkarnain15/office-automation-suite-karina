@@ -60,6 +60,15 @@ def test_startup_shows_welcome_splash_with_image_and_copy(
     assert app._welcome_start_image is not None
     assert app._welcome_start_image.width() == 200
     assert app._welcome_start_image.height() == 80
+    assert app._welcome_mascot_image is not None
+    assert len(app._welcome_mascot_images) == 3
+    assert app._welcome_mascot_image.width() == 120
+    assert app._welcome_mascot_image.height() == 120
+    assert app._welcome_mascot_bubble.cget("text") == "Let's go !!!"
+    assert app._welcome_mascot_bounce_job is not None
+    mascot_y = app._welcome_mascot_label.place_info()["y"]
+    app._advance_welcome_mascot_bounce()
+    assert app._welcome_mascot_label.place_info()["y"] != mascot_y
     assert app._welcome_shimmer_job is not None
     title_style = app._welcome_title_label.cget("style")
     glow_style = app._welcome_start_glow.cget("style")
@@ -78,6 +87,7 @@ def test_startup_shows_welcome_splash_with_image_and_copy(
     app._start_from_welcome()
     assert not app._welcome_splash.winfo_exists()
     assert app._welcome_shimmer_job is None
+    assert app._welcome_mascot_bounce_job is None
     assert app.navigation.active_page_id == "dashboard"
     assert app.startup_database_result.status == "NO_DATABASE"
     deadline = time.monotonic() + 2

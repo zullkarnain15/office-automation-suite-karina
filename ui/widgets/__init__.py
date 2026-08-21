@@ -6,6 +6,8 @@ from ui.widgets.choice_chip import OptionChip, SegmentedChoice
 from ui.widgets.date_entry import DateEntry, display_to_iso, iso_to_display
 from ui.widgets.empty_state import EmptyState
 from ui.widgets.header import Header
+from ui.widgets.karina_mascot import KarinaMascotView
+from ui.widgets.karina_mascot_controller import KarinaMascotController
 from ui.widgets.health_status_card import HealthStatusCard
 from ui.widgets.metric_card import MetricCard, ModuleStatusCard
 from ui.widgets.modern_card import ModernCard
@@ -24,6 +26,8 @@ __all__ = [
     "DateEntry",
     "EmptyState",
     "Header",
+    "KarinaMascotView",
+    "KarinaMascotController",
     "HealthStatusCard",
     "MetricCard",
     "ModernCard",

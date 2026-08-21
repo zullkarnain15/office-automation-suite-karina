@@ -302,6 +302,15 @@ class StyleManager:
             background=welcome_background,
         )
         style.configure(
+            "WelcomeMascotBubble.TLabel",
+            background="#DCEBFF",
+            foreground="#081A33",
+            font=(display_family, 7, "bold"),
+            padding=(6, 3),
+            relief="solid",
+            borderwidth=1,
+        )
+        style.configure(
             "WelcomeEyebrow.TLabel",
             background=welcome_background,
             foreground="#8FB8FF",

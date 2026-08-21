@@ -163,6 +163,32 @@ def test_defaults_preserve_leading_zero_and_sqlite_source(tmp_path: Path):
     assert defaults.hris_url == "https://hris.test"
 
 
+def test_defaults_load_distinct_local_ho_and_branch_txt_sources(tmp_path: Path):
+    database = make_database(tmp_path)
+    ho = tmp_path / "configured-ho"
+    branch = tmp_path / "configured-branch"
+    ho.mkdir()
+    branch.mkdir()
+    with SQLiteConnectionFactory().connect(database) as connection:
+        connection.execute(
+            "INSERT INTO application_preferences "
+            "(preference_key, preference_value, value_type, updated_at) "
+            "VALUES ('hris_txt_source_ho', ?, 'TEXT', '2026-08-21')",
+            (str(ho),),
+        )
+        connection.execute(
+            "INSERT INTO application_preferences "
+            "(preference_key, preference_value, value_type, updated_at) "
+            "VALUES ('hris_txt_source_branch', ?, 'TEXT', '2026-08-21')",
+            (str(branch),),
+        )
+
+    defaults = HRISService(Storage(tmp_path, database), Adapter()).load_defaults()
+
+    assert defaults.ho_txt_source_folder == ho
+    assert defaults.branch_txt_source_folder == branch
+
+
 @pytest.mark.parametrize("workflow", ["HO", "BRANCH"])
 def test_resolves_exactly_one_workflow(tmp_path: Path, workflow: str):
     database = make_database(tmp_path)

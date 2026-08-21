@@ -177,6 +177,8 @@ def test_fixture_attendance_manual_acceptance(tk_root, tmp_path: Path) -> None:
     assert page._last_result.success
     assert responsive_ticks > 2
     page.open_output()
+    page.open_txt()
+    page.open_report()
     page.open_process_log()
 
     page.workflow_var.set("BRANCH")
@@ -235,7 +237,7 @@ def test_fixture_attendance_manual_acceptance(tk_root, tmp_path: Path) -> None:
     assert file_count == 10
     assert table_count == len(REQUIRED_TABLES)
     assert len(confirmations) == 3
-    assert len(opened) == 2
+    assert len(opened) == 4
     assert backend.write_count == 1  # Explicit test pointer setup only.
     assert backend.delete_count == 0
     assert app.close()

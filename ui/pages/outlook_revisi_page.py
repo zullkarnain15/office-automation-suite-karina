@@ -9,6 +9,7 @@ from tkinter import ttk
 from ui.constants import COMPACT_LOG_BACKGROUND, LOG_FONT, LOG_TEXT
 from ui.dialogs.module_configuration_detail import ModuleConfigurationDetailDialog
 from ui.icon_manager import IconManager
+from ui.mascot_outcome import classify_mascot_outcome
 from ui.outlook_revisi_models import (
     OutlookRevisiCancellationToken,
     OutlookRevisiLogEvent,
@@ -603,6 +604,8 @@ class OutlookRevisiPage(BasePage):
         self._resolved = resolved
         self._cancellation = OutlookRevisiCancellationToken()
         self._running = True
+        if self.context.mascot_work_started:
+            self.context.mascot_work_started()
         self._set_busy(True, "Outlook Revisi running...")
         self.cancel_button.configure(state="normal")
         self.cancel_button.pack(side="left", padx=(8, 0))
@@ -619,6 +622,10 @@ class OutlookRevisiPage(BasePage):
             )
 
         def done(task_result) -> None:
+            if self.context.mascot_work_finished:
+                self.context.mascot_work_finished(
+                    classify_mascot_outcome(task_result)
+                )
             if self._disposed:
                 return
             self._running = False
@@ -756,6 +763,18 @@ class OutlookRevisiPage(BasePage):
             else ("Gagal", "StatusError.TLabel")
         )
         self._set_validation_status(status_text, status_style)
+        if result.success and not result.cancelled and not result.warning_count:
+            completion = getattr(self.services.dialog_service, "completion", None)
+            if callable(completion):
+                completion(
+                    "Outlook Revisi",
+                    "Outlook Revisi berhasil diproses. Output sudah tersimpan.",
+                    (
+                        f"Email berhasil: {result.message_counts.get('success', 0)}",
+                        f"Attachment: {result.attachment_counts.get('total', 0)}",
+                        f"Output: {result.output_root}",
+                    ),
+                )
 
     def _set_validation_status(self, text: str, style: str) -> None:
         self.validation_status_var.set(text)

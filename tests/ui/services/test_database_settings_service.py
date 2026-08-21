@@ -11,6 +11,7 @@ from shared.database import SchemaManager
 from ui.services.database_settings_service import DatabaseSettingsService
 from ui.services.protocols import (
     GlobalSettingsDraft,
+    HRISTxtSourceDraft,
     ModuleGlobalUsage,
     OutlookOperationalSettingsDraft,
 )
@@ -54,6 +55,32 @@ def test_global_settings_save_and_load(settings_database: Path) -> None:
     draft = GlobalSettingsDraft("D:/Output", "2026-01-01", "2026-01-31")
     assert service.save_global_settings(settings_database, draft) == draft
     assert service.load_global_settings(settings_database) == draft
+
+
+def test_hris_txt_sources_are_local_preferences_and_allow_empty_values(
+    settings_database: Path,
+    tmp_path: Path,
+) -> None:
+    service = DatabaseSettingsService()
+    ho = tmp_path / "HRIS HO"
+    branch = tmp_path / "HRIS Branch"
+    ho.mkdir()
+    branch.mkdir()
+    draft = HRISTxtSourceDraft(str(ho), str(branch))
+
+    assert service.save_hris_txt_source_preferences(settings_database, draft) == draft
+    assert service.load_hris_txt_source_preferences(settings_database) == draft
+    assert service.save_hris_txt_source_preferences(
+        settings_database, HRISTxtSourceDraft()
+    ) == HRISTxtSourceDraft()
+
+
+def test_hris_txt_sources_reject_unavailable_folder(settings_database: Path) -> None:
+    with pytest.raises(ValueError, match="HO tidak ditemukan"):
+        DatabaseSettingsService().save_hris_txt_source_preferences(
+            settings_database,
+            HRISTxtSourceDraft("D:/folder-yang-tidak-ada", ""),
+        )
 
 
 def test_invalid_period_is_rejected(settings_database: Path) -> None:

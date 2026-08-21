@@ -49,11 +49,7 @@ class ConfigurationUIService:
     @staticmethod
     def present_preview(preview) -> ConfigurationImportUserSummary:
         issues = tuple(
-            ConfigurationIssuePresentation(
-                *ConfigurationUIService._issue_text(item.code, item.message),
-                item.severity.value,
-                item.code,
-            )
+            ConfigurationUIService._present_issue(item)
             for item in preview.issues
         )
         module_values = []
@@ -79,6 +75,28 @@ class ConfigurationUIService:
         )
 
     @staticmethod
+    def _present_issue(item) -> ConfigurationIssuePresentation:
+        title, detail = ConfigurationUIService._issue_text(
+            item.code,
+            item.message,
+        )
+        location = []
+        if item.sheet:
+            location.append(f"sheet {item.sheet}")
+        if item.row_number is not None:
+            location.append(f"baris {item.row_number}")
+        if item.field:
+            location.append(f"kolom {item.field}")
+        if location:
+            detail = f"{detail} Lokasi: {', '.join(location)}."
+        return ConfigurationIssuePresentation(
+            title,
+            detail,
+            item.severity.value,
+            item.code,
+        )
+
+    @staticmethod
     def _issue_text(code: str, fallback: str) -> tuple[str, str]:
         mapping = {
             "OUTLOOK_AUTOMATIC_SEND_ENABLED": (
@@ -100,6 +118,25 @@ class ConfigurationUIService:
             "GLOBAL_PERIOD_CONFLICT": (
                 "Periode Global berbeda.",
                 "Pilih periode aktif, periode dari file, atau nilai lain.",
+            ),
+            "ACTIVE_SENDER_EMAIL_MISSING": (
+                "Email pengirim Outlook aktif masih kosong.",
+                "Isi sender_email atau nonaktifkan baris tersebut, lalu periksa ulang.",
+            ),
+            "OUTLOOK_SENDER_DUPLICATE": (
+                "Data pengirim Outlook duplikat.",
+                (
+                    "Pastikan kombinasi workflow, company_code, branch_code, "
+                    "dan sender_email hanya muncul satu kali."
+                ),
+            ),
+            "OUTLOOK_SENDER_DUPLICATE_IDENTICAL_IGNORED": (
+                "Salinan identik pengirim Outlook diabaikan.",
+                "Importer memakai kemunculan pertama dari data yang sama.",
+            ),
+            "OUTLOOK_SENDER_ROW_INVALID": (
+                "Format data pengirim Outlook tidak valid.",
+                "Perbaiki nilai pada lokasi yang ditunjukkan, lalu periksa ulang.",
             ),
         }
         return mapping.get(code, (fallback, fallback))

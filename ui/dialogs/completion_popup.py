@@ -1,4 +1,4 @@
-"""Small themed completion popup with animated GIF support."""
+"""Small themed completion popup with optional local visual support."""
 
 from __future__ import annotations
 
@@ -33,9 +33,12 @@ class CompletionPopup(tk.Toplevel):
         message: str,
         details: tuple[str, ...] = (),
         gif_path: Path | None = None,
+        window_icon_path: Path | None = None,
     ) -> None:
         super().__init__(parent)
         self._frames: list[tk.PhotoImage] = []
+        self._window_icon: tk.PhotoImage | None = None
+        self._window_icon_path: Path | None = None
         self._frame_index = 0
         self._animation_job: str | None = None
 
@@ -44,6 +47,7 @@ class CompletionPopup(tk.Toplevel):
         self.resizable(False, False)
         self.configure(background=BORDER)
 
+        self._set_window_icon(window_icon_path)
         self._load_frames(gif_path)
         self._build_content(module_name, message, details)
         self.protocol("WM_DELETE_WINDOW", self.close)
@@ -55,6 +59,23 @@ class CompletionPopup(tk.Toplevel):
         self.lift()
         self.focus_force()
         self._animate()
+
+    def _set_window_icon(self, icon_path: Path | None) -> None:
+        if icon_path is None or not icon_path.is_file():
+            return
+        try:
+            if icon_path.suffix.casefold() == ".ico":
+                self.iconbitmap(default=str(icon_path))
+                self._window_icon_path = icon_path
+                return
+            icon = tk.PhotoImage(master=self, file=icon_path)
+            scale = max(1, ceil(max(icon.width(), icon.height()) / 32))
+            self._window_icon = icon.subsample(scale, scale) if scale > 1 else icon
+            self.iconphoto(True, self._window_icon)
+            self._window_icon_path = icon_path
+        except tk.TclError:
+            self._window_icon = None
+            self._window_icon_path = None
 
     def _build_content(
         self, module_name: str, message: str, details: tuple[str, ...]
@@ -124,7 +145,7 @@ class CompletionPopup(tk.Toplevel):
                 wraplength=300,
             ).pack(fill="x", pady=(0, 3))
 
-        actions = tk.Frame(shell, background=CARD_BACKGROUND, padx=18, pady=(0, 16))
+        actions = tk.Frame(shell, background=CARD_BACKGROUND, padx=18)
         actions.pack(fill="x")
         ok_button = tk.Button(
             actions,
@@ -142,16 +163,30 @@ class CompletionPopup(tk.Toplevel):
             padx=18,
             pady=6,
         )
-        ok_button.pack(side="right")
+        ok_button.pack(side="right", pady=(0, 16))
         ok_button.focus_set()
 
     def _load_frames(self, gif_path: Path | None) -> None:
         if gif_path is None or not gif_path.exists():
             return
+        if gif_path.suffix.casefold() != ".gif":
+            try:
+                frame = tk.PhotoImage(master=self, file=gif_path)
+            except tk.TclError:
+                return
+            scale = max(1, ceil(max(frame.width(), frame.height()) / 120))
+            self._frames.append(
+                frame.subsample(scale, scale) if scale > 1 else frame
+            )
+            return
         index = 0
         while True:
             try:
-                frame = tk.PhotoImage(file=gif_path, format=f"gif -index {index}")
+                frame = tk.PhotoImage(
+                    master=self,
+                    file=gif_path,
+                    format=f"gif -index {index}",
+                )
             except tk.TclError:
                 break
             scale = max(1, ceil(max(frame.width(), frame.height()) / 120))
@@ -183,4 +218,8 @@ class CompletionPopup(tk.Toplevel):
             except tk.TclError:
                 pass
             self._animation_job = None
-        self.destroy()
+        try:
+            if self.winfo_exists():
+                self.destroy()
+        except tk.TclError:
+            pass

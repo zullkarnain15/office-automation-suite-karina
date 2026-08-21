@@ -54,6 +54,25 @@ def test_preview_is_translated_to_user_friendly_summary(tmp_path: Path) -> None:
     assert summary.issues[0].technical_code == "OUTLOOK_AUTOMATIC_SEND_ENABLED"
 
 
+def test_outlook_sender_issue_shows_excel_location() -> None:
+    issue = ConfigImportIssue(
+        code="ACTIVE_SENDER_EMAIL_MISSING",
+        severity=IssueSeverity.ERROR,
+        module="OUTLOOK_REVISI",
+        message="Active sender row has no email address.",
+        sheet="Outlook_HO_Senders",
+        row_number=1323,
+        field="sender_email",
+    )
+
+    presented = ConfigurationUIService._present_issue(issue)
+
+    assert presented.title == "Email pengirim Outlook aktif masih kosong."
+    assert "sheet Outlook_HO_Senders" in presented.detail
+    assert "baris 1323" in presented.detail
+    assert "kolom sender_email" in presented.detail
+
+
 def test_primary_ui_terminology_hides_internal_action_names() -> None:
     source = Path("ui/pages/settings/configuration_section.py").read_text(encoding="utf-8")
     assert "Pilih File Excel" in source

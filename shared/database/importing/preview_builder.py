@@ -39,6 +39,12 @@ IGNORED_COMPARISON_COLUMNS = {
     "updated_at",
     *TABLE_PRIMARY_KEYS.values(),
 }
+OUTLOOK_SENDER_TABLE = "outlook_sender_master"
+OUTLOOK_SENDER_DIFF_BLOCKING_CODES = {
+    "ACTIVE_SENDER_EMAIL_MISSING",
+    "OUTLOOK_SENDER_DUPLICATE",
+    "OUTLOOK_SENDER_ROW_INVALID",
+}
 
 
 class PreviewBuilder:
@@ -289,14 +295,17 @@ def compare_module(
         proposed_rows = mapped.tables.get(table, ())
         current_rows = _read_rows(connection, table)
         keys = TABLE_KEYS[table]
-        current = {_key(row, keys): row for row in current_rows}
-        proposed = {_key(row, keys): row for row in proposed_rows}
+        current = {_key(table, row, keys): row for row in current_rows}
+        proposed = {_key(table, row, keys): row for row in proposed_rows}
+        block_removals = _block_removal_diff(mapped, table)
         for key in sorted(set(current) | set(proposed), key=str):
             old = current.get(key)
             new = proposed.get(key)
             if old is None:
                 operation = ChangeOperation.INSERT
             elif new is None:
+                if block_removals:
+                    continue
                 operation = ChangeOperation.DELETE
             elif _meaningful(old) == _meaningful(new):
                 operation = ChangeOperation.UNCHANGED
@@ -345,8 +354,35 @@ def _read_rows(
     return [dict(row) for row in connection.execute(sql).fetchall()]
 
 
-def _key(row: dict[str, Any], columns: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(str(row.get(column, "")) for column in columns)
+def _key(
+    table: str,
+    row: dict[str, Any],
+    columns: tuple[str, ...],
+) -> tuple[str, ...]:
+    return tuple(_key_value(table, column, row.get(column)) for column in columns)
+
+
+def _key_value(table: str, column: str, value: Any) -> str:
+    text = "" if value is None else str(value).strip()
+    if table == OUTLOOK_SENDER_TABLE:
+        if column == "sender_email":
+            return text.casefold()
+        if column == "workflow":
+            return text.upper()
+    return text
+
+
+def _block_removal_diff(
+    mapped: MappedModuleConfiguration,
+    table: str,
+) -> bool:
+    if mapped.module != "OUTLOOK_REVISI" or table != OUTLOOK_SENDER_TABLE:
+        return False
+    return any(
+        issue.severity in {IssueSeverity.ERROR, IssueSeverity.CRITICAL}
+        and issue.code in OUTLOOK_SENDER_DIFF_BLOCKING_CODES
+        for issue in mapped.issues
+    )
 
 
 def _meaningful(row: dict[str, Any]) -> dict[str, Any]:

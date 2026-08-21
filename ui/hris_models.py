@@ -113,6 +113,8 @@ class HRISDefaults:
     assisted_steps_count: int = 0
     last_updated: str | None = None
     warning: str | None = None
+    ho_txt_source_folder: Path | None = None
+    branch_txt_source_folder: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)

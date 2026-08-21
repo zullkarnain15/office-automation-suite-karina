@@ -26,7 +26,7 @@ from ui.navigation import NavigationController
 from ui.page_registry import PageRegistry, build_default_page_registry
 from ui.pages.error_page import ErrorPage
 from ui.style_manager import StyleManager
-from ui.widgets import Header, Sidebar, StatusBar
+from ui.widgets import Header, KarinaMascotController, KarinaMascotView, Sidebar, StatusBar
 from ui.window_state import WindowState
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,8 @@ class OASKUnifiedApp:
         self._welcome_starting = False
         self._welcome_shimmer_job = None
         self._welcome_shimmer_phase = 0
+        self._welcome_mascot_bounce_job = None
+        self._welcome_mascot_bounce_phase = 0
         self.startup_database_result = None
         self._build_welcome_splash()
         if self.context.app_services is None:
@@ -156,6 +158,26 @@ class OASKUnifiedApp:
             "start_button_pxl.png",
             size=(200, 80),
         )
+        self._welcome_mascot_icon_manager = IconManager(
+            self.context.assets_path / "mascot" / "karina" / "success",
+            master=self.root,
+            logger=self.context.logger,
+        )
+        self._welcome_mascot_images = tuple(
+            image
+            for name in ("success_01.png", "success_02.png", "success_03.png")
+            if (
+                image := self._welcome_mascot_icon_manager.load(
+                    name,
+                    size=120,
+                )
+            )
+        )
+        self._welcome_mascot_image = (
+            self._welcome_mascot_images[0]
+            if self._welcome_mascot_images
+            else None
+        )
 
         splash = ttk.Frame(self.root, style="WelcomeSplash.TFrame")
         splash.place(x=0, y=0, relwidth=1, relheight=1)
@@ -166,15 +188,39 @@ class OASKUnifiedApp:
 
         content = ttk.Frame(splash, style="WelcomeSplash.TFrame")
         content.grid(row=1, column=1)
+        mascot_stage = ttk.Frame(
+            content,
+            style="WelcomeSplash.TFrame",
+            width=510,
+            height=170,
+        )
+        mascot_stage.grid(row=0, column=0, columnspan=2, pady=(0, 4))
+        mascot_stage.grid_propagate(False)
+        if self._welcome_mascot_image is not None:
+            self._welcome_mascot_label = ttk.Label(
+                mascot_stage,
+                image=self._welcome_mascot_image,
+                style="WelcomeImage.TLabel",
+            )
+            self._welcome_mascot_label.place(relx=0.5, rely=0.52, anchor="center")
+        else:
+            self._welcome_mascot_label = None
+        self._welcome_mascot_bubble = ttk.Label(
+            mascot_stage,
+            text="Let's go !!!",
+            style="WelcomeMascotBubble.TLabel",
+            anchor="w",
+        )
+        self._welcome_mascot_bubble.place(relx=0.56, rely=0.18, anchor="w")
         if self._welcome_image is not None:
             ttk.Label(
                 content,
                 image=self._welcome_image,
                 style="WelcomeImage.TLabel",
-            ).grid(row=0, column=0, rowspan=4, padx=(0, 24))
+            ).grid(row=1, column=0, padx=(0, 24))
 
         text = ttk.Frame(content, style="WelcomeSplash.TFrame")
-        text.grid(row=0, column=1, rowspan=4, sticky="w")
+        text.grid(row=1, column=1, sticky="w")
         ttk.Label(
             text,
             text="WELCOME TO",
@@ -209,10 +255,12 @@ class OASKUnifiedApp:
         self._welcome_start_button.pack(padx=3, pady=3)
         self._welcome_splash = splash
         self._start_welcome_shimmer()
+        self._start_welcome_mascot_bounce()
         self.root.update_idletasks()
 
     def _dismiss_welcome_splash(self) -> None:
         self._stop_welcome_shimmer()
+        self._stop_welcome_mascot_bounce()
         if self._welcome_return_binding:
             self.root.unbind("<Return>", self._welcome_return_binding)
             self._welcome_return_binding = None
@@ -222,6 +270,8 @@ class OASKUnifiedApp:
         except tk.TclError:
             return
         self._welcome_icon_manager.clear()
+        self._welcome_mascot_icon_manager.clear()
+        self.karina_mascot_controller.start()
 
     def _start_welcome_shimmer(self) -> None:
         if self._welcome_shimmer_job is not None:
@@ -277,6 +327,62 @@ class OASKUnifiedApp:
                 pass
             self._welcome_shimmer_job = None
         self._welcome_shimmer_phase = 0
+
+    def _start_welcome_mascot_bounce(self) -> None:
+        if self._welcome_mascot_label is None or self._welcome_mascot_bounce_job:
+            return
+        self._apply_welcome_mascot_bounce()
+        self._welcome_mascot_bounce_job = self.root.after(
+            120,
+            self._advance_welcome_mascot_bounce,
+        )
+
+    def _advance_welcome_mascot_bounce(self) -> None:
+        self._welcome_mascot_bounce_job = None
+        try:
+            if (
+                not self._welcome_splash.winfo_exists()
+                or self._welcome_mascot_label is None
+                or not self._welcome_mascot_label.winfo_exists()
+            ):
+                return
+        except tk.TclError:
+            return
+        self._welcome_mascot_bounce_phase = (
+            self._welcome_mascot_bounce_phase + 1
+        ) % 8
+        self._apply_welcome_mascot_bounce()
+        self._welcome_mascot_bounce_job = self.root.after(
+            120,
+            self._advance_welcome_mascot_bounce,
+        )
+
+    def _apply_welcome_mascot_bounce(self) -> None:
+        if self._welcome_mascot_label is None:
+            return
+        offsets = (0, -4, -9, -14, -9, -4, 0, 2)
+        frames = (0, 0, 1, 1, 2, 2, 1, 0)
+        try:
+            self._welcome_mascot_label.place_configure(
+                y=offsets[self._welcome_mascot_bounce_phase]
+            )
+            if self._welcome_mascot_images:
+                self._welcome_mascot_label.configure(
+                    image=self._welcome_mascot_images[
+                        frames[self._welcome_mascot_bounce_phase]
+                    ]
+                )
+        except tk.TclError:
+            return
+
+    def _stop_welcome_mascot_bounce(self) -> None:
+        if self._welcome_mascot_bounce_job is not None:
+            try:
+                self.root.after_cancel(self._welcome_mascot_bounce_job)
+            except tk.TclError:
+                pass
+            self._welcome_mascot_bounce_job = None
+        self._welcome_mascot_bounce_phase = 0
 
     @staticmethod
     def _default_context() -> AppContext:
@@ -365,6 +471,24 @@ class OASKUnifiedApp:
             application_version=self.context.application_version,
         )
         self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.karina_mascot = KarinaMascotView(
+            self.sidebar,
+            self.context.assets_path,
+            logger=self.context.logger,
+        )
+        self.karina_mascot.grid(
+            row=9,
+            column=0,
+            columnspan=2,
+            sticky="s",
+            pady=(12, 4),
+        )
+        self.karina_mascot_controller = KarinaMascotController(self.karina_mascot)
+        preferences = self.context.app_services.mascot_preferences.load()
+        self.karina_mascot_controller.apply_preferences(preferences)
+        self.context.mascot_controller = self.karina_mascot_controller
+        self.context.mascot_work_started = self.karina_mascot_controller.process_started
+        self.context.mascot_work_finished = self.karina_mascot_controller.process_finished
 
     def navigate(self, page_id: str) -> bool:
         return self.navigation.navigate(page_id)
@@ -431,6 +555,8 @@ class OASKUnifiedApp:
             return False
         self._closing = True
         self._stop_welcome_shimmer()
+        self._stop_welcome_mascot_bounce()
+        self.karina_mascot_controller.stop()
         if self.context.app_services is not None:
             self.context.app_services.task_runner.shutdown()
         self.icon_manager.clear()

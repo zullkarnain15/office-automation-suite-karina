@@ -14,7 +14,7 @@ from shared.database.importing import (
     ImportMode,
 )
 from shared.database.importing.exceptions import ConfigCommitError
-from tests.database.importing.conftest import ATTENDANCE_WORKBOOK
+from tests.database.importing.conftest import ATTENDANCE_WORKBOOK, HRIS_WORKBOOK
 
 
 def test_confirmation_required_preview_is_rejected_without_confirmation(
@@ -110,6 +110,46 @@ def test_global_settings_commit_is_a_separate_unit(
     assert result.committed is True
     assert global_count == 1
     assert attendance_count == 0
+
+
+def test_hris_import_does_not_overwrite_local_txt_source_preferences(
+    db2_database: Path,
+) -> None:
+    with SQLiteConnectionFactory().connect(db2_database) as connection:
+        connection.execute(
+            "INSERT INTO application_preferences "
+            "(preference_key, preference_value, value_type, updated_at) "
+            "VALUES ('hris_txt_source_ho', 'D:/Local/HO', 'TEXT', '2026-08-21')"
+        )
+        connection.execute(
+            "INSERT INTO application_preferences "
+            "(preference_key, preference_value, value_type, updated_at) "
+            "VALUES ('hris_txt_source_branch', 'D:/Local/Branch', 'TEXT', '2026-08-21')"
+        )
+    service = ConfigImportService()
+    preview = service.preview(db2_database, [HRIS_WORKBOOK])
+
+    result = service.commit(
+        db2_database,
+        ConfigImportCommitRequest(
+            preview=preview,
+            modules=("HRIS",),
+            mode=ImportMode.REPLACE_MODULE_CONFIGURATION,
+            confirmed=True,
+        ),
+    )
+
+    with SQLiteConnectionFactory().connect(db2_database, read_only=True) as connection:
+        values = dict(
+            connection.execute(
+                "SELECT preference_key, preference_value FROM application_preferences"
+            ).fetchall()
+        )
+    assert result.committed
+    assert values == {
+        "hris_txt_source_ho": "D:/Local/HO",
+        "hris_txt_source_branch": "D:/Local/Branch",
+    }
 
 
 def test_second_preview_is_unchanged_after_commit(

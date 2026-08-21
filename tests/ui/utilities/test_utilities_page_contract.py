@@ -83,7 +83,6 @@ def test_utilities_validation_status_uses_visual_state_styles(
 
     page._set_validation_status("Perlu perhatian")
     assert page.validation_status_label.cget("style") == "StatusWarning.TLabel"
-
     page._run_done(
         SimpleNamespace(
             success=True,
@@ -101,6 +100,44 @@ def test_utilities_validation_status_uses_visual_state_styles(
     )
     assert page.validation_status_var.get() == "Berhasil dengan peringatan"
     assert page.validation_status_label.cget("style") == "StatusWarning.TLabel"
+
+
+def test_utilities_success_shows_completion_popup(tk_root, tmp_path) -> None:
+    completions = []
+    services = SimpleNamespace(
+        utilities_service=SimpleNamespace(landing_summaries=lambda: ()),
+        task_runner=SimpleNamespace(),
+        dialog_service=SimpleNamespace(
+            completion=lambda *args: completions.append(args)
+        ),
+        file_system_service=SimpleNamespace(open_folder=lambda path: False),
+    )
+    context = AppContext(
+        project_root=tmp_path,
+        assets_path=PROJECT_ROOT / "assets",
+        application_version="test",
+        logger=logging.getLogger("ui7-utilities-completion"),
+        app_services=services,
+    )
+    page = UtilitiesPage(tk_root, context)
+    page._feature = UtilitiesFeature.COMPARISON_RESULT
+
+    page._run_done(
+        SimpleNamespace(
+            success=True,
+            value=ComparisonRunResult(
+                True,
+                False,
+                "UI-UTIL-SUCCESS",
+                "2026-07-01T00:00:00+00:00",
+                "2026-07-01T00:00:01+00:00",
+                tmp_path / "output",
+                (),
+            ),
+        )
+    )
+
+    assert completions and completions[0][0] == "Comparison Result"
 
 
 def test_att_data_repair_browse_uses_folder_picker(tk_root, tmp_path) -> None:

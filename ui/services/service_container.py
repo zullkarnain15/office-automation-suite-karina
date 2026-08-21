@@ -28,6 +28,7 @@ class AppServices:
     comparison_result_service: Any = None
     attachment_consolidation_service: Any = None
     att_data_repair_service: Any = None
+    mascot_preferences: Any = None
 
 
 def build_default_app_services(
@@ -73,6 +74,7 @@ def build_default_app_services(
     from ui.services.storage_ui_service import StorageUIService
     from ui.services.system_health_service import SystemHealthService
     from ui.services.task_runner import TaskRunner
+    from ui.services.karina_mascot_preferences import KarinaMascotPreferencesService
 
     registry = registry or StorageRegistryService(WindowsRegistryBackend())
     storage_arguments = {}
@@ -116,4 +118,5 @@ def build_default_app_services(
         att_data_repair_service=AttDataRepairService(
             storage_service, AttDataRepairAdapter()
         ),
+        mascot_preferences=KarinaMascotPreferencesService(registry.backend),
     )

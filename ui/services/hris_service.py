@@ -10,7 +10,11 @@ from pathlib import Path
 
 from shared.database import SQLiteConnectionFactory
 from shared.database.models import JobFileRecord, JobHistoryRecord
-from shared.database.repositories import GlobalSettingsRepository, JobRepository
+from shared.database.repositories import (
+    ApplicationPreferencesRepository,
+    GlobalSettingsRepository,
+    JobRepository,
+)
 from shared.database.time_utils import current_timestamp
 from shared.storage.path_resolver import get_hris_recorder_profiles_root
 from ui.hris_models import (
@@ -27,6 +31,8 @@ from ui.services.module_configuration_service import ModuleConfigurationService
 
 
 _TERMINAL = {"COMPLETED", "COMPLETED_WITH_WARNING", "FAILED", "CANCELLED"}
+HRIS_TXT_SOURCE_HO_KEY = "hris_txt_source_ho"
+HRIS_TXT_SOURCE_BRANCH_KEY = "hris_txt_source_branch"
 
 
 class HRISService:
@@ -67,6 +73,9 @@ class HRISService:
             steps = connection.execute(
                 "SELECT COUNT(*) FROM hris_assisted_steps WHERE is_active=1"
             ).fetchone()[0]
+            sources = ApplicationPreferencesRepository(connection).get_text_values(
+                (HRIS_TXT_SOURCE_HO_KEY, HRIS_TXT_SOURCE_BRANCH_KEY)
+            )
         ho = tuple(str(row["run_control_id"]) for row in controls if row["workflow"] == "HO")
         branch = tuple(
             str(row["run_control_id"])
@@ -92,11 +101,18 @@ class HRISService:
             branch,
             int(steps),
             str(settings["updated_at"]) if settings else None,
+            None,
+            Path(sources[HRIS_TXT_SOURCE_HO_KEY])
+            if sources.get(HRIS_TXT_SOURCE_HO_KEY)
+            else None,
+            Path(sources[HRIS_TXT_SOURCE_BRANCH_KEY])
+            if sources.get(HRIS_TXT_SOURCE_BRANCH_KEY)
+            else None,
         )
 
     def discover_txt(self, folder: Path) -> tuple[Path, ...]:
         if not folder.is_dir():
-            raise ValueError("Folder TXT Attendance tidak tersedia.")
+            raise ValueError("Folder TXT HRIS tidak tersedia.")
         return tuple(sorted(folder.glob("*.txt"), key=lambda item: item.name.casefold()))
 
     def resolve_request(self, request: HRISRunRequest) -> HRISResolvedRequest:

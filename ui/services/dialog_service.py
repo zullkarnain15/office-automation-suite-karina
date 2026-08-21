@@ -76,13 +76,37 @@ class TkDialogService:
     def completion(
         self, module_name: str, message: str, details: tuple[str, ...] = ()
     ) -> None:
-        CompletionPopup(
-            self.parent,
-            module_name=module_name,
-            message=message,
-            details=details,
-            gif_path=ASSETS_PATH / "icons" / "png" / "pop_up.gif",
-        )
+        try:
+            CompletionPopup(
+                self.parent,
+                module_name=module_name,
+                message=message,
+                details=details,
+                gif_path=(
+                    ASSETS_PATH
+                    / "mascot"
+                    / "karina"
+                    / "success"
+                    / "success_03.png"
+                ),
+                window_icon_path=(
+                    ASSETS_PATH
+                    / "mascot"
+                    / "karina"
+                    / "working"
+                    / "working_04.ico"
+                ),
+            )
+        except (OSError, tk.TclError):
+            detail_text = "\n".join(details)
+            fallback_message = message
+            if detail_text:
+                fallback_message = f"{message}\n\n{detail_text}"
+            messagebox.showinfo(
+                f"{module_name} Selesai",
+                fallback_message,
+                parent=self.parent,
+            )
 
     def warning(self, title: str, message: str) -> None:
         messagebox.showwarning(title, message, parent=self.parent)

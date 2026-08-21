@@ -11,6 +11,8 @@ from typing import Any
 NavigationCallback = Callable[[str], bool]
 StatusCallback = Callable[[str], None]
 CloseCallback = Callable[[], bool]
+MascotStartedCallback = Callable[[], None]
+MascotFinishedCallback = Callable[[str | None], None]
 
 
 @dataclass(slots=True)
@@ -24,3 +26,6 @@ class AppContext:
     navigate: NavigationCallback | None = None
     set_status: StatusCallback | None = None
     request_close: CloseCallback | None = None
+    mascot_work_started: MascotStartedCallback | None = None
+    mascot_work_finished: MascotFinishedCallback | None = None
+    mascot_controller: Any | None = None

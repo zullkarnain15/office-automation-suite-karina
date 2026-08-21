@@ -31,6 +31,7 @@ MODE_LABELS = {
     ImportMode.UPDATE_GLOBAL_SETTINGS: "Replace Module Configuration",
 }
 SENSITIVE_WORDS = {"password", "secret", "token", "credential"}
+OUTLOOK_SENDER_TABLE = "outlook_sender_master"
 
 
 class ImportTransactionService:
@@ -133,6 +134,17 @@ class ImportTransactionService:
             )
             for table in MODULE_TABLES[mapped.module]:
                 rows = mapped.tables.get(table, ())
+                if (
+                    mapped.module == "OUTLOOK_REVISI"
+                    and table == OUTLOOK_SENDER_TABLE
+                    and request.mode == ImportMode.REPLACE_MODULE_CONFIGURATION
+                ):
+                    self._apply_outlook_sender_changes(
+                        connection,
+                        rows,
+                        changes,
+                    )
+                    continue
                 if request.mode in {
                     ImportMode.REPLACE_MODULE_CONFIGURATION,
                     ImportMode.UPDATE_GLOBAL_SETTINGS,
@@ -226,6 +238,63 @@ class ImportTransactionService:
                 inserted.pop(primary_key, None)
             self._insert_rows(connection, table, (inserted,))
 
+    def _apply_outlook_sender_changes(
+        self,
+        connection: sqlite3.Connection,
+        rows: tuple[dict[str, Any], ...],
+        changes: list[Any],
+    ) -> None:
+        rows_by_key = {
+            _outlook_sender_key(row): row
+            for row in rows
+        }
+        for change in changes:
+            if change.setting_scope != OUTLOOK_SENDER_TABLE:
+                continue
+            key = tuple(json.loads(change.setting_key))
+            if change.operation == ChangeOperation.INSERT:
+                row = rows_by_key[key]
+                inserted = dict(row)
+                inserted.pop("sender_id", None)
+                self._insert_rows(connection, OUTLOOK_SENDER_TABLE, (inserted,))
+            elif change.operation == ChangeOperation.UPDATE:
+                row = rows_by_key[key]
+                self._update_outlook_sender(connection, row)
+            elif change.operation == ChangeOperation.DELETE:
+                _delete_outlook_sender(connection, key)
+
+    @staticmethod
+    def _update_outlook_sender(
+        connection: sqlite3.Connection,
+        row: dict[str, Any],
+    ) -> None:
+        allowed = {
+            str(item["name"])
+            for item in connection.execute(
+                f"PRAGMA table_info({OUTLOOK_SENDER_TABLE})"
+            ).fetchall()
+        }
+        columns = [
+            column
+            for column in row
+            if column in allowed and column not in {"sender_id", "created_at"}
+        ]
+        assignments = ", ".join(f"{column} = ?" for column in columns)
+        connection.execute(
+            f"""
+            UPDATE {OUTLOOK_SENDER_TABLE}
+            SET {assignments}
+            WHERE workflow = ?
+              AND trim(company_code) = ?
+              AND trim(branch_code) = ?
+              AND lower(trim(sender_email)) = ?
+            """,
+            (
+                *(row[column] for column in columns),
+                *_outlook_sender_key(row),
+            ),
+        )
+
     @staticmethod
     def _insert_batch(
         connection: sqlite3.Connection,
@@ -300,3 +369,28 @@ class ImportTransactionService:
             if any(word in field.casefold() for word in SENSITIVE_WORDS):
                 decoded[field] = "[REDACTED]"
         return json.dumps(decoded, ensure_ascii=False, sort_keys=True)
+
+
+def _outlook_sender_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        str(row.get("workflow") or "").strip().upper(),
+        str(row.get("company_code") or "").strip(),
+        str(row.get("branch_code") or "").strip(),
+        str(row.get("sender_email") or "").strip().casefold(),
+    )
+
+
+def _delete_outlook_sender(
+    connection: sqlite3.Connection,
+    key: tuple[str, str, str, str],
+) -> None:
+    connection.execute(
+        f"""
+        DELETE FROM {OUTLOOK_SENDER_TABLE}
+        WHERE workflow = ?
+          AND trim(company_code) = ?
+          AND trim(branch_code) = ?
+          AND lower(trim(sender_email)) = ?
+        """,
+        key,
+    )

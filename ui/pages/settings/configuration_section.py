@@ -234,8 +234,26 @@ class ConfigurationSection(SettingsSection):
 
         def done(value) -> None:
             result, summaries, globals_value, usages = value
-            self.steps.set_step(3)
-            self.import_result.show_lines(["Penerapan selesai.", *(f"{item.module}: {'Berhasil' if item.committed else 'Gagal'} ({item.changes_applied} perubahan)" for item in result.module_results)])
+            if result.committed:
+                self.steps.set_step(3)
+            result_lines = []
+            for item in result.module_results:
+                status = "Berhasil" if item.committed else "Gagal"
+                line = (
+                    f"{item.module}: {status} "
+                    f"({item.changes_applied} perubahan)"
+                )
+                if item.error:
+                    line += f" - {item.error}"
+                result_lines.append(line)
+            self.import_result.show_lines(
+                [
+                    "Penerapan selesai."
+                    if result.committed
+                    else "Penerapan gagal; database tidak diubah.",
+                    *result_lines,
+                ]
+            )
             module_section = self.page.sections.get("Module Configuration")
             if module_section:
                 module_section._render(summaries)
@@ -288,10 +306,47 @@ class ConfigurationSection(SettingsSection):
             )
 
     def _show_summary(self, summary) -> None:
-        labels = {"GLOBAL": "Global Settings", "ATTENDANCE": "Attendance", "OUTLOOK_REVISI": "Outlook Revisi", "HRIS": "HRIS", "UTILITIES": "Utilities"}
-        states = {"READY": "Siap", "ATTENTION": "Perlu Perhatian", "ERROR": "Error", "NOT_FOUND": "Tidak Ditemukan"}
+        labels = {
+            "GLOBAL": "Global Settings",
+            "ATTENDANCE": "Attendance",
+            "OUTLOOK_REVISI": "Outlook Revisi",
+            "HRIS": "HRIS",
+            "UTILITIES": "Utilities",
+        }
+        states = {
+            "READY": "Siap",
+            "ATTENTION": "Perlu Perhatian",
+            "ERROR": "Error",
+            "NOT_FOUND": "Tidak Ditemukan",
+        }
         module_states = dict(summary.modules)
-        self.import_result.show_lines(["Hasil Pemeriksaan", *(f"{labels[module]}: {states[module_states[module].value]}" if module in module_states else f"{labels[module]}: Tidak Ditemukan" for module in self.MODULES), f"Diperbarui: {summary.update_count}", f"Ditambahkan: {summary.insert_count}", f"Dihapus: {summary.delete_count}", f"Peringatan: {summary.warning_count}", f"Error: {summary.error_count}", "Perlu Persetujuan: " + ("Ya" if summary.confirmation_required else "Tidak")])
+        error_details = [
+            f"Masalah: {issue.title} {issue.detail}"
+            for issue in summary.issues
+            if issue.severity in {"ERROR", "CRITICAL"}
+        ][:3]
+        module_lines = [
+            (
+                f"{labels[module]}: {states[module_states[module].value]}"
+                if module in module_states
+                else f"{labels[module]}: Tidak Ditemukan"
+            )
+            for module in self.MODULES
+        ]
+        self.import_result.show_lines(
+            [
+                "Hasil Pemeriksaan",
+                *module_lines,
+                f"Diperbarui: {summary.update_count}",
+                f"Ditambahkan: {summary.insert_count}",
+                f"Dihapus: {summary.delete_count}",
+                f"Peringatan: {summary.warning_count}",
+                f"Error: {summary.error_count}",
+                *error_details,
+                "Perlu Persetujuan: "
+                + ("Ya" if summary.confirmation_required else "Tidak"),
+            ]
+        )
 
     def _toggle_advanced(self) -> None:
         if self.advanced_var.get():

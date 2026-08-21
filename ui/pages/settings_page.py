@@ -98,14 +98,18 @@ class SettingsPage(BasePage):
                 self.services.database_service.load_outlook_operational_settings(
                     database
                 ),
+                self.services.database_service.load_hris_txt_source_preferences(
+                    database
+                ),
             )
 
         def done(value) -> None:
-            draft, usages, outlook = value
+            draft, usages, outlook, hris_sources = value
             general._loaded = draft
             general._apply(draft)
             general._show_usage(usages)
             general._apply_outlook(outlook)
+            general._apply_hris_txt_sources(hris_sources)
             general.result.show_lines(["Global Settings otomatis dimuat."])
             self._auto_load_modules(database)
 

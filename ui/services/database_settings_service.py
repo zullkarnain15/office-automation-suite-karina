@@ -7,11 +7,16 @@ from pathlib import Path
 
 from shared.database import DatabaseValidator, SQLiteConnectionFactory
 from shared.database.models import ConfigurationAuditRecord
-from shared.database.repositories import AuditRepository, GlobalSettingsRepository
+from shared.database.repositories import (
+    ApplicationPreferencesRepository,
+    AuditRepository,
+    GlobalSettingsRepository,
+)
 from shared.database.time_utils import current_timestamp, validate_date_pair
 from shared.payroll_period import normalize_payroll_period
 from ui.services.protocols import (
     GlobalSettingsDraft,
+    HRISTxtSourceDraft,
     ModuleGlobalUsage,
     OutlookOperationalSettingsDraft,
 )
@@ -28,6 +33,8 @@ MODULE_USAGE = (
         False,
     ),
 )
+HRIS_TXT_SOURCE_HO_KEY = "hris_txt_source_ho"
+HRIS_TXT_SOURCE_BRANCH_KEY = "hris_txt_source_branch"
 
 
 class DatabaseSettingsService:
@@ -100,6 +107,49 @@ class DatabaseSettingsService:
             saved.period_start,
             saved.period_end,
         )
+
+    def load_hris_txt_source_preferences(
+        self,
+        database_path: Path,
+    ) -> HRISTxtSourceDraft:
+        with self.factory.connect(database_path, read_only=True) as connection:
+            values = ApplicationPreferencesRepository(connection).get_text_values(
+                (HRIS_TXT_SOURCE_HO_KEY, HRIS_TXT_SOURCE_BRANCH_KEY)
+            )
+        return HRISTxtSourceDraft(
+            values.get(HRIS_TXT_SOURCE_HO_KEY, ""),
+            values.get(HRIS_TXT_SOURCE_BRANCH_KEY, ""),
+        )
+
+    def save_hris_txt_source_preferences(
+        self,
+        database_path: Path,
+        draft: HRISTxtSourceDraft,
+    ) -> HRISTxtSourceDraft:
+        saved = HRISTxtSourceDraft(
+            self._normalize_optional_folder(draft.ho_folder, "HO"),
+            self._normalize_optional_folder(draft.branch_folder, "Branch"),
+        )
+        with self.factory.connect(database_path) as connection:
+            ApplicationPreferencesRepository(connection).save_text_values(
+                {
+                    HRIS_TXT_SOURCE_HO_KEY: saved.ho_folder,
+                    HRIS_TXT_SOURCE_BRANCH_KEY: saved.branch_folder,
+                }
+            )
+        return saved
+
+    @staticmethod
+    def _normalize_optional_folder(value: str, source_type: str) -> str:
+        raw = value.strip()
+        if not raw:
+            return ""
+        folder = Path(raw).expanduser()
+        if not folder.is_absolute() or not folder.is_dir():
+            raise ValueError(
+                f"Folder HRIS TXT Source {source_type} tidak ditemukan: {raw}"
+            )
+        return str(folder)
 
     def load_outlook_operational_settings(
         self,

@@ -14,8 +14,10 @@ from ui.attendance_models import (
     AttendanceRunRequest,
 )
 from ui.constants import COMPACT_LOG_BACKGROUND, LOG_FONT, LOG_TEXT
+from ui.dialogs.attendance_validation_detail import AttendanceValidationDetailDialog
 from ui.dialogs.module_configuration_detail import ModuleConfigurationDetailDialog
 from ui.icon_manager import IconManager
+from ui.mascot_outcome import classify_mascot_outcome
 from ui.pages.base_page import BasePage
 from ui.widgets import (
     CompactProgress,
@@ -41,6 +43,7 @@ class AttendancePage(BasePage):
         self._resolved = None
         self._cancellation = None
         self._last_result = None
+        self._validation_result = None
         self._validation_lines: tuple[str, ...] = ()
         self._log_expanded = False
         self._run_icon = None
@@ -345,8 +348,8 @@ class AttendancePage(BasePage):
         actions.grid(row=0, column=1, sticky="e", padx=(10, 0))
         for text, command in (
             ("Buka Output", self.open_output),
+            ("Buka TXT", self.open_txt),
             ("Buka Report", self.open_report),
-            ("Buka Log", self.open_process_log),
         ):
             if self._open_folder_icon is None:
                 self._open_folder_icon = IconManager(
@@ -646,6 +649,8 @@ class AttendancePage(BasePage):
         self._resolved = resolved
         self._cancellation = AttendanceCancellationToken()
         self._running = True
+        if self.context.mascot_work_started:
+            self.context.mascot_work_started()
         self._set_validation_status("Sedang berjalan", "StatusRunning.TLabel")
         self._set_busy(True, "Attendance sedang berjalan...")
         self.cancel_button.configure(state="normal")
@@ -663,6 +668,10 @@ class AttendancePage(BasePage):
             )
 
         def done(task_result) -> None:
+            if self.context.mascot_work_finished:
+                self.context.mascot_work_finished(
+                    classify_mascot_outcome(task_result)
+                )
             if self._disposed:
                 return
             self._running = False
@@ -710,6 +719,7 @@ class AttendancePage(BasePage):
         )
 
     def _show_validation(self, value) -> None:
+        self._validation_result = value
         self._validation_lines = (
             f"Configuration valid: {value.configuration_valid}",
             f"Workflow: {value.workflow}",
@@ -737,6 +747,7 @@ class AttendancePage(BasePage):
         self.validation_detail_button.configure(state="normal")
 
     def _show_validation_error(self, message: str) -> None:
+        self._validation_result = None
         self._validation_lines = (message,)
         self.validation_summary.show_lines(self._validation_lines)
         self._set_validation_status("Perlu perhatian", "StatusWarning.TLabel")
@@ -745,11 +756,11 @@ class AttendancePage(BasePage):
     def show_validation_detail(self) -> None:
         if not self._validation_lines:
             return
-        info = getattr(self.services.dialog_service, "info", None)
-        if callable(info):
-            info("Detail Validasi Attendance", "\n".join(self._validation_lines))
-        else:
-            self.validation_summary.grid()
+        AttendanceValidationDetailDialog(
+            self.winfo_toplevel(),
+            self._validation_result,
+            self._validation_lines,
+        )
 
     def _show_result(self, result) -> None:
         status = (
@@ -793,7 +804,7 @@ class AttendancePage(BasePage):
             if result.success
             else "Dibatalkan"
         )
-        if result.success:
+        if result.success and not result.cancelled and not result.warning_count:
             completion = getattr(self.services.dialog_service, "completion", None)
             if callable(completion):
                 completion(
@@ -884,20 +895,30 @@ class AttendancePage(BasePage):
             )
 
     def open_report(self) -> None:
-        path = None
-        if self._last_result:
-            path = next(
-                (
-                    item.path
-                    for item in self._last_result.output_files
-                    if "REPORT" in item.file_type.upper()
-                ),
-                None,
-            )
+        path = self._last_output_file("REPORT")
         if path is None or not self.services.file_system_service.open_folder(path):
             self.services.dialog_service.warning(
                 "Open Report", "Report tidak tersedia."
             )
+
+    def open_txt(self) -> None:
+        path = self._last_output_file("TXT")
+        if path is None or not self.services.file_system_service.open_folder(path):
+            self.services.dialog_service.warning(
+                "Open TXT", "TXT tidak tersedia."
+            )
+
+    def _last_output_file(self, file_type: str):
+        if self._last_result is None:
+            return None
+        return next(
+            (
+                item.path
+                for item in self._last_result.output_files
+                if file_type in item.file_type.upper()
+            ),
+            None,
+        )
 
     def open_process_log(self) -> None:
         path = self._result_path("process_log_path")

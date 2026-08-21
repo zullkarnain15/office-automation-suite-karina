@@ -128,14 +128,20 @@ def _validate_outlook(
 
     sender_keys = [
         (
-            row["workflow"],
-            row["company_code"],
-            row["branch_code"],
-            str(row["sender_email"]).casefold(),
+            str(row.get("workflow") or "").strip().upper(),
+            str(row.get("company_code") or "").strip(),
+            str(row.get("branch_code") or "").strip(),
+            str(row.get("sender_email") or "").strip().casefold(),
         )
         for row in mapped.tables["outlook_sender_master"]
     ]
-    _duplicates(sender_keys, "OUTLOOK_SENDER_DUPLICATE", "OUTLOOK_REVISI", issues)
+    if not any(issue.code == "OUTLOOK_SENDER_DUPLICATE" for issue in issues):
+        _duplicates(
+            sender_keys,
+            "OUTLOOK_SENDER_DUPLICATE",
+            "OUTLOOK_REVISI",
+            issues,
+        )
     subject_keys = [
         (row["workflow"], row["subject_pattern"])
         for row in mapped.tables["outlook_subject_rules"]
