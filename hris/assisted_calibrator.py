@@ -8,9 +8,9 @@ from typing import Any, Callable
 
 from hris.click_profile import HRISClickProfileManager
 from shared.config_manager import (
-    HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES,
     HRISConfiguration,
     HRISConfigurationReader,
+    resolve_hris_macro_steps,
 )
 
 
@@ -55,12 +55,9 @@ class HRISAssistedCalibrator:
                 "browser": self._browser_profile(configuration),
                 "steps": {},
             }
-            post_upload_steps = [
-                step
-                for step in configuration.assisted_steps
-                if step.step_name in HRIS_POST_UPLOAD_ASSISTED_STEP_NAMES
-            ]
-            calibration_steps = post_upload_steps or configuration.assisted_steps
+            calibration_steps = resolve_hris_macro_steps(
+                configuration.assisted_steps
+            )
             for step in calibration_steps:
                 if step.method != "coordinate":
                     continue

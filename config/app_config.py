@@ -27,9 +27,9 @@ APP_NAME: str = "OAS-K"
 APP_FULL_NAME: str = "Office Automation Suite - Karina"
 COMPANY_NAME: str = "OTO Finance"
 
-APP_VERSION: str = "1.0.0"
+APP_VERSION: str = "1.0.8"
 APP_STATUS: str = "Development"
-BUILD_NUMBER: str = "001"
+BUILD_NUMBER: str = "008"
 
 WINDOW_TITLE: str = (
     f"{APP_NAME} | {APP_FULL_NAME} | {COMPANY_NAME}"
@@ -68,7 +68,7 @@ APP_ICON: Path = ICON_PATH / "app.ico"
 LOGO_ICON: Path = ICON_PATH / "logo.ico"
 
 ATTENDANCE_ICON: Path = ICON_PATH / "attendance.ico"
-OUTLOOK_ICON: Path = ICON_PATH / "outlook.ico"
+OUTLOOK_ICON: Path = ICON_PATH / "outlook_revisi.ico"
 HRIS_ICON: Path = ICON_PATH / "hris.ico"
 UTILITIES_ICON: Path = ICON_PATH / "utilities.ico"
 

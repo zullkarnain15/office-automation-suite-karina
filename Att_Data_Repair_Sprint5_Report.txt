@@ -1,0 +1,378 @@
+Att Data Repair Sprint 5 Report
+Office Automation Suite - Karina (OAS-K)
+Generated: 2026-08-03
+
+1. Identitas Sprint
+Sprint: Att Data Repair - Sprint 5.
+Repository: D:\Python Project\OfficeAutomationSuite-Karina.
+Scope: active SQLite configuration integration, template/import/export integration, typed configuration adapter, generate flags, and job history integration.
+
+2. Status Kesiapan
+READY WITH NOTES.
+Notes: all final required tests passed. git diff --check is clean for Sprint 5 files, but the full command still reports pre-existing trailing whitespace in docs/database/OAS-K_DB4_Recovery_Notes.md, which was explicitly not touched.
+
+3. Ringkasan Implementasi
+Implemented schema v3 with singleton att_data_repair_settings.
+Added optional Att_Data_Repair sheet to unified configuration template/export/import.
+Added strict validation and old workbook default fallback.
+Added typed AttDataRepairSettings and adapter to build AttDataRepairJobRequest from SQLite active settings plus resolved caller inputs.
+Added Generate_TXT and Generate_Excel_Report support in run_job.
+Added AttDataRepairJobAudit for job_history, job_files, and job_status_events.
+
+4. Audit Kondisi Aktual Database Sebelum Perubahan
+SCHEMA_VERSION before Sprint 5 was verified as 2.
+REQUIRED_TABLES before Sprint 5 contained 24 tables.
+Existing migration path contained v1_to_v2.sql.
+Existing startup migration is backup-first through shared/database/startup_migration.py and BackupManager before MigrationManager.migrate().
+Existing singleton settings pattern used integer primary key CHECK(id = 1), defaults, updated_at, and optional updated_by where applicable.
+Existing unified setting sheets used setting_key, setting_value, required, description.
+
+5. Schema Version Sebelum dan Sesudah
+Before: 2.
+After: 3.
+Final SCHEMA_VERSION: 3.
+
+6. File Baru
+shared/database/migrations/v2_to_v3.sql.
+utilities/att_data_repair/configuration.py.
+utilities/att_data_repair/job_audit.py.
+tests/database/test_att_data_repair_settings.py.
+tests/database/test_att_data_repair_import_export.py.
+tests/test_att_data_repair_configuration.py.
+Att_Data_Repair_Sprint5_Report.txt.
+
+7. File Existing yang Berubah
+config/templates/OAS-K_Configuration_Template.xlsx.
+shared/database/constants.py.
+shared/database/migration_manager.py.
+shared/database/database_validator.py.
+shared/database/exporting/constants.py.
+shared/database/exporting/template_builder.py.
+shared/database/exporting/current_config_exporter.py.
+shared/database/importing/constants.py.
+shared/database/importing/unified/unified_mapper.py.
+shared/database/importing/validator.py.
+shared/database/importing/preview_builder.py.
+utilities/att_data_repair/artifacts.py.
+utilities/att_data_repair/engine.py.
+utilities/att_data_repair/__init__.py.
+tests/database/test_schema.py.
+tests/database/test_startup_migration.py.
+tests/database/test_backup_and_isolation.py.
+tests/database/exporting/test_template.py.
+tests/recovery/test_candidate_and_backup.py.
+tests/recovery/test_import_and_reset.py.
+
+8. Tabel Att Data Repair Settings
+Final table name: att_data_repair_settings.
+Final columns: att_data_repair_settings_id, enabled, minimum_duration_minutes, weekday_default_in, weekday_default_out, saturday_default_in, saturday_default_out, sunday_invalid_default_in, sunday_invalid_default_out, txt_max_rows, generate_txt, generate_excel_report, use_global_period, use_global_output, updated_at, updated_by.
+Singleton key: att_data_repair_settings_id = 1.
+
+9. Default Singleton Row
+Default values: enabled=1, minimum_duration_minutes=61, weekday_default_in=09:30, weekday_default_out=17:00, saturday_default_in=09:30, saturday_default_out=12:05, sunday_invalid_default_in=09:30, sunday_invalid_default_out=12:05, txt_max_rows=10000, generate_txt=1, generate_excel_report=1, use_global_period=1, use_global_output=1, updated_by=System.
+The row is inserted by v2_to_v3.sql and by old workbook default mapping when the sheet is absent.
+
+10. Migration
+Migration file: shared/database/migrations/v2_to_v3.sql.
+Migration registry: shared/database/migration_manager.py now includes 2 -> 3.
+The migration creates the table and inserts the default singleton row.
+Old migrations were not edited.
+
+11. Backup dan Rollback Behavior
+Backup-first behavior follows the existing StartupDatabaseMigrator path, which creates a backup before MigrationManager.migrate().
+MigrationManager still executes migration SQL in a transaction and updates database_metadata plus PRAGMA user_version after the script succeeds.
+Migration failure rollback remains delegated to the existing transaction behavior.
+
+12. REQUIRED_TABLES dan Schema Validation
+REQUIRED_TABLES now includes att_data_repair_settings.
+Required table count is now 25.
+DatabaseValidator validates the singleton row for schema v3.
+DatabaseValidator(expected_version < 3) excludes att_data_repair_settings so v1/v2 backups remain valid for compatibility checks.
+
+13. Sheet Att_Data_Repair
+New sheet name: Att_Data_Repair.
+Position: appended after Attachment_Consolidation, preserving the relative order of existing sheets.
+The sheet uses the existing vertical settings structure.
+The sheet is not part of the required workbook signature, so older workbooks still detect as OAS-K unified.
+
+14. Template Generator
+The unified template generator includes Att_Data_Repair with setting_key, setting_value, required, description, and typed defaults.
+Time settings are written as strict HH:MM strings with text formatting.
+config/templates/OAS-K_Configuration_Template.xlsx was regenerated.
+
+15. Validation Rules
+Boolean fields must be TRUE/FALSE or native boolean values during Att_Data_Repair import.
+minimum_duration_minutes must be integer 1..1440.
+txt_max_rows must be integer >= 1.
+All default time fields must be strict HH:MM and valid clock times.
+weekday, saturday, and sunday invalid default out times must be greater than in times.
+At least one of generate_txt or generate_excel_report must be true.
+Invalid values are not silently normalized.
+
+16. Old Workbook Compatibility
+Workbook without Att_Data_Repair still detects as OAS_K_UNIFIED.
+Import applies Blueprint defaults for att_data_repair_settings.
+Preview includes warning code ATT_DATA_REPAIR_DEFAULTS_APPLIED.
+Database receives the default singleton row on commit.
+
+17. New Workbook Import
+Workbook with valid Att_Data_Repair maps booleans, integers, and times to typed SQLite values.
+Workbook with invalid Att_Data_Repair values is rejected in preview.
+Invalid import does not commit partial data and existing DB values remain unchanged.
+
+18. Import Preview dan Commit
+The import pipeline remains Detect -> Read -> Normalize -> Validate -> Preview -> Explicit Commit -> SQLite.
+PreviewBuilder now catches workbook mapping failures and reports WORKBOOK_MAPPING_FAILED instead of writing to DB.
+Commit remains explicit through ConfigImportCommitRequest and existing transaction service.
+
+19. Export Current Config
+Current configuration export includes Att_Data_Repair.
+Values come from active SQLite data, not hardcoded defaults when a DB value exists.
+Boolean values export as TRUE/FALSE.
+Time values export as HH:MM strings.
+
+20. Roundtrip Test
+SQLite -> export workbook -> import preview -> commit to a fresh database -> compare settings passed.
+Verified fields include minimum_duration_minutes, weekday_default_in, txt_max_rows, generate_txt, and generate_excel_report.
+
+21. Typed Settings Model
+Added AttDataRepairSettings dataclass with slots.
+Fields: enabled, minimum_duration_minutes, weekday_default_in, weekday_default_out, saturday_default_in, saturday_default_out, sunday_invalid_default_in, sunday_invalid_default_out, txt_max_rows, generate_txt, generate_excel_report, use_global_period, use_global_output.
+Time fields are datetime.time objects in the typed model.
+
+22. Configuration Adapter
+Added AttDataRepairConfigurationService.
+read_settings(database_path) reads the active singleton row from SQLite.
+build_job_request(...) builds AttDataRepairJobRequest from active settings plus source_report, resolved period_start, resolved period_end, and resolved output_root.
+The adapter does not read GUI widgets and does not store source_report as singleton configuration.
+Disabled settings reject run with a clear ValueError.
+
+23. Generate TXT / Excel Flags
+TRUE / TRUE: TXT and Excel report are generated.
+TRUE / FALSE: TXT is generated, report is skipped, summary report.generated=false with a configuration reason.
+FALSE / TRUE: TXT is skipped, Excel report is generated, summary txt.generated=false with a configuration reason.
+FALSE / FALSE: rejected before output folders are created.
+Default run_job behavior remains TRUE / TRUE.
+
+24. Job History Integration
+Added AttDataRepairJobAudit.
+One job_history row is written per audited run.
+Feature name: Att Data Repair.
+Stored metadata includes job id, status, timestamps, source report, period, output folder, final/anomaly counts, and error message when available.
+The core engine remains usable without database history.
+
+25. job_files Integration
+Recorded file roles: HRIS_TXT, EXCEL_REPORT, PROCESS_LOG, SUMMARY_JSON.
+TXT files are recorded only when generated.
+Excel report is recorded only when generated.
+Process.log and summary.json are recorded for completed output runs.
+
+26. job_status_events Integration
+Recorded phases include STARTED, ANALYZED, TXT_GENERATED when applicable, REPORT_GENERATED when applicable, COMPLETED, and FAILED when applicable.
+Existing JobRepository also records its standard create/finish status events.
+
+27. Failure Handling
+Import validation failure does not mutate the existing database.
+Both generate flags false is rejected before output folder creation.
+History write failure is caught by safe_record, logged to Process.log, and output artifacts are preserved.
+History transaction rollback prevents orphan job_files and job_status_events.
+
+28. Test Baru
+tests/database/test_att_data_repair_settings.py: schema, defaults, SQLite constraints, v2->v3 migration.
+tests/database/test_att_data_repair_import_export.py: template, old workbook default compatibility, valid import, invalid import preservation, export/import roundtrip, generate flags validation.
+tests/test_att_data_repair_configuration.py: typed adapter, disabled settings, generate flags, pre-output validation, job history files/events/orphan behavior, history failure preservation.
+
+29. Perintah Test
+python -m py_compile shared/database/constants.py shared/database/migration_manager.py shared/database/database_validator.py shared/database/exporting/constants.py shared/database/exporting/template_builder.py shared/database/exporting/current_config_exporter.py shared/database/importing/constants.py shared/database/importing/unified/unified_mapper.py shared/database/importing/validator.py shared/database/importing/preview_builder.py utilities/att_data_repair/artifacts.py utilities/att_data_repair/engine.py utilities/att_data_repair/configuration.py utilities/att_data_repair/job_audit.py utilities/att_data_repair/__init__.py tests/database/test_att_data_repair_settings.py tests/database/test_att_data_repair_import_export.py tests/test_att_data_repair_configuration.py
+pytest tests/database/test_att_data_repair_settings.py -q
+pytest tests/database/test_att_data_repair_import_export.py -q
+pytest tests/test_att_data_repair_configuration.py -q
+pytest tests/test_att_data_repair.py -q
+pytest tests/test_att_data_repair_output.py -q
+pytest tests/test_att_data_repair_report.py -q
+pytest tests/test_attachment_consolidation.py -q
+pytest tests/ui/utilities -q
+pytest tests/database -q
+pytest tests/recovery -q
+git diff --check
+git diff --check -- selected Sprint 5 tracked files
+rg "[ \t]+$" selected new Sprint 5 files
+git diff --stat
+git diff --stat -- . ":(exclude)docs/database/OAS-K_DB4_Recovery_Notes.md"
+git status --short
+
+30. Hasil Test
+Final successful test commands:
+py_compile: passed.
+tests/database/test_att_data_repair_settings.py: 3 passed.
+tests/database/test_att_data_repair_import_export.py: 5 passed.
+tests/test_att_data_repair_configuration.py: 8 passed.
+tests/test_att_data_repair.py: 19 passed.
+tests/test_att_data_repair_output.py: 14 passed.
+tests/test_att_data_repair_report.py: 8 passed.
+tests/test_attachment_consolidation.py: 6 passed.
+tests/ui/utilities: 17 passed.
+tests/database: 127 passed.
+tests/recovery: 68 passed.
+Final aggregate across successful pytest commands: 275 passed, 0 failed, 0 skipped.
+
+31. Detail Test Gagal
+Intermediate failures occurred and were fixed:
+tests/database/test_att_data_repair_import_export.py initially had 1 failure because the roundtrip test exported from an unconfigured DB fixture; fixed by seeding configuration through the import API before export.
+tests/test_att_data_repair_configuration.py initially had 3 failures because json import was removed while still used; fixed by restoring import json.
+tests/database first run had 1 failure for literal "Table count: 24"; fixed to use len(REQUIRED_TABLES).
+tests/database second run had 1 failure because REQUIRED_TABLES was not imported in that test; fixed.
+tests/recovery first run had 2 failures for old future schema/version and 24-table expectation; fixed to schema 4 and len(REQUIRED_TABLES).
+No final failing tests remain.
+
+32. Regression Test
+Sprint 2 regression: pytest tests/test_att_data_repair.py -q -> 19 passed.
+Sprint 3 regression: pytest tests/test_att_data_repair_output.py -q -> 14 passed.
+Sprint 4 regression: pytest tests/test_att_data_repair_report.py -q -> 8 passed.
+Attachment Consolidation regression: pytest tests/test_attachment_consolidation.py -q -> 6 passed.
+Utilities regression: pytest tests/ui/utilities -q -> 17 passed.
+Database/import/export regression: pytest tests/database -q -> 127 passed.
+Recovery regression: pytest tests/recovery -q -> 68 passed.
+
+33. Bug Sprint 2-4 yang Ditemukan
+No core Sprint 2-4 engine/report/output bug was found.
+Only test expectation drift from schema v2 to v3 was found and updated.
+
+34. Penyimpangan dari Prompt Sprint 5
+No intentional functional deviation.
+Rollback-on-migration-failure was not given a new bespoke test because the existing MigrationManager transaction pattern remains unchanged; schema/migration/startup tests cover the new migration path.
+ui/services/_utilities_job_audit.py was audited but not modified; a focused AttDataRepairJobAudit adapter was added to avoid UI coupling.
+
+35. Ambiguitas yang Belum Diimplementasikan
+Use_Global_Period and Use_Global_Output are stored and exposed for Sprint 6 UI resolution, but the adapter requires caller-resolved period/output as requested.
+Local GUI controls, file picker, date picker, progress UI, run/cancel UI, and final manual are not implemented in Sprint 5.
+
+36. Risiko Tersisa untuk Sprint 6
+Sprint 6 must decide exactly where UI resolves global vs local period/output.
+Sprint 6 should wire AttDataRepairConfigurationService and AttDataRepairJobAudit into the Utilities UI/service layer.
+User-facing validation messages may need localization/polish in GUI.
+Manual QA should verify the regenerated XLSX template visually in Excel.
+
+37. Git Diff Check
+Full git diff --check: failed only because docs/database/OAS-K_DB4_Recovery_Notes.md has pre-existing trailing whitespace at lines 3-6. This file was explicitly not touched.
+Selected Sprint 5 tracked files git diff --check: passed, with only LF-to-CRLF warnings.
+Selected new Sprint 5 files trailing whitespace scan: passed.
+
+38. Git Diff Stat
+Full git diff --stat included the pre-existing docs recovery notes modification and showed 18 tracked files changed, 324 insertions, 42 deletions, plus template binary size change 34868 -> 36387 bytes.
+Sprint 5 tracked diff excluding docs/database/OAS-K_DB4_Recovery_Notes.md: 17 files changed, 319 insertions, 37 deletions, plus template binary size change 34868 -> 36387 bytes.
+Note: git diff --stat does not include untracked files such as new migration, new tests, and untracked utilities/att_data_repair package files.
+
+39. Git Status Akhir
+Expected final git status includes:
+M config/templates/OAS-K_Configuration_Template.xlsx
+M docs/database/OAS-K_DB4_Recovery_Notes.md
+M shared/database/constants.py
+M shared/database/database_validator.py
+M shared/database/exporting/constants.py
+M shared/database/exporting/current_config_exporter.py
+M shared/database/exporting/template_builder.py
+M shared/database/importing/constants.py
+M shared/database/importing/preview_builder.py
+M shared/database/importing/unified/unified_mapper.py
+M shared/database/importing/validator.py
+M shared/database/migration_manager.py
+M tests/database/exporting/test_template.py
+M tests/database/test_backup_and_isolation.py
+M tests/database/test_schema.py
+M tests/database/test_startup_migration.py
+M tests/recovery/test_candidate_and_backup.py
+M tests/recovery/test_import_and_reset.py
+?? Att_Data_Repair_Sprint1_Audit_Plan.txt
+?? Att_Data_Repair_Sprint2_Report.txt
+?? Att_Data_Repair_Sprint3_Report.txt
+?? Att_Data_Repair_Sprint4_Report.txt
+?? Att_Data_Repair_Sprint5_Report.txt
+?? shared/database/migrations/v2_to_v3.sql
+?? tests/database/test_att_data_repair_import_export.py
+?? tests/database/test_att_data_repair_settings.py
+?? tests/test_att_data_repair.py
+?? tests/test_att_data_repair_configuration.py
+?? tests/test_att_data_repair_output.py
+?? tests/test_att_data_repair_report.py
+?? utilities/att_data_repair/
+
+40. File Inventory Sprint 5
+shared/database/constants.py: 83 lines, 2369 bytes.
+shared/database/migration_manager.py: 129 lines, 4989 bytes.
+shared/database/database_validator.py: 279 lines, 11447 bytes.
+shared/database/migrations/v2_to_v3.sql: 68 lines, 2410 bytes.
+shared/database/exporting/constants.py: 207 lines, 10968 bytes.
+shared/database/exporting/template_builder.py: 305 lines, 12688 bytes.
+shared/database/exporting/current_config_exporter.py: 281 lines, 10198 bytes.
+shared/database/importing/constants.py: 217 lines, 7365 bytes.
+shared/database/importing/unified/unified_mapper.py: 285 lines, 10169 bytes.
+shared/database/importing/validator.py: 341 lines, 11451 bytes.
+shared/database/importing/preview_builder.py: 337 lines, 13262 bytes.
+utilities/att_data_repair/artifacts.py: 63 lines, 2017 bytes.
+utilities/att_data_repair/engine.py: 374 lines, 16266 bytes.
+utilities/att_data_repair/configuration.py: 133 lines, 6263 bytes.
+utilities/att_data_repair/job_audit.py: 169 lines, 7257 bytes.
+utilities/att_data_repair/__init__.py: 59 lines, 1587 bytes.
+tests/database/test_att_data_repair_settings.py: 94 lines, 4123 bytes.
+tests/database/test_att_data_repair_import_export.py: 199 lines, 8461 bytes.
+tests/test_att_data_repair_configuration.py: 251 lines, 9467 bytes.
+tests/database/test_schema.py: 263 lines, 10024 bytes.
+tests/database/test_startup_migration.py: 140 lines, 5159 bytes.
+tests/database/test_backup_and_isolation.py: 115 lines, 3783 bytes.
+tests/database/exporting/test_template.py: 250 lines, 9227 bytes.
+tests/recovery/test_candidate_and_backup.py: 113 lines, 4676 bytes.
+tests/recovery/test_import_and_reset.py: 179 lines, 7133 bytes.
+config/templates/OAS-K_Configuration_Template.xlsx: binary, 36387 bytes.
+
+41. Hal yang Tidak Dilakukan
+No GUI change.
+No Utilities Page change.
+No file picker/date picker/progress/run/cancel GUI.
+No build EXE.
+No PyInstaller.
+No dist/ changes.
+No dependency added.
+No commit, staging, reset, checkout, clean, or stash.
+No deletion of untracked sprint reports.
+No edit to docs/database/OAS-K_DB4_Recovery_Notes.md.
+No Attachment Consolidation behavior change.
+No Outlook parser change.
+No Attendance engine change.
+No report_writer.py refactor.
+
+42. Definition of Done Sprint 5
+Schema version safely increased from 2 to 3: done.
+New migration exists: done.
+Backup-first migration path remains through startup migrator: done.
+att_data_repair_settings table exists: done.
+Default singleton row exists: done.
+REQUIRED_TABLES and schema validation updated: done.
+Att_Data_Repair sheet added: done.
+Existing sheet names and relative order preserved: done.
+Template generated and importable: done.
+Old workbook import compatibility: done.
+Defaults applied for old workbook: done.
+New workbook import: done.
+Invalid import preserves DB: done.
+Export current config includes Att_Data_Repair: done.
+Export/import roundtrip: done.
+Typed settings and config adapter: done.
+Disabled setting rejects run: done.
+Generate flags work: done.
+Job history, job_files, and job_status_events integration: done.
+No orphan DB rows in history test: done.
+Core engine standalone tests still pass: done.
+Sprint 2-4 regression passes: done.
+Attachment Consolidation regression passes: done.
+Database/import/export regression passes: done.
+Utilities regression passes: done.
+No GUI change, no EXE build, no git operation: done.
+Sprint 5 report created: done.
+
+43. Rekomendasi Sprint 6
+Wire AttDataRepairConfigurationService into the Utilities UI/service layer.
+Resolve Use_Global_Period and Use_Global_Output at the caller/UI layer.
+Add file picker, date picker, output selection, progress, run/cancel UX, and user-facing validation messages.
+Use AttDataRepairJobAudit.safe_record from the orchestration layer after engine completion.
+Perform manual Excel review of the regenerated unified configuration template.

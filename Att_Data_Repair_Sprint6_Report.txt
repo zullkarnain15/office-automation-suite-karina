@@ -1,0 +1,386 @@
+Att Data Repair Sprint 6 Report
+Office Automation Suite - Karina (OAS-K)
+Generated: 2026-08-03
+
+1. Identitas Sprint
+Sprint: Att Data Repair - Sprint 6.
+Repository: D:\Python Project\OfficeAutomationSuite-Karina.
+Scope: Unified UI Utilities integration, UI service/adapter wiring, source picker, global/local resolution, preflight, TaskRunner lifecycle, recovery actions, and history integration.
+
+2. Status Kesiapan
+READY WITH NOTES.
+Notes: automated tests passed. Manual visual smoke test was NOT RUN because this Codex environment does not provide an interactive human-visible GUI session for visual overflow/responsiveness inspection.
+
+3. Ringkasan Implementasi
+Utilities now has three subfeatures: Comparison Result, Attachment Consolidation, and Att Data Repair.
+Added Att Data Repair UI request/resolved/validation/progress/log/output/result models.
+Added ui/adapters/att_data_repair_adapter.py for source workbook preflight and engine result mapping.
+Added ui/services/att_data_repair_service.py for active SQLite settings, global/local period/output resolution, generate flag overrides, preflight, run orchestration, and AttDataRepairJobAudit.safe_record.
+Extended Utilities page with Att Data Repair mode, .xlsx source file picker, output options, status/result summary, progress/log stream, cancel request, and recovery buttons.
+No schema, migration, template, engine business rules, TXT format, or report sheet changes were made in Sprint 6.
+
+4. Kondisi Repository Sebelum Sprint 6
+Initial git status showed Sprint 5 changes still dirty/untracked, including schema v3 files, Att Data Repair package/tests, and Sprint 1-5 reports.
+Pre-existing modified file docs/database/OAS-K_DB4_Recovery_Notes.md remained dirty and was not touched.
+No commit, staging, reset, checkout, clean, or stash was performed.
+
+5. Audit Aktual Utilities UI
+ui/pages/utilities_page.py used one compact page with landing cards and a shared workspace.
+UtilitiesFeature initially had COMPARISON_RESULT and ATTACHMENT_CONSOLIDATION.
+UtilitiesService read read-only defaults from SQLite.
+ComparisonResultService and AttachmentConsolidationService resolved UI requests and used TaskRunner from the page.
+TaskRunner provided background worker execution and Tk-safe reporting callbacks.
+TkDialogService already had select_file and select_folder helpers.
+FileSystemService.open_folder opens folders or a file parent through os.startfile on Windows.
+Existing history page reads job_history generically, so no dedicated History page was needed.
+
+6. File Baru
+ui/adapters/att_data_repair_adapter.py.
+ui/services/att_data_repair_service.py.
+tests/ui/utilities/test_att_data_repair_service.py.
+Att_Data_Repair_Sprint6_Report.txt.
+
+7. File Existing yang Berubah
+ui/utilities_models.py.
+ui/services/utilities_service.py.
+ui/services/service_container.py.
+ui/pages/utilities_page.py.
+tests/ui/utilities/test_utilities_services.py.
+tests/ui/utilities/test_utilities_page_contract.py.
+tests/ui/utilities/test_utilities_zero_side_effect.py.
+
+8. Utilities Landing Integration
+Final Utilities feature count: 3.
+Landing summaries now include the third card for Att Data Repair.
+Opening the landing remains zero side-effect: tests verify no default loading, preflight, run, DB creation, or registry write occurs by merely opening Utilities.
+
+9. Label dan Feature Identifier
+User-facing label: Att Data Repair.
+Internal identifier: ATT_DATA_REPAIR.
+The forbidden longer label Attendance Data Repair was not used.
+Existing labels Comparison Result and Attachment Consolidation were preserved.
+
+10. Layout Att Data Repair
+The mode reuses the existing compact Utilities workspace.
+Source section label changes to Source Report.
+Second source field is hidden.
+Workflow segmented control is hidden because Att Data Repair resolves workflow per record from the source report.
+Period, output, process log, validation, result, and recovery sections reuse the existing layout.
+
+11. Source File Picker
+Source Report uses file picker, not folder picker.
+Actual dialog helper: dialog_service.select_file.
+Actual file filter: ("Excel Workbook", "*.xlsx").
+Folders are not accepted as source by service validation.
+.xls and other non-.xlsx extensions are blocked.
+
+12. Global Period Resolution
+Default checkbox state comes from att_data_repair_settings.use_global_period.
+When enabled, resolved period comes from General Settings period_start and period_end.
+If global period is missing, run/preflight is blocked with a user-facing message.
+The source workbook is not used as a period fallback.
+
+13. Local Period Resolution
+When global period is disabled, local Period Start and Period End from the UI request are used.
+Local period requires both dates.
+start > end is blocked with "Tanggal mulai tidak boleh lebih besar dari tanggal selesai."
+Local period is not written to General Settings or Att Data Repair settings.
+
+14. Global Output Resolution
+Default checkbox state comes from att_data_repair_settings.use_global_output.
+When enabled, resolved output root comes from General Settings output_root.
+Output field is readonly and Browse is disabled through _apply_global_state.
+Missing global output is blocked with a user-facing message.
+
+15. Local Output Resolution
+When global output is disabled, local Output Folder from the UI request is used.
+Output Browse uses folder picker.
+The UI passes only the output root to the engine; the engine/job manager creates Utilities\Att_Data_Repair\YYYY-MM-DD_XX.
+Local output is not written to SQLite.
+
+16. Generate Flags UX
+Output options show Generate TXT and Generate Excel Report.
+Initial values come from active SQLite settings.
+The UI allows per-job override.
+Per-job override is applied by dataclasses.replace on the typed settings object and is not saved to SQLite.
+Both false is blocked before run.
+
+17. Configuration Service Integration
+AttDataRepairService uses AttDataRepairConfigurationService.read_settings to read active SQLite settings.
+AttDataRepairConfigurationService.build_job_request maps resolved source, period, output, and settings to AttDataRepairJobRequest.
+The UI page does not read SQLite directly for Att Data Repair.
+
+18. Att Data Repair Service
+Service path: ui/services/att_data_repair_service.py.
+Responsibilities implemented: receive typed UI request, read active settings, resolve global/local period and output, validate user-facing inputs, build job request, run adapter/engine, call AttDataRepairJobAudit.safe_record, map back to UI result, and avoid widget coupling.
+
+19. Service Container Wiring
+AppServices now includes att_data_repair_service.
+build_default_app_services wires AttDataRepairService(storage_service, AttDataRepairAdapter()).
+No circular UI-engine dependency was introduced.
+
+20. Preflight
+Preflight checks source file presence, .xlsx extension, active settings, period/output resolution, workbook readability, required sheets, and required headers.
+Adapter uses AttDataRepairReportReader instead of duplicating workbook parsing rules in the UI page.
+Fatal preflight failures do not create output folders.
+
+21. User-Facing Validation
+Implemented messages cover source empty, missing source, wrong extension, missing sheet, missing header, invalid period, missing global period, missing global output, missing local output, both generate flags false, disabled feature, and settings read failure.
+Raw tracebacks are not displayed by the service/page path.
+
+22. Run Lifecycle
+Lifecycle uses existing page flow: validation, confirmation, running, completion/failure, recovery.
+Inputs and Browse buttons are disabled during busy/running state and restored afterward.
+Result panel is shown after completion or failure.
+Feature navigation away is blocked while running via can_navigate_away.
+
+23. TaskRunner Integration
+UtilitiesPage uses task_runner.submit for default loading and preflight.
+UtilitiesPage uses task_runner.submit_reporting for run jobs.
+Att Data Repair therefore runs off the UI thread like existing Utilities jobs.
+No manual thread was added.
+
+24. Progress Behavior
+Progress is phase-based.
+Implemented phases include preflight, reading source sheets, normalization/repair, TXT stage or skip, Excel report stage or skip, history/log/summary stage, and complete.
+Progress remains monotonic in reported current values.
+No fake per-record progress was added.
+
+25. Process Log UI
+AttDataRepairAdapter emits log events for preflight, engine start, complete, and history result.
+Process log panel reuses the existing Utilities log widget.
+Open Log uses the generated Process.log artifact when available.
+
+26. Cancellation Behavior
+Stop/Cancel requests the cancellation token through existing page/service flow.
+Adapter-level cooperative cancellation is supported before the core engine starts.
+Core Att Data Repair engine does not yet provide granular cancellation checkpoints during run_job, so cancellation during the engine phase waits for the safe boundary at engine completion.
+No unsafe thread termination was implemented.
+
+27. Status Mapping
+SUCCESS maps to successful UI state.
+PARTIAL_SUCCESS maps to "Berhasil dengan peringatan" and prompts the user to check Excel Report.
+NO_VALID_RECORDS maps to "Tidak ada data valid" and prompts the user to check the Anomaly sheet when a report exists.
+FAILED maps to failed UI state with user-facing error summary.
+CANCELLED maps to canceled UI state when cancellation occurs before engine start.
+
+28. Result Summary UI
+Result summary includes Job ID, Status, Output Files, Warnings, Output Folder, source_records, final_records, changed_records, anomaly_records, txt_file_count, Excel Report generated/not generated, engine status, duration, and error summary when present.
+
+29. Recovery Buttons
+Open Output uses the job output folder.
+Open Report supports COMPARISON_REPORT, CONSOLIDATION_REPORT, and EXCEL_REPORT roles.
+Open Log uses PROCESS_LOG.
+Buttons are enabled only when the corresponding artifact exists; Retry is enabled when not running.
+Retry clears the last result state and does not reuse an old job folder.
+
+30. History Integration
+AttDataRepairService calls AttDataRepairJobAudit.safe_record after engine result creation.
+History feature code recorded by Sprint 5 audit is "Att Data Repair".
+job_files includes HRIS_TXT, EXCEL_REPORT, PROCESS_LOG, and SUMMARY_JSON when generated.
+History failure logs a warning and preserves output artifacts.
+Existing HistoryService can load the row because it reads job_history generically.
+
+31. Settings Page Impact
+No Settings page source changes were made.
+Att Data Repair defaults are read from active SQLite settings for the job UI.
+Opening the Utilities page and toggling per-job output options do not write to SQLite.
+No template or module configuration schema was changed in Sprint 6.
+
+32. UI State Cleanup
+Switching feature is blocked while running.
+Inputs are re-enabled after task completion/failure.
+Dispose requests cancellation on any active token.
+Landing open has zero side effects.
+
+33. Test Baru
+tests/ui/utilities/test_att_data_repair_service.py added 6 tests covering global resolution, local resolution, generate flag validation, user-facing validation, missing global settings, workbook preflight errors, run/history/artifact behavior, and orphan prevention.
+tests/ui/utilities/test_utilities_page_contract.py gained Att Data Repair landing/picker assertions.
+tests/ui/utilities/test_utilities_services.py now validates three landing features and Att Data Repair defaults.
+tests/ui/utilities/test_utilities_zero_side_effect.py now includes Att Data Repair service in no-side-effect guards.
+
+34. Perintah Test
+python -m py_compile ui/utilities_models.py ui/services/utilities_service.py ui/adapters/att_data_repair_adapter.py ui/services/att_data_repair_service.py ui/services/service_container.py ui/pages/utilities_page.py tests/ui/utilities/test_att_data_repair_service.py tests/ui/utilities/test_utilities_services.py tests/ui/utilities/test_utilities_page_contract.py tests/ui/utilities/test_utilities_zero_side_effect.py
+pytest tests/ui/utilities/test_att_data_repair_service.py -q
+pytest tests/ui/utilities -q
+pytest tests/test_att_data_repair.py -q
+pytest tests/test_att_data_repair_output.py -q
+pytest tests/test_att_data_repair_report.py -q
+pytest tests/test_att_data_repair_configuration.py -q
+pytest tests/test_attachment_consolidation.py -q
+pytest tests/database -q
+pytest tests/recovery -q
+git diff --check
+git diff --check -- selected Sprint 6 tracked files
+rg "[ \t]+$" ui/adapters/att_data_repair_adapter.py ui/services/att_data_repair_service.py tests/ui/utilities/test_att_data_repair_service.py
+git diff --stat
+git status --short
+
+35. Hasil Test
+py_compile: passed.
+tests/ui/utilities/test_att_data_repair_service.py: 6 passed.
+tests/ui/utilities: 24 passed.
+tests/test_att_data_repair.py: 19 passed.
+tests/test_att_data_repair_output.py: 14 passed.
+tests/test_att_data_repair_report.py: 8 passed.
+tests/test_att_data_repair_configuration.py: 8 passed.
+tests/test_attachment_consolidation.py: 6 passed.
+tests/database: 127 passed.
+tests/recovery: 68 passed.
+Command-total pytest result, including the explicit Sprint 6 subset also covered by tests/ui/utilities: 280 passed, 0 failed, 0 skipped.
+Non-overlapping final suite count using tests/ui/utilities once: 274 passed, 0 failed, 0 skipped.
+
+36. Detail Test Gagal
+No final failing tests.
+No intermediate Sprint 6 pytest failure remained.
+
+37. Regression Test
+Sprint 2 regression: 19 passed.
+Sprint 3 output regression: 14 passed.
+Sprint 4 report regression: 8 passed.
+Sprint 5 configuration regression: 8 passed.
+Attachment Consolidation regression: 6 passed.
+UI Utilities regression: 24 passed.
+Database/import/export regression: 127 passed.
+Recovery regression: 68 passed.
+
+38. Manual Smoke Test
+Manual visual source-level smoke test: NOT RUN.
+Reason: no interactive human-visible GUI session is available in this Codex environment for visual layout/overflow/responsiveness inspection or real OS file-open observation.
+Automated Tk/UI contract and service tests were run instead.
+
+39. Bug Sprint 2-5 yang Ditemukan
+No Sprint 2-5 core bug was found.
+No change was needed in Att Data Repair report_writer.py, TXT writer behavior, repair rules, Attachment Consolidation, database schema, migration, or template.
+
+40. Penyimpangan dari Prompt Sprint 6
+Cancellation is cooperative only at safe service/adapter checkpoints before the engine starts; core run_job does not yet expose granular cancellation callbacks during workbook processing/output writing.
+Manual visual smoke test was NOT RUN for environment reasons.
+No dedicated Settings page mapping was added because the job page can read active SQLite settings and the generic settings/import/export path from Sprint 5 remains unchanged.
+
+41. Ambiguitas yang Belum Diimplementasikan
+No persistent recent-value storage was added for local source, local period, or local output because the repository did not show an existing per-job recent-value pattern.
+No custom icon asset was added; the existing Utilities/card button styling is reused.
+
+42. Risiko Tersisa untuk Sprint 7
+Add granular cancellation hooks inside AttDataRepairEngine if true mid-run stop is required.
+Perform manual visual QA on Windows for layout overflow, file dialog behavior, and OS open actions.
+Consider a dedicated icon for Att Data Repair if desired.
+Consider a user-facing Settings mapping if the generic module configuration UI does not surface the new settings clearly enough.
+
+43. Git Diff Check
+Full git diff --check: failed only because docs/database/OAS-K_DB4_Recovery_Notes.md has pre-existing trailing whitespace at lines 3-6.
+Selected Sprint 6 tracked files git diff --check: passed, with LF-to-CRLF warnings only.
+Selected Sprint 6 untracked files trailing whitespace scan: passed.
+
+44. Git Diff Stat
+Full git diff --stat at report time includes Sprint 5 dirty changes plus Sprint 6 changes: 25 tracked files changed, 746 insertions, 79 deletions, and template binary 34868 -> 36387 bytes.
+Sprint 6 tracked diff only: 7 files changed, 445 insertions, 37 deletions.
+Sprint 6 untracked new files are not included in git diff --stat and are listed in File Inventory.
+
+45. Git Status Akhir
+Expected final git status includes:
+M config/templates/OAS-K_Configuration_Template.xlsx
+M docs/database/OAS-K_DB4_Recovery_Notes.md
+M shared/database/constants.py
+M shared/database/database_validator.py
+M shared/database/exporting/constants.py
+M shared/database/exporting/current_config_exporter.py
+M shared/database/exporting/template_builder.py
+M shared/database/importing/constants.py
+M shared/database/importing/preview_builder.py
+M shared/database/importing/unified/unified_mapper.py
+M shared/database/importing/validator.py
+M shared/database/migration_manager.py
+M tests/database/exporting/test_template.py
+M tests/database/test_backup_and_isolation.py
+M tests/database/test_schema.py
+M tests/database/test_startup_migration.py
+M tests/recovery/test_candidate_and_backup.py
+M tests/recovery/test_import_and_reset.py
+M tests/ui/utilities/test_utilities_page_contract.py
+M tests/ui/utilities/test_utilities_services.py
+M tests/ui/utilities/test_utilities_zero_side_effect.py
+M ui/pages/utilities_page.py
+M ui/services/service_container.py
+M ui/services/utilities_service.py
+M ui/utilities_models.py
+?? Att_Data_Repair_Sprint1_Audit_Plan.txt
+?? Att_Data_Repair_Sprint2_Report.txt
+?? Att_Data_Repair_Sprint3_Report.txt
+?? Att_Data_Repair_Sprint4_Report.txt
+?? Att_Data_Repair_Sprint5_Report.txt
+?? Att_Data_Repair_Sprint6_Report.txt
+?? shared/database/migrations/v2_to_v3.sql
+?? tests/database/test_att_data_repair_import_export.py
+?? tests/database/test_att_data_repair_settings.py
+?? tests/test_att_data_repair.py
+?? tests/test_att_data_repair_configuration.py
+?? tests/test_att_data_repair_output.py
+?? tests/test_att_data_repair_report.py
+?? tests/ui/utilities/test_att_data_repair_service.py
+?? ui/adapters/att_data_repair_adapter.py
+?? ui/services/att_data_repair_service.py
+?? utilities/att_data_repair/
+
+46. File Inventory Sprint 6
+ui/utilities_models.py: 281 lines, 8597 bytes.
+ui/services/utilities_service.py: 116 lines, 5233 bytes.
+ui/services/service_container.py: 112 lines, 4894 bytes.
+ui/services/att_data_repair_service.py: 205 lines, 7970 bytes.
+ui/adapters/att_data_repair_adapter.py: 176 lines, 7231 bytes.
+ui/pages/utilities_page.py: 928 lines, 40697 bytes.
+tests/ui/utilities/test_att_data_repair_service.py: 346 lines, 12331 bytes.
+tests/ui/utilities/test_utilities_services.py: 306 lines, 12169 bytes.
+tests/ui/utilities/test_utilities_page_contract.py: 124 lines, 4615 bytes.
+tests/ui/utilities/test_utilities_zero_side_effect.py: 61 lines, 2303 bytes.
+
+47. Hal yang Tidak Dilakukan
+No EXE build.
+No PyInstaller.
+No packaging.
+No dist/ changes.
+No schema change.
+No migration change.
+No template change.
+No Att Data Repair business rule change.
+No TXT format/naming change.
+No report sheet change.
+No report_writer.py refactor.
+No Attachment Consolidation, Comparison Result, Outlook parser, Attendance engine, or HRIS engine change.
+No dependency added.
+No commit, staging, reset, checkout, clean, or stash.
+No deletion of sprint reports or untracked files.
+No edit to docs/database/OAS-K_DB4_Recovery_Notes.md.
+
+48. Definition of Done Sprint 6
+Utilities has three subfeatures: done.
+New label is exactly Att Data Repair: done.
+Two old subfeatures unchanged: done.
+Source Report uses .xlsx file picker: done.
+Global and local period resolution: done.
+Global and local output resolution: done.
+Default state from SQLite: done.
+Disabled feature blocks run: done.
+Generate TXT/Excel flags work as per-job overrides: done.
+At least one output required: done.
+Preflight source works: done.
+Service core does not read widgets: done.
+TaskRunner used: done.
+UI worker should not freeze the UI thread: done by TaskRunner architecture; manual visual confirmation NOT RUN.
+Progress and process log UI: done.
+Stop/Cancel safe checkpoint support: done with noted limitation.
+SUCCESS, PARTIAL_SUCCESS, NO_VALID_RECORDS, FAILED, and pre-engine CANCELLED mapping: done.
+Result summary and recovery buttons: done.
+History recorded through AttDataRepairJobAudit.safe_record: done.
+History failure preserves output: covered by Sprint 5 audit tests and service warning behavior.
+Settings not written on page open or per-job override: done.
+Sprint 2-5, Attachment Consolidation, UI Utilities, database, and recovery regressions: passed.
+No schema/template/build/git destructive operation: done.
+Sprint 6 report created: done.
+
+49. Rekomendasi Sprint 7
+Add granular cancel checks inside AttDataRepairEngine if mid-run cancellation is a product requirement.
+Run manual Windows GUI smoke test with a real display and actual OS file-open actions.
+Add a dedicated Att Data Repair icon if design wants clearer visual distinction.
+Consider polishing localized copy in confirmation/result states after stakeholder review.

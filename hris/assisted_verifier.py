@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 
 DEFAULT_SUCCESS_TEXTS = ("Process Instance", "Submitted", "Queued")
 DEFAULT_FAILURE_TEXTS = ("Error", "Invalid", "Failed")
+MIN_VERIFICATION_TIMEOUT_SECONDS = 30.0
 PROCESS_INSTANCE_PATTERN = re.compile(
     r"process\s+instance\s*[:#]?\s*(\d+)",
     flags=re.IGNORECASE,
@@ -53,12 +54,15 @@ class HRISAssistedResultVerifier:
             upload.get("Manual_Verification_On_Error", True)
         )
         self.initial_wait = self._to_float(
-            upload.get("Verification_Wait_Seconds", 1),
-            1,
+            upload.get("Verification_Wait_Seconds", 2),
+            2,
         )
-        self.timeout = self._to_float(
-            upload.get("Verification_Timeout_Seconds", 10),
-            10,
+        self.timeout = max(
+            MIN_VERIFICATION_TIMEOUT_SECONDS,
+            self._to_float(
+                upload.get("Verification_Timeout_Seconds", 30),
+                30,
+            ),
         )
         self.poll_seconds = self._to_float(
             upload.get("Verification_Poll_Seconds", 1),
@@ -207,14 +211,12 @@ class HRISAssistedResultVerifier:
         value: Any,
         defaults: tuple[str, ...],
     ) -> tuple[str, ...]:
-        if value is None or not str(value).strip():
-            return defaults
-        phrases = tuple(
+        configured = tuple(
             phrase.strip()
-            for phrase in str(value).split("|")
+            for phrase in str(value or "").split("|")
             if phrase.strip()
         )
-        return phrases or defaults
+        return tuple(dict.fromkeys((*defaults, *configured)))
 
     @staticmethod
     def _to_bool(value: Any) -> bool:

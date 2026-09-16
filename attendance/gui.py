@@ -35,17 +35,7 @@ from openpyxl import load_workbook
 from attendance.engine import AttendanceProcessEngine
 from config.app_config import ATTENDANCE_ICON
 from config.app_config import DATE_FORMAT
-from config.ui_config import BACKGROUND_COLOR
-from config.ui_config import BORDER_COLOR
-from config.ui_config import BUTTON_FONT
-from config.ui_config import CARD_COLOR
-from config.ui_config import DEFAULT_FONT
 from config.ui_config import HEADER_FONT
-from config.ui_config import PRIMARY_COLOR
-from config.ui_config import SECONDARY_COLOR
-from config.ui_config import SUCCESS_COLOR
-from config.ui_config import TEXT_PRIMARY
-from config.ui_config import TEXT_SECONDARY
 from shared.config_manager import AttendanceConfigurationReader
 from shared.dialogs import Dialog
 from shared.logger import get_logger
@@ -66,9 +56,13 @@ APP_TEXT = "#102A43"
 APP_MUTED_TEXT = "#60758A"
 APP_ACCENT = "#198FA3"
 APP_ACCENT_HOVER = "#123B63"
+APP_BUTTON = "#2F8F83"
+APP_BUTTON_HOVER = "#36A397"
 APP_SUCCESS = "#43A58F"
 APP_SUCCESS_ACTIVE = "#2E8775"
 APP_SUCCESS_BORDER = "#247363"
+WORKFLOW_ACCENT = APP_BUTTON
+WORKFLOW_ACCENT_HOVER = APP_BUTTON_HOVER
 APP_LOG_BG = "#24384C"
 APP_LOG_FG = "#F4F7FB"
 APP_SOFT_ACCENT = "#DDF3F3"
@@ -84,7 +78,7 @@ class AttendanceGUI:
     def __init__(self, master: tk.Toplevel) -> None:
         self.master = master
 
-        self.master.title("Attendance Module")
+        self.master.title("OAS-K | Attendance Module - by ZSH")
         self.master.geometry("1180x700")
         self.master.minsize(1000, 650)
         self.master.configure(bg=APP_BACKGROUND)
@@ -104,6 +98,7 @@ class AttendanceGUI:
         self._create_widgets()
         self._apply_widget_theme(self.master)
         self._style_primary_action()
+        self._update_workflow_selector()
 
     # =====================================================
     # GUI
@@ -380,33 +375,38 @@ class AttendanceGUI:
             padx=(0, 8),
         )
 
-        tk.Radiobutton(
-            workflow_frame,
-            text="Head Office (HO)",
-            variable=self.workflow_var,
-            value="HO",
-            font=DEFAULT_FONT,
-            command=self.update_workflow_status,
-        ).grid(
+        workflow_selector = tk.Frame(workflow_frame)
+        workflow_selector.grid(
             row=0,
             column=0,
-            sticky="w",
+            columnspan=2,
+            sticky="ew",
             padx=5,
         )
+        workflow_selector.columnconfigure(0, weight=1, uniform="workflow")
+        workflow_selector.columnconfigure(1, weight=1, uniform="workflow")
 
-        tk.Radiobutton(
-            workflow_frame,
-            text="Branch",
-            variable=self.workflow_var,
-            value="Branch",
-            font=DEFAULT_FONT,
-            command=self.update_workflow_status,
-        ).grid(
-            row=0,
-            column=1,
-            sticky="w",
-            padx=20,
-        )
+        self.workflow_buttons: dict[str, tk.Button] = {}
+
+        for column, (value, label) in enumerate(
+            (("HO", "Head Office (HO)"), ("Branch", "Branch"))
+        ):
+            button = tk.Button(
+                workflow_selector,
+                text=label,
+                font=BUTTON_FONT,
+                command=lambda selected=value: self._select_workflow(selected),
+                padx=8,
+                pady=2,
+                takefocus=True,
+            )
+            button.grid(
+                row=0,
+                column=column,
+                sticky="ew",
+                padx=(0, 4) if column == 0 else (4, 0),
+            )
+            self.workflow_buttons[value] = button
 
         self.workflow_status_label = tk.Label(
             workflow_frame,
@@ -801,8 +801,44 @@ class AttendanceGUI:
             text = "Selected Workflow : Branch"
 
         self.workflow_status_label.config(text=text)
+        self._update_workflow_selector()
 
         self.append_log(text)
+
+    def _select_workflow(self, workflow: str) -> None:
+        """Select a workflow from the compact card selector."""
+
+        self.workflow_var.set(workflow)
+        self.update_workflow_status()
+
+    def _update_workflow_selector(self) -> None:
+        """Refresh workflow button colors and selected marker."""
+
+        selected_workflow = self.workflow_var.get()
+        labels = {
+            "HO": "Head Office (HO)",
+            "Branch": "Branch",
+        }
+
+        for workflow, button in self.workflow_buttons.items():
+            selected = workflow == selected_workflow
+            button.config(
+                text=("\u2713 " if selected else "") + labels[workflow],
+                bg=WORKFLOW_ACCENT if selected else APP_INPUT,
+                fg="#FFFFFF" if selected else APP_TEXT,
+                activebackground=(
+                    WORKFLOW_ACCENT_HOVER if selected else APP_SOFT_ACCENT
+                ),
+                activeforeground="#FFFFFF" if selected else APP_TEXT,
+                relief="solid",
+                bd=1,
+                highlightthickness=1,
+                highlightbackground=(
+                    WORKFLOW_ACCENT if selected else APP_BORDER
+                ),
+                highlightcolor=WORKFLOW_ACCENT,
+                cursor="hand2",
+            )
 
     def generate(self) -> None:
         """Validate input and run Attendance Process Engine."""
@@ -1177,6 +1213,10 @@ class AttendanceGUI:
             f"Valid record count  : {result['valid_record_count']}"
         )
         self.append_log(
+            f"Duplicate removed   : "
+            f"{result.get('duplicate_removed_count', 0)}"
+        )
+        self.append_log(
             f"Anomaly count       : {result['anomaly_record_count']}"
         )
 
@@ -1508,9 +1548,9 @@ class AttendanceGUI:
         elif widget_class == "Button":
             self._safe_configure(
                 widget,
-                bg=APP_ACCENT,
+                bg=APP_BUTTON,
                 fg="#FFFFFF",
-                activebackground=APP_ACCENT_HOVER,
+                activebackground=APP_BUTTON_HOVER,
                 activeforeground="#FFFFFF",
                 relief="flat",
                 bd=0,

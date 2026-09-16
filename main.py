@@ -13,10 +13,12 @@ Application Entry Point
 
 from __future__ import annotations
 
+import argparse
+from functools import partial
 import tkinter as tk
 from tkinter import messagebox
+from typing import Any
 
-from attendance.gui import AttendanceGUI
 from config.app_config import (
     APP_ICON,
     APP_VERSION,
@@ -38,17 +40,20 @@ from config.ui_config import (
     WINDOW_RESIZABLE,
     WINDOW_WIDTH,
 )
-from hris.gui import HRISUploadGUI
 from shared.logger import get_logger
 
 logger = get_logger(__name__)
+
+AttendanceGUI: Any = None
+HRISUploadGUI: Any = None
+OutlookRevisiGUI: Any = None
 
 APP_BACKGROUND = BACKGROUND_COLOR
 APP_PANEL = CARD_COLOR
 APP_TEXT = TEXT_PRIMARY
 APP_MUTED_TEXT = TEXT_SECONDARY
 APP_ACCENT = SECONDARY_COLOR
-APP_ACCENT_HOVER = PRIMARY_COLOR
+APP_ACCENT_HOVER = "#36A397"
 APP_SUCCESS = SUCCESS_COLOR
 APP_SUCCESS_ACTIVE = "#257A4C"
 APP_BORDER = BORDER_COLOR
@@ -60,6 +65,37 @@ APP_CARD_TITLE_FONT = ("Segoe UI", 12, "bold")
 # =========================================================
 # EVENT
 # =========================================================
+
+
+def _load_attendance_gui() -> Any:
+    global AttendanceGUI
+
+    if AttendanceGUI is None:
+        from attendance.gui import AttendanceGUI as attendance_gui
+
+        AttendanceGUI = attendance_gui
+    return AttendanceGUI
+
+
+def _load_hris_gui() -> Any:
+    global HRISUploadGUI
+
+    if HRISUploadGUI is None:
+        from hris.gui import HRISUploadGUI as hris_gui
+
+        HRISUploadGUI = hris_gui
+    return HRISUploadGUI
+
+
+def _load_outlook_gui() -> Any:
+    global OutlookRevisiGUI
+
+    if OutlookRevisiGUI is None:
+        from outlook.gui import OutlookRevisiGUI as outlook_gui
+
+        OutlookRevisiGUI = outlook_gui
+    return OutlookRevisiGUI
+
 
 def coming_soon(module_name: str) -> None:
     """Temporary event for unavailable modules."""
@@ -78,7 +114,7 @@ def open_hris_module(root: tk.Tk) -> None:
 
     hris_window = tk.Toplevel(root)
     hris_window.transient(root)
-    HRISUploadGUI(hris_window)
+    _load_hris_gui()(hris_window)
     hris_window.lift()
     hris_window.focus_force()
 
@@ -90,16 +126,50 @@ def open_attendance_module(root: tk.Tk) -> None:
 
     attendance_window = tk.Toplevel(root)
     attendance_window.transient(root)
-    AttendanceGUI(attendance_window)
+    _load_attendance_gui()(attendance_window)
     attendance_window.lift()
     attendance_window.focus_force()
+
+
+def open_outlook_module(root: tk.Tk) -> None:
+    """Open Outlook - Revisi module."""
+
+    logger.info("Outlook - Revisi module opened.")
+
+    outlook_window = tk.Toplevel(root)
+    outlook_window.transient(root)
+    _load_outlook_gui()(outlook_window)
+    outlook_window.lift()
+    outlook_window.focus_force()
+
+
+def open_utilities_module(root: tk.Tk) -> None:
+    """Open the Utilities Hub through a lazy import."""
+    try:
+        from utilities.gui import UtilitiesGUI
+
+        logger.info("Utilities Hub opened.")
+        utilities_window = tk.Toplevel(root)
+        utilities_window.transient(root)
+        UtilitiesGUI(utilities_window)
+        utilities_window.lift()
+        utilities_window.focus_force()
+    except Exception as error:
+        logger.exception("Utilities Hub could not be opened.")
+        messagebox.showerror(
+            "Office Automation Suite - Karina",
+            "Gagal membuka Utilities.\n\n"
+            f"{error}",
+            parent=root,
+        )
 
 
 # =========================================================
 # MAIN
 # =========================================================
 
-def main() -> None:
+def legacy_main() -> None:
+    """Start the previous multi-window launcher for rollback."""
 
     logger.info("Starting OAS-K")
 
@@ -172,7 +242,7 @@ def main() -> None:
 
     tk.Label(
         header,
-        text="Office Automation Suite - Karina",
+        text="Office Automation Suite - Karina by. ZSH",
         font=APP_TITLE_FONT,
         bg=APP_BACKGROUND,
         fg=PRIMARY_COLOR,
@@ -229,8 +299,8 @@ def main() -> None:
         (
             "Outlook",
             "outlook.png",
-            "Email automation module.",
-            False,
+            "Process attendance revision emails and prepare HRIS TXT output.",
+            True,
         ),
         (
             "HRIS",
@@ -241,8 +311,11 @@ def main() -> None:
         (
             "Utilities",
             "utilities.png",
-            "Merge, split, and clean office files.",
-            False,
+            (
+                "Comparison Result and Attachment Consolidation "
+                "for HRIS-ready output."
+            ),
+            True,
         ),
     ]
 
@@ -320,15 +393,19 @@ def main() -> None:
             pady=(0, 12),
         )
 
-        if module_name == "Attendance":
-            button_command = lambda r=root: open_attendance_module(r)
-        elif module_name == "HRIS":
-            button_command = lambda r=root: open_hris_module(r)
-        else:
-            button_command = lambda m=module_name: coming_soon(m)
+        module_commands = {
+            "Attendance": partial(open_attendance_module, root),
+            "Outlook": partial(open_outlook_module, root),
+            "HRIS": partial(open_hris_module, root),
+            "Utilities": partial(open_utilities_module, root),
+        }
+        button_command = module_commands.get(
+            module_name,
+            partial(coming_soon, module_name),
+        )
 
-        button_bg = APP_SUCCESS if is_available else APP_ACCENT
-        button_active_bg = APP_SUCCESS_ACTIVE if is_available else PRIMARY_COLOR
+        button_bg = APP_ACCENT
+        button_active_bg = APP_ACCENT_HOVER
 
         tk.Button(
             card,
@@ -409,6 +486,50 @@ def main() -> None:
     logger.info("Launcher loaded successfully.")
 
     root.mainloop()
+
+
+def main() -> None:
+    """Start the current OAS-K Unified UI shell."""
+
+    from shared.database import StartupDatabaseMigrationError
+    from ui.app import create_app
+
+    arguments = _parse_startup_arguments()
+    if arguments.post_update:
+        from shared.update.health_check import PostUpdateHealthCheck
+
+        try:
+            PostUpdateHealthCheck(application_version=APP_VERSION).run(
+                arguments.update_transaction,
+                create_ui_shell=False,
+            )
+            logger.info("Post-update health check succeeded.")
+        except Exception:
+            logger.exception("Post-update health check failed.")
+            return
+    elif arguments.post_rollback:
+        logger.warning(
+            "Update rollback completed for transaction: %s",
+            arguments.update_transaction,
+        )
+
+    try:
+        app = create_app()
+    except StartupDatabaseMigrationError:
+        logger.error("Application stopped because database migration failed.")
+        return
+    app.run()
+
+
+def _parse_startup_arguments():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--post-update", action="store_true")
+    parser.add_argument("--post-rollback", action="store_true")
+    parser.add_argument("--update-transaction")
+    arguments, _unknown = parser.parse_known_args()
+    if (arguments.post_update or arguments.post_rollback) and not arguments.update_transaction:
+        raise SystemExit("--update-transaction wajib untuk mode post-update/post-rollback.")
+    return arguments
 
 
 if __name__ == "__main__":
