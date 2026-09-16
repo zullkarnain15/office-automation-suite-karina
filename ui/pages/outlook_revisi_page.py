@@ -6,7 +6,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
-from ui.constants import COMPACT_LOG_BACKGROUND, LOG_FONT, LOG_TEXT
+from ui.constants import COMPACT_LOG_BACKGROUND, LOG_FONT, LOG_TEXT, MAIN_BACKGROUND
 from ui.dialogs.module_configuration_detail import ModuleConfigurationDetailDialog
 from ui.icon_manager import IconManager
 from ui.mascot_outcome import classify_mascot_outcome
@@ -67,8 +67,26 @@ class OutlookRevisiPage(BasePage):
             value="Mailbox: Belum divalidasi â€¢ Target: karina.hr.1@oto.co.id / Inbox"
         )
 
-        self.surface = ttk.Frame(self, style="OASK.TFrame")
-        self.surface.grid(row=1, column=0, sticky="nsew")
+        viewport = ttk.Frame(self, style="OASK.TFrame")
+        viewport.grid(row=1, column=0, sticky="nsew")
+        viewport.columnconfigure(0, weight=1)
+        viewport.rowconfigure(0, weight=1)
+        self._scroll_canvas = tk.Canvas(
+            viewport, background=MAIN_BACKGROUND, borderwidth=0,
+            highlightthickness=0,
+        )
+        scrollbar = ttk.Scrollbar(
+            viewport, orient="vertical", command=self._scroll_canvas.yview,
+        )
+        self._scroll_canvas.configure(yscrollcommand=scrollbar.set)
+        self._scroll_canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.surface = ttk.Frame(self._scroll_canvas, style="OASK.TFrame")
+        self._surface_window = self._scroll_canvas.create_window(
+            (0, 0), window=self.surface, anchor="nw",
+        )
+        self.surface.bind("<Configure>", self._sync_scroll_region)
+        self._scroll_canvas.bind("<Configure>", self._resize_scroll_surface)
         self.surface.columnconfigure(0, weight=1)
         self.surface.rowconfigure(4, weight=1)
 
@@ -79,6 +97,36 @@ class OutlookRevisiPage(BasePage):
         self._build_log()
         self._build_result()
         self._build_advanced()
+        self._bind_page_scrolling(viewport)
+
+    def _sync_scroll_region(self, _event=None) -> None:
+        self._scroll_canvas.configure(scrollregion=self._scroll_canvas.bbox("all"))
+
+    def _resize_scroll_surface(self, event) -> None:
+        self._scroll_canvas.itemconfigure(
+            self._surface_window,
+            width=event.width,
+        )
+
+    def _bind_page_scrolling(self, widget) -> None:
+        # The log keeps its own wheel scrolling; other controls scroll the page.
+        if isinstance(widget, tk.Text):
+            return
+        widget.bind("<MouseWheel>", self._scroll_page, add="+")
+        widget.bind("<Button-4>", self._scroll_page, add="+")
+        widget.bind("<Button-5>", self._scroll_page, add="+")
+        for child in widget.winfo_children():
+            self._bind_page_scrolling(child)
+
+    def _scroll_page(self, event):
+        if self._scroll_canvas.yview() == (0.0, 1.0):
+            return None
+        delta = getattr(event, "delta", 0)
+        direction = -1 if getattr(event, "num", None) == 4 or delta > 0 else 1
+        self._scroll_canvas.yview_scroll(
+            direction * max(1, abs(int(delta / 120))) * 3, "units",
+        )
+        return "break"
 
     def _build_configuration_strip(self) -> None:
         strip = ttk.Frame(self.surface, style="CompactPanel.TFrame", padding=(12, 8))
