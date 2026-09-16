@@ -38,9 +38,18 @@ class SegmentedChoice(ttk.Frame):
         self._sync()
 
     def set(self, value: str) -> None:
+        if self.instate(("disabled",)):
+            return
         self.variable.set(value)
         if self.command is not None:
             self.command()
+
+    def set_enabled(self, enabled: bool) -> None:
+        state = ("!disabled",) if enabled else ("disabled",)
+        self.state(state)
+        for widget in self.buttons.values():
+            widget.state(state)
+            widget.configure(cursor="hand2" if enabled else "")
 
     def _sync(self) -> None:
         selected = self.variable.get()

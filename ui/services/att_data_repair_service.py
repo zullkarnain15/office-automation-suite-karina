@@ -39,7 +39,9 @@ class AttDataRepairService:
             configuration_service or AttDataRepairConfigurationService(factory)
         )
         self.audit = audit or AttDataRepairJobAudit(factory)
-        self.discovery = discovery or AttDataRepairReportDiscovery()
+        self.discovery = discovery or AttDataRepairReportDiscovery(
+            getattr(adapter, "reader", None)
+        )
 
     def load_defaults(self):
         return self.defaults.load_defaults()

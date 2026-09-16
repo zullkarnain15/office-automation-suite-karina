@@ -173,6 +173,50 @@ def test_schema3_release_prepares_backs_up_migrates_and_preserves_data(
     assert tuple(settings) == ("11:00", "23:59")
 
 
+def test_schema4_production_100_update_preserves_entire_database(tmp_path: Path) -> None:
+    data_root = initialized_data_root(tmp_path)
+    layout = resolve_storage_layout(data_root)
+    with SQLiteConnectionFactory().connect(layout.database_path) as connection:
+        connection.execute(
+            "INSERT INTO global_settings "
+            "(global_settings_id, output_root, updated_at, updated_by) "
+            "VALUES (1, ?, CURRENT_TIMESTAMP, ?)",
+            (r"C:\ProductionData\Output", "Production 1.0.0"),
+        )
+        connection.commit()
+        before = tuple(connection.iterdump())
+    package = build_package(
+        tmp_path,
+        manifest_updates={
+            "version": "1.0.9",
+            "minimum_current_version": "1.0.0",
+            "database_schema_from": 4,
+            "database_schema_to": 4,
+            "migration_required": False,
+        },
+    )
+    app_root = tmp_path / "application"
+    app_root.mkdir()
+    prepared = ApplicationUpdateService().prepare_update(
+        package, current_version="1.0.0", data_root=data_root,
+        application_root=app_root,
+    )
+    assert prepared.status == "STAGED"
+    assert prepared.backup_path.is_file()
+    assert DatabaseValidator(expected_version=4).validate(prepared.backup_path).is_valid
+    with SQLiteConnectionFactory().connect(prepared.backup_path, read_only=True) as connection:
+        assert tuple(connection.iterdump()) == before
+    health = PostUpdateHealthCheck(application_version="1.0.9").run(
+        prepared.transaction_path, create_ui_shell=False,
+    )
+    assert health.status == "SUCCESS"
+    assert health.database_schema_version == 4
+    assert all(health.checks.values())
+    assert DatabaseValidator(expected_version=4).validate(layout.database_path).is_valid
+    with SQLiteConnectionFactory().connect(layout.database_path, read_only=True) as connection:
+        assert tuple(connection.iterdump()) == before
+
+
 def test_database_schema_mismatch_rejected(tmp_path: Path) -> None:
     package = build_package(
         tmp_path,

@@ -12,6 +12,7 @@ from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from utilities._excel_styles import apply_data_style
 
 from utilities.att_data_repair.artifacts import (
     AttDataRepairJobRequest,
@@ -657,6 +658,19 @@ class _ReportContext:
         for change in analysis.change_log:
             if change.field_name == "NIK":
                 self.resolved_nik_by_id[change.record_id] = change.final_value
+        self.final_workflows = Counter()
+        self.final_statuses = Counter()
+        self.workflow_statuses = Counter()
+        for record in analysis.final_records:
+            self.final_workflows[record.workflow] += 1
+            self.final_statuses[record.final_status] += 1
+            self.workflow_statuses[record.workflow, record.final_status] += 1
+        self.changed_workflows = Counter(record.workflow for record in analysis.changed_records)
+        self.txt_file_counts = Counter()
+        self.txt_row_counts = Counter()
+        for artifact in txt_artifacts:
+            self.txt_file_counts[artifact.workflow] += 1
+            self.txt_row_counts[artifact.workflow] += artifact.row_count
 
     @property
     def txt_unique_code(self) -> int | None:
@@ -676,17 +690,11 @@ class _ReportContext:
             ("Final Records", len(self.analysis.final_records)),
             (
                 "Unchanged Records",
-                sum(
-                    record.final_status == FinalStatus.VALID_UNCHANGED
-                    for record in self.analysis.final_records
-                ),
+                self.final_statuses[FinalStatus.VALID_UNCHANGED],
             ),
             (
                 "Repaired Records",
-                sum(
-                    record.final_status == FinalStatus.REPAIRED
-                    for record in self.analysis.final_records
-                ),
+                self.final_statuses[FinalStatus.REPAIRED],
             ),
             ("Changed Records", len(self.analysis.changed_records)),
             ("Anomaly Records", len(self.analysis.anomalies)),
@@ -741,26 +749,19 @@ class _ReportContext:
         return Counter(item.change_code for item in self.analysis.change_log)
 
     def _workflow_final(self, workflow: str) -> int:
-        return sum(record.workflow == workflow for record in self.analysis.final_records)
+        return self.final_workflows[workflow]
 
     def _workflow_status(self, workflow: str, status: str) -> int:
-        return sum(
-            record.workflow == workflow and record.final_status == status
-            for record in self.analysis.final_records
-        )
+        return self.workflow_statuses[workflow, status]
 
     def _workflow_changed(self, workflow: str) -> int:
-        return sum(record.workflow == workflow for record in self.analysis.changed_records)
+        return self.changed_workflows[workflow]
 
     def _workflow_txt_files(self, workflow: str) -> int:
-        return sum(artifact.workflow == workflow for artifact in self.txt_artifacts)
+        return self.txt_file_counts[workflow]
 
     def _workflow_txt_rows(self, workflow: str) -> int:
-        return sum(
-            artifact.row_count
-            for artifact in self.txt_artifacts
-            if artifact.workflow == workflow
-        )
+        return self.txt_row_counts[workflow]
 
 
 def _employee_groups(context: _ReportContext) -> list[dict[str, Any]]:
@@ -917,13 +918,11 @@ def _append_data_row(
     formats = number_formats or {}
     for index in sorted(set(formats) | set(status_columns)):
         cell = WriteOnlyCell(sheet, value=row[index])
-        number_format = formats.get(index)
-        if number_format:
-            cell.number_format = number_format
-        if index in status_columns:
-            fill = _status_fill(row[index])
-            if fill is not None:
-                cell.fill = fill
+        apply_data_style(
+            cell,
+            number_format=formats.get(index),
+            fill=_status_fill(row[index]) if index in status_columns else None,
+        )
         row[index] = cell
     _append_row(sheet, row)
 

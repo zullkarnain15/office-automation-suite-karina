@@ -18,6 +18,7 @@ dist/
 .vscode/
 .pytest_cache/
 .ruff_cache/
+.codex_tmp/
 
 # Logs / temp / output
 logs/
@@ -42,6 +43,7 @@ OAS-K_Attendance_Configuration.xlsx
 *.bak
 *.before_*
 *backup*.xlsx
+config/templates/OAS-K_Configuration_Templatexx.xlsx
 
 # OS files
 .DS_Store

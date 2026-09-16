@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from openpyxl import load_workbook
@@ -26,7 +28,48 @@ from utilities.att_data_repair.models import (
 class AttDataRepairReportReader:
     """Read Valid_Records and Invalid_Records from an AC report."""
 
+    def __init__(self) -> None:
+        self._cache_lock = RLock()
+        self._cached_source: tuple[Path, bytes, tuple[SourceRecord, ...]] | None = None
+
+    def clear_cache(self) -> None:
+        """Release the single parsed workbook retained for the current job."""
+        with self._cache_lock:
+            self._cached_source = None
+
     def read(self, path: str | Path) -> tuple[SourceRecord, ...]:
+        """Reuse immutable parsed rows only when workbook bytes still match."""
+        source_path = Path(path)
+        if source_path.suffix.casefold() != ".xlsx" or not source_path.is_file():
+            return self._read_uncached(source_path)
+        with self._cache_lock:
+            digest = self._digest(source_path)
+            cached = self._cached_source
+            if cached is not None and cached[:2] == (source_path, digest):
+                return cached[2]
+            records = self._read_uncached(source_path)
+            # A writer may have changed the workbook while it was parsed.
+            # Such a result must never become a reusable cache entry.
+            if self._digest(source_path) == digest:
+                self._cached_source = (source_path, digest, records)
+            else:
+                self._cached_source = None
+            return records
+
+    @staticmethod
+    def _digest(path: Path) -> bytes:
+        try:
+            with path.open("rb") as source:
+                digest = hashlib.sha256()
+                for block in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(block)
+                return digest.digest()
+        except OSError as exc:
+            raise SourceWorkbookError(
+                f"Source workbook tidak dapat dibaca: {path}: {exc}"
+            ) from exc
+
+    def _read_uncached(self, path: str | Path) -> tuple[SourceRecord, ...]:
         """Return source records in workbook order and close the workbook."""
 
         source_path = Path(path)

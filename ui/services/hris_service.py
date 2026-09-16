@@ -112,7 +112,7 @@ class HRISService:
 
     def discover_txt(self, folder: Path) -> tuple[Path, ...]:
         if not folder.is_dir():
-            raise ValueError("Folder TXT HRIS tidak tersedia.")
+            raise ValueError(f"Folder TXT HRIS tidak tersedia: {folder}")
         return tuple(sorted(folder.glob("*.txt"), key=lambda item: item.name.casefold()))
 
     def resolve_request(self, request: HRISRunRequest) -> HRISResolvedRequest:

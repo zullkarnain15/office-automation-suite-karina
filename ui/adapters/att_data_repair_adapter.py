@@ -38,8 +38,8 @@ class AttDataRepairAdapter:
         engine: AttDataRepairEngine | None = None,
         reader: AttDataRepairReportReader | None = None,
     ) -> None:
-        self.engine = engine or AttDataRepairEngine()
-        self.reader = reader or AttDataRepairReportReader()
+        self.reader = reader or getattr(engine, "reader", None) or AttDataRepairReportReader()
+        self.engine = engine or AttDataRepairEngine(reader=self.reader)
 
     def validate(
         self,
@@ -122,7 +122,12 @@ class AttDataRepairAdapter:
         _log(log, "INFO", "PREFLIGHT", "Preflight source passed.")
         _emit(progress, 45, "Normalisasi dan repair")
         _log(log, "INFO", "ENGINE", "Att Data Repair dimulai.")
-        result = self.engine.run_job(job_request)
+        try:
+            result = self.engine.run_job(job_request)
+        finally:
+            clear_cache = getattr(self.reader, "clear_cache", None)
+            if clear_cache is not None:
+                clear_cache()
         _emit(progress, 70, "Membuat TXT" if resolved.generate_txt else "TXT dilewati")
         _emit(
             progress,

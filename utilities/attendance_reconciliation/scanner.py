@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import fnmatch
+import os
 from pathlib import Path
 from threading import Event
 
@@ -37,7 +39,8 @@ def discover_reports(
     candidates: list[Path] = []
     preliminary_logs: list[ScanLogEntry] = []
 
-    for path in sorted(root.rglob(pattern), key=lambda item: str(item).casefold()):
+    report_paths, lock_paths = _discover_paths(root, pattern, cancel_event)
+    for path in report_paths:
         check_cancelled(cancel_event)
         if _is_ignored_path(path, root):
             continue
@@ -77,10 +80,8 @@ def discover_reports(
             continue
         candidates.append(path)
 
-    # rglob("Export...") does not match the ~$ prefix, so inspect only lock
-    # file variants of the known pattern instead of every xlsx workbook.
-    lock_pattern = "~$" + pattern
-    for path in sorted(root.rglob(lock_pattern), key=lambda item: str(item).casefold()):
+    for path in lock_paths:
+        check_cancelled(cancel_event)
         if _is_ignored_path(path, root):
             continue
         preliminary_logs.append(
@@ -94,6 +95,27 @@ def discover_reports(
         )
 
     return candidates, preliminary_logs
+
+
+def _discover_paths(root: Path, pattern: str, cancel_event: Event | None):
+    reports: list[Path] = []
+    locks: list[Path] = []
+    lock_pattern = "~$" + pattern
+    # Prune excluded subtrees before descending; retain the original sorted
+    # report order and append lock-file audit entries after report errors.
+    for folder, directories, files in os.walk(root, followlinks=False):
+        check_cancelled(cancel_event)
+        for name in (*directories, *files):
+            check_cancelled(cancel_event)
+            if fnmatch.fnmatch(name, pattern):
+                reports.append(Path(folder) / name)
+            elif fnmatch.fnmatch(name, lock_pattern):
+                locks.append(Path(folder) / name)
+        directories[:] = [
+            name for name in directories if name.casefold() not in IGNORED_FOLDER_NAMES
+        ]
+    key = lambda path: str(path).casefold()
+    return sorted(reports, key=key), sorted(locks, key=key)
 
 
 def detect_workflow(path: Path) -> str:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import stat
 from pathlib import Path
 from threading import Event
@@ -94,38 +95,57 @@ class AttachmentScanner:
     ) -> None:
         check_cancelled(cancel_event)
         try:
-            entries = sorted(folder.iterdir(), key=lambda path: path.name.casefold())
+            with os.scandir(folder) as iterator:
+                entries = sorted(iterator, key=lambda entry: entry.name.casefold())
         except OSError as error:
             warnings.append(f"Tidak dapat membaca folder {folder}: {error}")
             return
 
-        for path in entries:
+        for entry in entries:
             check_cancelled(cancel_event)
+            path = Path(entry.path)
+            try:
+                metadata = entry.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            attributes = getattr(metadata, "st_file_attributes", 0)
+            linked = stat.S_ISLNK(metadata.st_mode) or bool(
+                attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+            )
+            try:
+                is_file = entry.is_file() if linked else stat.S_ISREG(metadata.st_mode)
+            except OSError:
+                is_file = False
+            size = None if linked else metadata.st_size
             relative = self._relative(path, root)
             if self._is_output_artifact(path):
-                if path.is_file():
+                if is_file:
                     files.append(
-                        self._item(path, relative, FILE_OUTPUT_SKIPPED, "Artifact output lama.")
+                        self._item(path, relative, FILE_OUTPUT_SKIPPED, "Artifact output lama.", size=size)
                     )
                 continue
-            if path.is_symlink() or self._is_reparse_point(path):
-                if path.is_file():
+            if linked:
+                if is_file:
                     files.append(
                         self._item(path, relative, FILE_SYMLINK, "Symlink/reparse point.")
                     )
                 continue
-            if self._is_hidden_or_system(path):
-                if path.is_file() and self._is_discovery_extension(path, mode):
+            if path.name.startswith(".") or attributes & (
+                getattr(stat, "FILE_ATTRIBUTE_HIDDEN", 0x2)
+                | getattr(stat, "FILE_ATTRIBUTE_SYSTEM", 0x4)
+            ):
+                if is_file and self._is_discovery_extension(path, mode):
                     files.append(
                         self._item(
                             path,
                             relative,
                             FILE_HIDDEN_SYSTEM,
                             "File hidden/system.",
+                            size=size,
                         )
                     )
                 continue
-            if path.is_dir():
+            if stat.S_ISDIR(metadata.st_mode):
                 if recursive:
                     self._walk(
                         root,
@@ -137,11 +157,11 @@ class AttachmentScanner:
                         cancel_event,
                     )
                 continue
-            if not path.is_file() or not self._is_discovery_extension(path, mode):
+            if not is_file or not self._is_discovery_extension(path, mode):
                 continue
             if path.name.startswith("~$"):
                 files.append(
-                    self._item(path, relative, FILE_TEMPORARY, "File sementara Excel.")
+                    self._item(path, relative, FILE_TEMPORARY, "File sementara Excel.", size=size)
                 )
                 continue
             if mode == MODE_EXCEL and path.suffix.casefold() == ".xls":
@@ -151,10 +171,11 @@ class AttachmentScanner:
                         relative,
                         FILE_UNSUPPORTED,
                         "Format .xls tidak didukung; simpan ulang sebagai .xlsx.",
+                        size=size,
                     )
                 )
                 continue
-            files.append(self._item(path, relative, FILE_READY))
+            files.append(self._item(path, relative, FILE_READY, size=size))
 
     @staticmethod
     def _item(
@@ -162,11 +183,14 @@ class AttachmentScanner:
         relative: str,
         status: str,
         reason: str = "",
+        *,
+        size: int | None = None,
     ) -> ScannedAttachment:
-        try:
-            size = path.stat().st_size
-        except OSError:
-            size = 0
+        if size is None:
+            try:
+                size = path.stat().st_size
+            except OSError:
+                size = 0
         return ScannedAttachment(
             path=path,
             relative_path=relative,
@@ -198,24 +222,3 @@ class AttachmentScanner:
             or name in OUTPUT_FILE_NAMES
             or name.startswith("attachment_consolidation_")
         )
-
-    @staticmethod
-    def _is_hidden_or_system(path: Path) -> bool:
-        if path.name.startswith("."):
-            return True
-        try:
-            attributes = getattr(path.stat(follow_symlinks=False), "st_file_attributes", 0)
-        except (OSError, TypeError):
-            return False
-        hidden = getattr(stat, "FILE_ATTRIBUTE_HIDDEN", 0x2)
-        system = getattr(stat, "FILE_ATTRIBUTE_SYSTEM", 0x4)
-        return bool(attributes & (hidden | system))
-
-    @staticmethod
-    def _is_reparse_point(path: Path) -> bool:
-        try:
-            attributes = getattr(path.stat(follow_symlinks=False), "st_file_attributes", 0)
-        except (OSError, TypeError):
-            return False
-        reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
-        return bool(attributes & reparse)

@@ -90,15 +90,16 @@ class ConsolidationReportWriter:
             item.path.resolve(): item.relative_path
             for item in result.scan.files
         }
+        source_paths: dict[Path, str] = {}
         for number, record in enumerate(result.records, 1):
+            source = record.source_file
+            if source not in source_paths:
+                source_paths[source] = relative_paths.get(source.resolve(), source.name)
             sheet.append(
                 [
                     number,
                     record.source_file.name,
-                    relative_paths.get(
-                        record.source_file.resolve(),
-                        record.source_file.name,
-                    ),
+                    source_paths[source],
                     record.source_row,
                     result.request.workflow,
                     record.nik,
@@ -134,15 +135,16 @@ class ConsolidationReportWriter:
             item.path.resolve(): item.relative_path
             for item in result.scan.files
         }
+        source_paths: dict[Path, str] = {}
         for number, anomaly in enumerate(result.anomalies, 1):
+            source = anomaly.source_file
+            if source not in source_paths:
+                source_paths[source] = relative_paths.get(source.resolve(), source.name)
             sheet.append(
                 [
                     number,
                     anomaly.source_file.name,
-                    relative_paths.get(
-                        anomaly.source_file.resolve(),
-                        anomaly.source_file.name,
-                    ),
+                    source_paths[source],
                     anomaly.source_row,
                     result.request.workflow,
                     anomaly.nik,

@@ -356,13 +356,17 @@ class AttachmentConsolidationEngine:
         records: list[object],
     ) -> None:
         outputs_by_source: dict[Path, set[Path]] = {}
+        resolved_sources: dict[Path | str, Path] = {}
         for record in records:
             output_file = getattr(record, "output_file", None)
             if output_file is None:
                 continue
-            source = Path(record.source_file).resolve()
+            raw_source = record.source_file
+            if raw_source not in resolved_sources:
+                resolved_sources[raw_source] = Path(raw_source).resolve()
+            source = resolved_sources[raw_source]
             outputs_by_source.setdefault(source, set()).add(
-                Path(output_file)
+                output_file if isinstance(output_file, Path) else Path(output_file)
             )
         for item in file_results:
             item.output_files = sorted(

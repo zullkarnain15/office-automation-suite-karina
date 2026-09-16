@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tkinter as tk
 from tkinter import ttk
 
@@ -285,6 +286,18 @@ class GeneralSection(SettingsSection):
         draft = HRISTxtSourceDraft(
             self.hris_ho_source_var.get(), self.hris_branch_source_var.get()
         )
+        ho = draft.ho_folder.strip()
+        branch = draft.branch_folder.strip()
+        if ho and branch and os.path.normcase(os.path.normpath(ho)) == os.path.normcase(
+            os.path.normpath(branch)
+        ):
+            if not self.services.dialog_service.confirm(
+                "HRIS TXT Source Sama",
+                "Folder HO dan Branch menunjuk ke path yang sama.\n\n"
+                "Mengganti Source Type akan tetap membaca folder TXT yang sama.\n"
+                "Tetap simpan pengaturan ini?",
+            ):
+                return
 
         def done(value: HRISTxtSourceDraft) -> None:
             self._apply_hris_txt_sources(value)

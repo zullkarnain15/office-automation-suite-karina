@@ -59,6 +59,8 @@ class HRISPage(BasePage):
         )
         self.source_var = tk.StringVar()
         self.source_summary_var = tk.StringVar(value="TXT source: Belum dipilih")
+        self._source_scan_generation = 0
+        self.source_var.trace_add("write", self._source_path_changed)
         self.workflow_var = tk.StringVar(value="HO")
         self.use_configured_source_var = tk.BooleanVar(value=True)
         self._configured_sources: dict[str, Path | None] = {
@@ -122,11 +124,12 @@ class HRISPage(BasePage):
         ttk.Label(source, text="Source Type", style="CompactText.TLabel").grid(
             row=1, column=0, columnspan=3, sticky="w", pady=(5, 2)
         )
-        SegmentedChoice(
+        self.source_type_choice = SegmentedChoice(
             source,
             variable=self.workflow_var,
             choices=(("HO", "HO"), ("BRANCH", "BRANCH")),
-        ).grid(row=2, column=0, columnspan=3, sticky="w")
+        )
+        self.source_type_choice.grid(row=2, column=0, columnspan=3, sticky="w")
         self.use_configured_source_check = ttk.Checkbutton(
             source,
             text="Gunakan folder global HRIS",
@@ -556,18 +559,31 @@ class HRISPage(BasePage):
             self._load_defaults()
 
     def refresh_source(self) -> None:
+        self._source_scan_generation += 1
+        generation = self._source_scan_generation
         raw = self.source_var.get().strip()
         if not raw:
             self.source_summary_var.set("Folder TXT wajib dipilih.")
             return
-        self.services.task_runner.submit(
-            lambda: self.services.hris_service.discover_txt(Path(raw)),
-            on_done=lambda result: self.source_summary_var.set(
+        self.source_summary_var.set("Membaca folder TXT...")
+
+        def done(result) -> None:
+            if self._disposed or generation != self._source_scan_generation:
+                return
+            self.source_summary_var.set(
                 f"TXT ditemukan/valid: {len(result.value)}"
                 if result.success
                 else result.error or "Discovery gagal."
-            ),
+            )
+
+        self.services.task_runner.submit(
+            lambda: self.services.hris_service.discover_txt(Path(raw)),
+            on_done=done,
         )
+
+    def _source_path_changed(self, *_args) -> None:
+        self._source_scan_generation += 1
+        self.source_summary_var.set("TXT source: Belum diperiksa")
 
     def _request(self) -> HRISRunRequest:
         raw_source = self.source_var.get().strip()
@@ -579,11 +595,6 @@ class HRISPage(BasePage):
                 "Silakan atur melalui Settings → General."
             )
         source_folder = Path(raw_source).expanduser()
-        if not source_folder.is_dir():
-            label = "HO" if source_type == "HO" else "Branch"
-            raise ValueError(
-                f"{label} TXT Source Folder tidak tersedia: {source_folder}"
-            )
         fallback = self.fallback_path_var.get().strip()
         profile = self.profile_var.get().strip()
         return HRISRunRequest(
@@ -1023,7 +1034,7 @@ class HRISPage(BasePage):
         )
 
     def browse_source(self) -> None:
-        if self.use_configured_source_var.get():
+        if self._busy or self._running or self.use_configured_source_var.get():
             return
         path = self.services.dialog_service.select_folder(title="Pilih Folder TXT HRIS")
         if path:
@@ -1047,13 +1058,23 @@ class HRISPage(BasePage):
             self.use_configured_source()
 
     def _apply_source_mode(self) -> None:
+        self._update_source_controls()
         if self.use_configured_source_var.get():
-            self.source_entry.configure(state="readonly")
-            self.source_browse_button.configure(state="disabled")
             self.use_configured_source()
-        else:
-            self.source_entry.configure(state="normal")
-            self.source_browse_button.configure(state="normal")
+
+    def _update_source_controls(self) -> None:
+        locked = self._busy or self._running
+        configured = self.use_configured_source_var.get()
+        self.source_type_choice.set_enabled(not locked)
+        self.use_configured_source_check.configure(
+            state="disabled" if locked else "normal"
+        )
+        self.source_entry.configure(
+            state="disabled" if locked else "readonly" if configured else "normal"
+        )
+        self.source_browse_button.configure(
+            state="disabled" if locked or configured else "normal"
+        )
 
     def select_profile(self) -> None:
         path = self.services.dialog_service.select_file(
@@ -1103,6 +1124,7 @@ class HRISPage(BasePage):
 
     def _set_busy(self, busy: bool, message: str = "") -> None:
         self._busy = busy
+        self._update_source_controls()
         self.validate_button.configure(state="disabled" if busy else "normal")
         self.run_button.configure(state="disabled" if busy else "normal")
         self.calibrate_button.configure(state="disabled" if busy else "normal")

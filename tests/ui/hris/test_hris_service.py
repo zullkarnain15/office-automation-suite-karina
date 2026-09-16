@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -153,6 +154,17 @@ def test_database_unavailable_blocks_run_without_creating_anything(tmp_path: Pat
     with pytest.raises(RuntimeError, match="database belum tersedia"):
         service.resolve_request(make_request(tmp_path))
     assert not (tmp_path / "output").exists()
+
+
+def test_preflight_rejects_missing_source_before_adapter_validation(tmp_path: Path):
+    database = make_database(tmp_path)
+    adapter = Mock()
+    service = HRISService(Storage(tmp_path, database), adapter)
+    request = make_request(tmp_path, source_folder=tmp_path / "missing")
+    with pytest.raises(ValueError, match="Folder TXT HRIS tidak tersedia"):
+        service.preflight(request)
+    adapter.validate.assert_not_called()
+    assert not (tmp_path / "missing").exists()
 
 
 def test_defaults_preserve_leading_zero_and_sqlite_source(tmp_path: Path):
