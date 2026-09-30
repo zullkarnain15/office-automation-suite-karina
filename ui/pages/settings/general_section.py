@@ -17,6 +17,7 @@ from ui.constants import (
 )
 from ui.pages.settings.common import SettingsSection
 from ui.services.protocols import (
+    AttendanceOTSourceDraft,
     GlobalSettingsDraft,
     HRISTxtSourceDraft,
     ModuleGlobalUsage,
@@ -67,6 +68,9 @@ class GeneralSection(SettingsSection):
         self.payroll_period_var = tk.StringVar()
         self.hris_ho_source_var = tk.StringVar()
         self.hris_branch_source_var = tk.StringVar()
+        self.attendance_ot_source_var = tk.StringVar()
+        self.employee_data_source_var = tk.StringVar()
+        self.schedule_data_source_var = tk.StringVar()
         self.usage_vars: dict[str, tuple[tk.BooleanVar, tk.BooleanVar | None]] = {}
         preferences = getattr(self.page.context.mascot_controller, "preferences", None)
         preferences = preferences or KarinaMascotPreferences()
@@ -181,7 +185,99 @@ class GeneralSection(SettingsSection):
         self.result = ResultSummary(self.content)
         self.result.grid(row=5, column=0, sticky="ew", pady=(10, 0))
         self._build_hris_txt_source_settings(row=6)
-        self._build_mascot_settings(row=7)
+        self._build_attendance_ot_source_settings(row=7)
+        self._build_mascot_settings(row=8)
+        self._bind_page_scrolling(viewport)
+
+    def _bind_page_scrolling(self, widget) -> None:
+        if isinstance(widget, (tk.Text, ttk.Combobox)):
+            return
+        if not getattr(widget, "_settings_scroll_bound", False):
+            widget.bind("<MouseWheel>", self._scroll_page, add="+")
+            widget.bind("<Button-4>", self._scroll_page, add="+")
+            widget.bind("<Button-5>", self._scroll_page, add="+")
+            widget._settings_scroll_bound = True
+        for child in widget.winfo_children():
+            self._bind_page_scrolling(child)
+
+    def _scroll_page(self, event):
+        if self._canvas.yview() == (0.0, 1.0):
+            return None
+        delta = getattr(event, "delta", 0)
+        direction = -1 if getattr(event, "num", None) == 4 or delta > 0 else 1
+        steps = max(1, abs(int(delta / 120))) if delta else 1
+        self._canvas.yview_scroll(direction * steps * 3, "units")
+        return "break"
+
+    def _build_attendance_ot_source_settings(self, *, row: int) -> None:
+        frame = ttk.LabelFrame(
+            self.content,
+            text="ATTENDANCE & OT Source Folders",
+            padding=10,
+            style="SettingsPanel.TLabelframe",
+        )
+        frame.grid(row=row, column=0, sticky="ew", pady=(10, 0))
+        frame.columnconfigure(1, weight=1)
+        fields = (
+            ("Attendance / OT Source", self.attendance_ot_source_var),
+            ("Employee Data Source", self.employee_data_source_var),
+            ("Schedule Data Source", self.schedule_data_source_var),
+        )
+        for index, (label, variable) in enumerate(fields):
+            ttk.Label(frame, text=label).grid(
+                row=index, column=0, sticky="w", padx=(0, 10), pady=3
+            )
+            ttk.Entry(frame, textvariable=variable).grid(
+                row=index, column=1, sticky="ew", pady=3
+            )
+            browse = ttk.Button(
+                frame,
+                text="Browse",
+                command=lambda value=variable, name=label: self._browse_source(
+                    value, f"Pilih {name}"
+                ),
+            )
+            browse.grid(row=index, column=2, padx=(6, 0), pady=3)
+            self.page.register_action(browse)
+        button = ttk.Button(
+            frame,
+            text="Simpan ATTENDANCE & OT Sources",
+            command=self.save_attendance_ot_sources,
+        )
+        button.grid(row=len(fields), column=0, sticky="w", pady=(8, 0))
+        self.page.register_action(button)
+
+    def _browse_source(self, variable: tk.StringVar, title: str) -> None:
+        path = self.services.dialog_service.select_folder(title=title)
+        if path is not None:
+            variable.set(str(path))
+
+    def _apply_attendance_ot_sources(self, value: AttendanceOTSourceDraft) -> None:
+        self.attendance_ot_source_var.set(value.attendance_ot_folder)
+        self.employee_data_source_var.set(value.employee_folder)
+        self.schedule_data_source_var.set(value.schedule_folder)
+
+    def save_attendance_ot_sources(self) -> None:
+        database = self._require_active_database("Simpan ATTENDANCE & OT Sources")
+        if database is None:
+            return
+        draft = AttendanceOTSourceDraft(
+            self.attendance_ot_source_var.get(),
+            self.employee_data_source_var.get(),
+            self.schedule_data_source_var.get(),
+        )
+
+        def done(value: AttendanceOTSourceDraft) -> None:
+            self._apply_attendance_ot_sources(value)
+            self.result.show_lines(["ATTENDANCE & OT source folders tersimpan."])
+
+        self.page.run_task(
+            lambda: self.services.database_service.save_attendance_ot_source_preferences(
+                database, draft
+            ),
+            on_success=done,
+            message="Menyimpan ATTENDANCE & OT sources...",
+        )
 
     def _build_hris_txt_source_settings(self, *, row: int) -> None:
         frame = ttk.LabelFrame(
@@ -324,12 +420,13 @@ class GeneralSection(SettingsSection):
             return
 
         def done(value) -> None:
-            draft, usages, outlook, hris_sources = value
+            draft, usages, outlook, hris_sources, attendance_ot_sources = value
             self._loaded = draft
             self._apply(draft)
             self._show_usage(usages)
             self._apply_outlook(outlook)
             self._apply_hris_txt_sources(hris_sources)
+            self._apply_attendance_ot_sources(attendance_ot_sources)
             self.result.show_lines(["Global Settings berhasil dibaca."])
 
         self.page.run_task(
@@ -340,6 +437,9 @@ class GeneralSection(SettingsSection):
                     database
                 ),
                 self.services.database_service.load_hris_txt_source_preferences(
+                    database
+                ),
+                self.services.database_service.load_attendance_ot_source_preferences(
                     database
                 ),
             ),
@@ -521,6 +621,7 @@ class GeneralSection(SettingsSection):
         )
         button.grid(row=len(values), column=0, pady=(10, 0), sticky="w")
         self.page.register_action(button)
+        self._bind_page_scrolling(self.usage_frame)
 
     def _require_active_database(self, title: str):
         try:

@@ -477,11 +477,11 @@ class OASKUnifiedApp:
             logger=self.context.logger,
         )
         self.karina_mascot.grid(
-            row=9,
+            row=self.sidebar.mascot_row,
             column=0,
             columnspan=2,
             sticky="s",
-            pady=(12, 4),
+            pady=(20, 4),
         )
         self.karina_mascot_controller = KarinaMascotController(self.karina_mascot)
         preferences = self.context.app_services.mascot_preferences.load()

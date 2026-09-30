@@ -92,6 +92,14 @@ def build_default_page_registry() -> PageRegistry:
             "UtilitiesPage",
         ),
         (
+            "attendance_ot",
+            "ATT & OT",
+            "Fondasi data dan analitik Attendance & OT",
+            "info.ico",
+            "attendance_ot_page",
+            "AttendanceOTPage",
+        ),
+        (
             "history",
             "History",
             "Riwayat pekerjaan dan hasil proses aplikasi",

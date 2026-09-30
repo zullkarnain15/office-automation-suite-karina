@@ -101,15 +101,19 @@ class SettingsPage(BasePage):
                 self.services.database_service.load_hris_txt_source_preferences(
                     database
                 ),
+                self.services.database_service.load_attendance_ot_source_preferences(
+                    database
+                ),
             )
 
         def done(value) -> None:
-            draft, usages, outlook, hris_sources = value
+            draft, usages, outlook, hris_sources, attendance_ot_sources = value
             general._loaded = draft
             general._apply(draft)
             general._show_usage(usages)
             general._apply_outlook(outlook)
             general._apply_hris_txt_sources(hris_sources)
+            general._apply_attendance_ot_sources(attendance_ot_sources)
             general.result.show_lines(["Global Settings otomatis dimuat."])
             self._auto_load_modules(database)
 

@@ -486,3 +486,27 @@ def test_engine_cancellation_after_inbox_read_stops_before_message_and_outbound(
     assert result.final_status == "CANCELLED"
     assert outbound_calls == []
     assert {"CONNECTING_OUTLOOK", "RESOLVING_MAILBOX", "READING_INBOX"} <= set(events)
+
+
+def test_failure_exposes_early_process_log_in_history_artifacts(tmp_path):
+    config = workbook(tmp_path / 'outlook.xlsx')
+    class FailingEngine:
+        def __init__(self, **kwargs):
+            self.output_folder = tmp_path / 'failed-job'
+            self.process_log = self.output_folder / 'Process.log'
+        def run(self):
+            self.output_folder.mkdir()
+            self.process_log.write_text('READ_PROPERTY ReceivedTime\nFATAL COM failure\n')
+            raise RuntimeError('COM failure')
+    adapter = OutlookRevisiAdapter(
+        engine_class=FailingEngine, client_factory=lambda _config: ReadyClient(),
+    )
+    result = adapter.run(
+        resolved(config, tmp_path), cancellation=OutlookRevisiCancellationToken(),
+        progress=lambda _event: None, log=lambda _event: None,
+    )
+    assert not result.success
+    assert result.process_log_path.is_file()
+    assert result.job_folder == tmp_path / 'failed-job'
+    assert any(item.file_type == 'PROCESS_LOG' and item.path == result.process_log_path
+               for item in result.output_files)

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import re
+import traceback
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -141,6 +143,42 @@ class OutlookRevisiEngine:
         self.report_writer = OutlookProcessReportWriter()
 
     def run(self) -> OutlookProcessResult:
+        self.output_folder = None
+        self.process_log = None
+        self._diagnostic_stream = None
+        self._bound_client = None
+        try:
+            return self._run()
+        except Exception as exc:
+            try:
+                self._diagnostic("FATAL", {
+                    "error": repr(exc),
+                    "hresult": getattr(exc, "hresult", None),
+                    "traceback": traceback.format_exc(),
+                })
+            except OSError:
+                logger.exception("Unable to persist Outlook failure diagnostics.")
+            raise
+        finally:
+            if self._bound_client is not None:
+                client, diagnostic, cancellation = self._bound_client
+                client.diagnostic_callback = diagnostic
+                client.cancellation_requested = cancellation
+                self._bound_client = None
+            if self._diagnostic_stream is not None:
+                self._diagnostic_stream.close()
+                self._diagnostic_stream = None
+
+    def _diagnostic(self, operation: str, details: dict | None = None) -> None:
+        stream = getattr(self, "_diagnostic_stream", None)
+        if stream is not None:
+            stream.write(json.dumps({
+                "time": datetime.now().astimezone().isoformat(),
+                "operation": operation, **(details or {}),
+            }, ensure_ascii=False, default=str) + "\n")
+            stream.flush()
+
+    def _run(self) -> OutlookProcessResult:
         """Run Outlook - Revisi processing."""
         start_time = datetime.now()
         self._report("VALIDATING_CONFIGURATION", "Validating Configuration")
@@ -151,6 +189,13 @@ class OutlookRevisiEngine:
             raise ValueError("Output_Root is required in Outlook configuration.")
 
         job_id, job_folder = self._reserve_job_folder(output_root, self.workflow)
+        self.output_folder = job_folder
+        self.process_log = job_folder / "Process.log"
+        self._diagnostic_stream = self.process_log.open("a", encoding="utf-8")
+        self._diagnostic("JOB_STARTED", {
+            "job_id": job_id, "workflow": self.workflow,
+            "dry_run": self.dry_run, "limit": self.message_limit,
+        })
         attachments_folder = job_folder / "Attachments"
         txt_folder = job_folder / "TXT"
         report_folder = job_folder / "Report"
@@ -174,14 +219,27 @@ class OutlookRevisiEngine:
                 configuration.general.get("Save_SMTP_Copy_To_Sent")
             ),
         )
+        snapshot_reader = getattr(client, "scan_messages", None)
+        bounded_reader = callable(snapshot_reader)
+        if bounded_reader:
+            self._bound_client = (
+                client, getattr(client, "diagnostic_callback", None),
+                getattr(client, "cancellation_requested", None),
+            )
+            client.diagnostic_callback = self._diagnostic
+            client.cancellation_requested = self._is_cancel_requested
 
         cancelled = self._is_cancel_requested()
         previous_pending = {}
         messages = []
-        detected_workflows: dict[int, str] = {}
+        detected_workflows: dict[tuple[str, str], str] = {}
 
         def detect_workflow(message: OutlookMessage) -> str:
-            key = id(message)
+            # Rejected snapshots are freed during scanning; Python object IDs
+            # can be reused for a different email. Use stable mailbox IDs.
+            if not message.entry_id:
+                return self._detect_message_workflow(configuration, message)
+            key = (message.store_id, message.entry_id)
             if key not in detected_workflows:
                 detected_workflows[key] = self._detect_message_workflow(
                     configuration,
@@ -201,7 +259,8 @@ class OutlookRevisiEngine:
             self._report("CONNECTING_OUTLOOK", "Connecting to Outlook")
             self._report("RESOLVING_MAILBOX", "Resolving Mailbox and Inbox")
             self._report("READING_INBOX", "Reading Inbox")
-            messages = client.fetch_messages(
+            reader = snapshot_reader if bounded_reader else client.fetch_messages
+            messages = reader(
                 attachment_folder=attachments_folder,
                 limit=self.message_limit,
                 message_filter=lambda message: bool(detect_workflow(message)),
@@ -224,13 +283,28 @@ class OutlookRevisiEngine:
                 logger.info("Skipping duplicate Outlook message: %s", message.entry_id)
                 continue
 
-            result = self._process_message(
-                configuration=configuration,
-                client=client,
-                message=message,
-                job_folder=job_folder,
-                detected_workflow=detected_workflows.get(id(message)),
+            self._diagnostic("PROCESS_MESSAGE", {
+                "candidate_index": index, "entry_id": message.entry_id,
+                "subject": message.subject, "sender": message.sender_email,
+            })
+            scope = (
+                client.open_message(message, attachments_folder)
+                if bounded_reader and detect_workflow(message) == self.workflow
+                else nullcontext()
             )
+            with scope:
+                result = self._process_message(
+                    configuration=configuration,
+                    client=client,
+                    message=message,
+                    job_folder=job_folder,
+                    detected_workflow=detect_workflow(message),
+                )
+            self._diagnostic("MESSAGE_RESULT", {
+                "entry_id": message.entry_id, "status": result.status,
+                "errors": result.errors, "reply_result": result.reply_result,
+                "move_result": result.move_result,
+            })
             message_results.append(result)
 
             if self._is_cancel_requested():
@@ -688,6 +762,7 @@ class OutlookRevisiEngine:
         # reply has been sent. Move it just like a successful email so it does
         # not remain in the Inbox and get processed again.
         if result.reply_sent:
+            self._diagnostic("MOVE_MESSAGE", {"entry_id": message.entry_id})
             processed_folder = str(
                 configuration.general.get("Processed_Folder", "Deleted Items")
             )
@@ -1093,7 +1168,8 @@ class OutlookRevisiEngine:
                 lines.append(f"TXT: {output_file}")
             lines.append("")
 
-        result.process_log.write_text("\n".join(lines), encoding="utf-8")
+        with result.process_log.open("a", encoding="utf-8") as stream:
+            stream.write("\n" + "\n".join(lines) + "\n")
         result.summary_json.write_text(
             json.dumps(
                 {
@@ -1399,6 +1475,7 @@ class OutlookRevisiEngine:
             return default
 
     def _report(self, stage: str, message: str) -> None:
+        self._diagnostic(stage, {"message": message})
         if self.progress_callback is not None:
             self.progress_callback(stage, message)
 

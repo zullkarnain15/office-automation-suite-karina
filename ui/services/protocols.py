@@ -66,6 +66,13 @@ class HRISTxtSourceDraft:
 
 
 @dataclass(frozen=True, slots=True)
+class AttendanceOTSourceDraft:
+    attendance_ot_folder: str = ""
+    employee_folder: str = ""
+    schedule_folder: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class OutlookOperationalSettingsDraft:
     payroll_period: str = ""
     resubmit_deadline: str = ""
@@ -125,6 +132,14 @@ class DatabaseSettingsServiceProtocol(Protocol):
     def save_hris_txt_source_preferences(
         self, database_path: Path, draft: HRISTxtSourceDraft
     ) -> HRISTxtSourceDraft: ...
+
+    def load_attendance_ot_source_preferences(
+        self, database_path: Path
+    ) -> AttendanceOTSourceDraft: ...
+
+    def save_attendance_ot_source_preferences(
+        self, database_path: Path, draft: AttendanceOTSourceDraft
+    ) -> AttendanceOTSourceDraft: ...
 
     def load_outlook_operational_settings(
         self,

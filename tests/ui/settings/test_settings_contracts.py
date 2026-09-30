@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from config.app_config import PROJECT_ROOT
 from ui.dialogs.typed_confirmation_dialog import typed_value_matches
 from ui.pages.settings_page import SettingsPage
+from ui.pages.settings.general_section import GeneralSection
 
 
 class _Widget:
@@ -235,3 +236,17 @@ def test_pages_do_not_import_engines() -> None:
             if isinstance(node, ast.ImportFrom) and node.module
         }
         assert roots.isdisjoint(forbidden)
+
+
+def test_general_settings_mouse_wheel_scrolls_canvas() -> None:
+    calls = []
+    section = object.__new__(GeneralSection)
+    section._canvas = SimpleNamespace(
+        yview=lambda: (0.0, 0.5),
+        yview_scroll=lambda amount, unit: calls.append((amount, unit)),
+    )
+
+    result = section._scroll_page(SimpleNamespace(delta=-30, num=None))
+
+    assert result == "break"
+    assert calls == [(3, "units")]

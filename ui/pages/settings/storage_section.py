@@ -22,6 +22,8 @@ class StorageSection(SettingsSection):
         actions = (
             ("Refresh Status", self.refresh),
             ("Initialize Data Location", self.initialize),
+            ("Create/Initialize ATTENDANCE & OT", self.initialize_attendance_ot),
+            ("Repair ATTENDANCE & OT", self.repair_attendance_ot),
             ("Change Data Location", self.relocate),
             ("Open Data Root", self.open_root),
             ("Open Database Folder", self.open_database),
@@ -40,8 +42,11 @@ class StorageSection(SettingsSection):
         )
 
     def show_status(self, status) -> None:
+        analytics_service = getattr(self.services, "attendance_ot_service", None)
+        analytics = analytics_service.resolve_status() if analytics_service else None
         self.result.show_lines(
             [
+                "CORE OAS-K DATABASE",
                 f"Active Data Root: {status.data_root or '-'}",
                 f"Active Database: {status.database_path or '-'}",
                 f"Resolution: {status.resolution_status}",
@@ -55,9 +60,88 @@ class StorageSection(SettingsSection):
                 f"Output: {status.output_folder or '-'}",
                 f"Logs: {status.logs_folder or '-'}",
                 f"Diagnostics: {status.diagnostics_folder or '-'}",
+                "",
+                "ATTENDANCE & OT DATABASE",
+                f"Path: {analytics.database_path if analytics else '-'}",
+                f"Status: {analytics.status if analytics else 'Service tidak tersedia'}",
+                f"Size: {self._format_size(analytics.size_bytes) if analytics else '-'}",
+                f"Schema Version: {analytics.schema_version if analytics and analytics.schema_version is not None else '-'}",
+                "Last Initialization/Migration: "
+                + (
+                    analytics.last_initialization_or_migration
+                    if analytics and analytics.last_initialization_or_migration
+                    else "-"
+                ),
+                *(
+                    [f"Analytics Error: {analytics.error}"]
+                    if analytics and analytics.error
+                    else []
+                ),
                 *(f"Warning: {item}" for item in status.warnings),
                 *(f"Error: {item}" for item in status.errors),
             ]
+        )
+
+    @staticmethod
+    def _format_size(size_bytes: int | None) -> str:
+        if size_bytes is None:
+            return "-"
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        if size_bytes < 1024**2:
+            return f"{size_bytes / 1024:.1f} KB"
+        if size_bytes < 1024**3:
+            return f"{size_bytes / 1024**2:.1f} MB"
+        return f"{size_bytes / 1024**3:.2f} GB"
+
+    def initialize_attendance_ot(self) -> None:
+        service = getattr(self.services, "attendance_ot_service", None)
+        if service is None:
+            self.services.dialog_service.warning(
+                "ATTENDANCE & OT", "Analytics storage service tidak tersedia."
+            )
+            return
+
+        def done(_status) -> None:
+            self.show_status(self.services.storage_service.resolve_status())
+            self.services.dialog_service.info(
+                "ATTENDANCE & OT", "Database analytics siap digunakan."
+            )
+
+        self.page.run_task(
+            service.initialize,
+            on_success=done,
+            message="Menginisialisasi database ATTENDANCE & OT...",
+            destructive=True,
+            cancellable=False,
+        )
+
+    def repair_attendance_ot(self) -> None:
+        service = getattr(self.services, "attendance_ot_service", None)
+        if service is None:
+            return
+        if not self.services.dialog_service.confirm(
+            "Repair ATTENDANCE & OT",
+            "Repair hanya untuk interrupted SQLite transaction. Salinan database "
+            "dan journal dibuat sebelum recovery. Lanjutkan?",
+        ):
+            return
+
+        def done(result) -> None:
+            self.show_status(self.services.storage_service.resolve_status())
+            self.services.dialog_service.info(
+                "Repair ATTENDANCE & OT",
+                "Recovery selesai dan database tervalidasi.\n\n"
+                f"Pre-recovery copy: {result['pre_recovery_copy']}\n"
+                f"Verified backup: {result['verified_backup']}",
+            )
+
+        self.page.run_task(
+            service.repair_interrupted_transaction,
+            on_success=done,
+            message="Memulihkan interrupted analytics transaction...",
+            destructive=True,
+            cancellable=False,
         )
 
     def initialize(self) -> None:

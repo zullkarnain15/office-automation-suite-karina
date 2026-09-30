@@ -93,6 +93,7 @@ PAGE_ORDER = (
     "outlook_revisi",
     "hris",
     "utilities",
+    "attendance_ot",
     "history",
     "settings",
     "system_health",

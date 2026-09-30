@@ -170,6 +170,7 @@ class Header(ttk.Frame):
             "outlook revisi": "blue_slime.png",
             "hris": "green_slime.png",
             "utilities": "red_apple.png",
+            "att & ot": "info.png",
             "history": "history_wizard.png",
             "settings": "setting_stick.png",
             "system health": "sys_healt.png",

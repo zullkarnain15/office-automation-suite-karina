@@ -29,6 +29,11 @@ class AppServices:
     attachment_consolidation_service: Any = None
     att_data_repair_service: Any = None
     mascot_preferences: Any = None
+    attendance_ot_service: Any = None
+    attendance_ot_import_service: Any = None
+    attendance_ot_analytics_service: Any = None
+    attendance_ot_export_service: Any = None
+    attendance_ot_maintenance_service: Any = None
 
 
 def build_default_app_services(
@@ -75,6 +80,11 @@ def build_default_app_services(
     from ui.services.system_health_service import SystemHealthService
     from ui.services.task_runner import TaskRunner
     from ui.services.karina_mascot_preferences import KarinaMascotPreferencesService
+    from shared.attendance_ot import (
+        AttendanceOTAnalyticsQueryService,
+        AttendanceOTImportService,
+        AttendanceOTStorageService,
+    )
 
     registry = registry or StorageRegistryService(WindowsRegistryBackend())
     storage_arguments = {}
@@ -85,9 +95,17 @@ def build_default_app_services(
         application_version=application_version,
         **storage_arguments,
     )
+    database_settings_service = DatabaseSettingsService()
+    attendance_ot_storage_service = AttendanceOTStorageService(storage_service)
+    from shared.attendance_ot.export_service import AttendanceOTExportService
+    from shared.attendance_ot.maintenance import AttendanceOTMaintenanceService
+
+    attendance_ot_queries = AttendanceOTAnalyticsQueryService(
+        attendance_ot_storage_service
+    )
     return AppServices(
         storage_service=storage_service,
-        database_service=DatabaseSettingsService(),
+        database_service=database_settings_service,
         configuration_service=ConfigurationUIService(
             project_root / "config" / "templates" / "OAS-K_Configuration_Template.xlsx"
         ),
@@ -119,4 +137,14 @@ def build_default_app_services(
             storage_service, AttDataRepairAdapter()
         ),
         mascot_preferences=KarinaMascotPreferencesService(registry.backend),
+        attendance_ot_service=attendance_ot_storage_service,
+        attendance_ot_import_service=AttendanceOTImportService(
+            attendance_ot_storage_service,
+            database_settings_service,
+        ),
+        attendance_ot_analytics_service=attendance_ot_queries,
+        attendance_ot_export_service=AttendanceOTExportService(attendance_ot_queries),
+        attendance_ot_maintenance_service=AttendanceOTMaintenanceService(
+            attendance_ot_storage_service
+        ),
     )

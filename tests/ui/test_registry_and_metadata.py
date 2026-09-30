@@ -21,11 +21,12 @@ from ui.context import AppContext
 from ui.icon_manager import IconManager
 from ui.models import PageDefinition
 from ui.page_registry import PageRegistry, build_default_page_registry
+from ui.widgets.sidebar import Sidebar
 from ui.window_state import WindowState
 
 
-def test_page_registry_has_exactly_eight_pages() -> None:
-    assert len(build_default_page_registry()) == 8
+def test_page_registry_has_exactly_nine_pages() -> None:
+    assert len(build_default_page_registry()) == 9
 
 
 def test_page_order_is_locked() -> None:
@@ -55,12 +56,38 @@ def test_utilities_remains_main_menu() -> None:
     }
 
 
+def test_attendance_ot_is_directly_below_utilities_with_compact_metadata() -> None:
+    registry = build_default_page_registry()
+    assert registry.page_ids.index("attendance_ot") == (
+        registry.page_ids.index("utilities") + 1
+    )
+    assert registry.get("attendance_ot").title == "ATT & OT"
+    assert registry.get("attendance_ot").icon_name == "info.ico"
+
+
 def test_all_menu_icons_exist_or_have_fallback() -> None:
     manager = IconManager(PROJECT_ROOT / "assets" / "icons")
     assert all(
         manager.exists(definition.icon_name)
         for definition in build_default_page_registry()
     )
+
+
+def test_sidebar_reserves_mascot_row_below_all_navigation(
+    tk_root, tmp_path
+) -> None:
+    sidebar = Sidebar(
+        tk_root,
+        build_default_page_registry(),
+        IconManager(tmp_path, master=tk_root),
+        lambda _page_id: True,
+        application_version="test",
+    )
+
+    last_navigation_row = max(
+        int(button.grid_info()["row"]) for button in sidebar._buttons.values()
+    )
+    assert sidebar.mascot_row > last_navigation_row
 
 
 def test_icon_manager_missing_icon_is_safe(tmp_path: Path) -> None:

@@ -195,6 +195,7 @@ class OutlookRevisiAdapter:
                 "VALIDATING_CONFIGURATION", "Validating Configuration"
             )
         )
+        engine = None
         try:
             with self._configuration_path(request) as configuration_path:
                 log(
@@ -232,6 +233,15 @@ class OutlookRevisiAdapter:
             return self._normalize_result(request, engine_result, started, log)
         except Exception as exc:
             log(self._log("ERROR", f"Outlook Revisi run failed: {exc}"))
+            job_folder = self._existing_path(getattr(engine, "output_folder", None))
+            process_log = self._existing_path(getattr(engine, "process_log", None))
+            outputs = tuple(
+                OutlookRevisiOutputFile(role, path)
+                for role, path in (("OUTPUT_FOLDER", job_folder), ("PROCESS_LOG", process_log))
+                if path is not None
+            )
+            if process_log is not None:
+                log(self._log("ERROR", f"Detail diagnosis: {process_log}"))
             return OutlookRevisiRunResult(
                 success=False,
                 cancelled=cancellation.requested,
@@ -241,13 +251,14 @@ class OutlookRevisiAdapter:
                 started_at=started,
                 ended_at=self._now(),
                 output_root=request.output_root,
-                job_folder=None,
+                job_folder=job_folder,
                 message_counts={},
                 attachment_counts={},
                 reply_counts={},
-                output_files=(),
+                output_files=outputs,
                 warning_count=int(cancellation.requested),
                 error_summary=str(exc),
+                process_log_path=process_log,
             )
 
     def _validate_mailbox(self, configuration) -> MailboxValidationResult:

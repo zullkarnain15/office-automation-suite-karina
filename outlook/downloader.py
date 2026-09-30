@@ -5,6 +5,7 @@ Outlook Object Model integration for Outlook - Revisi.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import contextmanager
 from datetime import datetime
 from email.utils import format_datetime
 from email.utils import make_msgid
@@ -70,6 +71,14 @@ class OutlookComClient:
         "http://schemas.microsoft.com/mapi/proptag/0x007D001E",
     )
     SMTP_COPY_HEADER = "X-OAS-K-Copy-ID"
+    # Restrict at the MAPI collection level: wrapping a recall item as a COM
+    # object can fail before Python gets a chance to inspect item.Class.
+    RECALL_FILTER = (
+        '@SQL=NOT ("http://schemas.microsoft.com/mapi/proptag/0x001A001F" '
+        "LIKE 'IPM.Outlook.Recall%' OR "
+        '"http://schemas.microsoft.com/mapi/proptag/0x001A001F" '
+        "LIKE 'IPM.Recall.Report%')"
+    )
     PR_SMTP_ADDRESS_PROPERTIES = (
         "http://schemas.microsoft.com/mapi/proptag/0x39FE001F",
         "http://schemas.microsoft.com/mapi/proptag/0x39FE001E",
@@ -101,6 +110,54 @@ class OutlookComClient:
         self._outlook = None
         self._namespace = None
         self._smtp_copy_results: dict[str, SmtpSentCopyResult] = {}
+        self.diagnostic_callback = None
+        self.cancellation_requested = None
+
+    def _diagnostic(self, operation: str, **details) -> None:
+        if self.diagnostic_callback is not None:
+            self.diagnostic_callback(operation, details)
+
+    def scan_messages(self, **kwargs) -> list[OutlookMessage]:
+        """Snapshot candidate metadata without retaining live Outlook items."""
+        return self.fetch_messages(**kwargs, snapshot_only=True)
+
+    def _exclude_recall_items(self, items):
+        self._diagnostic("FILTER_RECALL_ITEMS", filter=self.RECALL_FILTER)
+        # Do not fall back to enumerating the unfiltered Inbox if Restrict fails.
+        filtered = items.Restrict(self.RECALL_FILTER)
+        try:
+            excluded = max(0, int(items.Count) - int(filtered.Count))
+        except Exception as exc:
+            self._diagnostic("RECALL_COUNT_UNAVAILABLE", error=repr(exc))
+        else:
+            self._diagnostic("RECALL_ITEMS_EXCLUDED", count=excluded)
+            if excluded:
+                logger.info("Skipped %s recall request/report item(s).", excluded)
+        return filtered
+
+    def _is_recall_item(self, item) -> bool:
+        self._diagnostic("READ_MESSAGE_CLASS")
+        message_class = str(getattr(item, "MessageClass", "") or "")
+        if message_class.casefold().startswith(("ipm.outlook.recall", "ipm.recall.report")):
+            self._diagnostic("SKIPPED_RECALL", message_class=message_class)
+            return True
+        return False
+
+    @contextmanager
+    def open_message(self, message: OutlookMessage, attachment_folder: Path):
+        """Hold only the current candidate across download, reply and move."""
+        self._diagnostic("OPEN_MESSAGE", entry_id=message.entry_id,
+                         store_id=message.store_id, subject=message.subject)
+        try:
+            message.raw_item = self._namespace.GetItemFromID(
+                message.entry_id, message.store_id,
+            )
+            message.attachments = self._save_attachments(
+                message.raw_item, attachment_folder,
+            )
+            yield message
+        finally:
+            message.raw_item = None
 
     def connect(self) -> None:
         """Connect to Outlook through COM."""
@@ -145,16 +202,22 @@ class OutlookComClient:
         limit: int | None = None,
         message_filter: Callable[[OutlookMessage], bool] | None = None,
         attachment_filter: Callable[[OutlookMessage], bool] | None = None,
+        snapshot_only: bool = False,
     ) -> list[OutlookMessage]:
         """Fetch candidate messages and save only selected attachments."""
         if self._namespace is None:
+            self._diagnostic("CONNECT_OUTLOOK")
             self.connect()
 
+        self._diagnostic("RESOLVE_INBOX")
         folder = self._get_source_folder()
-        items = folder.Items
+        self._diagnostic("READ_ITEMS")
+        items = self._exclude_recall_items(folder.Items)
         try:
+            self._diagnostic("SORT_RECEIVED_TIME")
             items.Sort("[ReceivedTime]", True)
-        except Exception:
+        except Exception as exc:
+            self._diagnostic("SORT_WARNING", error=repr(exc))
             logger.warning("Could not sort Outlook Inbox by ReceivedTime.")
 
         output_folder = Path(attachment_folder)
@@ -162,44 +225,68 @@ class OutlookComClient:
         messages: list[OutlookMessage] = []
         count = 0
 
-        for item in items:
-            if limit is not None and count >= limit:
+        self._diagnostic("ENUMERATE_ITEMS")
+        iterator = iter(items)
+        scan_index = 0
+        while limit is None or count < limit:
+            if self.cancellation_requested and self.cancellation_requested():
                 break
+            scan_index += 1
+            self._diagnostic("NEXT_ITEM", scan_index=scan_index, candidates=count)
+            try:
+                item = next(iterator)
+            except StopIteration:
+                break
+            try:
+                def read(name, default=None):
+                    self._diagnostic("READ_PROPERTY", scan_index=scan_index, property=name)
+                    return getattr(item, name, default)
 
-            if getattr(item, "Class", None) != 43:
-                continue
+                if self._is_recall_item(item) or read("Class") != 43:
+                    continue
 
-            sender_email = self._get_sender_email(item)
-            if self._is_smtp_archive_message(item, sender_email):
-                logger.info(
-                    "Skipping OAS-K SMTP BCC archive in Inbox: %s",
-                    str(getattr(item, "Subject", "") or ""),
+                entry_id = str(read("EntryID", "") or "")
+                self._diagnostic("MESSAGE_ID", scan_index=scan_index, entry_id=entry_id)
+                subject = str(read("Subject", "") or "")
+                self._diagnostic("MESSAGE", scan_index=scan_index,
+                                 entry_id=entry_id, subject=subject)
+                self._diagnostic("READ_SENDER")
+                sender_email = self._get_sender_email(item)
+                self._diagnostic("READ_ARCHIVE_HEADERS", sender=sender_email)
+                if self._is_smtp_archive_message(item, sender_email):
+                    continue
+                parent = read("Parent")
+                self._diagnostic("READ_STORE_ID")
+                try:
+                    store_id = str(parent.StoreID) if parent is not None else ""
+                finally:
+                    parent = None
+                sender_name = str(read("SenderName", "") or "")
+                self._diagnostic("READ_CC")
+                cc = self._get_cc_emails(item)
+                received_time = self._safe_datetime(read("ReceivedTime"))
+                self._diagnostic("READ_ATTACHMENT_COUNT")
+                attachment_count = int(getattr(item.Attachments, "Count", 0) or 0)
+                message = OutlookMessage(
+                    entry_id=entry_id, store_id=store_id, subject=subject,
+                    sender_name=sender_name, sender_email=sender_email, cc=cc,
+                    received_time=received_time, attachments=[],
+                    raw_item=None if snapshot_only else item,
+                    attachment_count=attachment_count,
                 )
-                continue
-
-            message = OutlookMessage(
-                entry_id=str(getattr(item, "EntryID", "") or ""),
-                store_id=str(getattr(item, "Parent", "").StoreID)
-                if getattr(item, "Parent", None) is not None
-                else "",
-                subject=str(getattr(item, "Subject", "") or ""),
-                sender_name=str(getattr(item, "SenderName", "") or ""),
-                sender_email=sender_email,
-                cc=self._get_cc_emails(item),
-                received_time=self._safe_datetime(getattr(item, "ReceivedTime", None)),
-                attachments=[],
-                raw_item=item,
-                attachment_count=int(
-                    getattr(getattr(item, "Attachments", None), "Count", 0) or 0
-                ),
-            )
-            if message_filter is not None and not message_filter(message):
-                continue
-
-            if attachment_filter is None or attachment_filter(message):
-                message.attachments = self._save_attachments(item, output_folder)
-            messages.append(message)
-            count += 1
+                self._diagnostic("FILTER_MESSAGE")
+                if message_filter is not None and not message_filter(message):
+                    continue
+                if snapshot_only and (not entry_id or not store_id):
+                    raise RuntimeError("Candidate email has no EntryID or StoreID.")
+                if not snapshot_only and (
+                    attachment_filter is None or attachment_filter(message)
+                ):
+                    message.attachments = self._save_attachments(item, output_folder)
+                messages.append(message)
+                count += 1
+            finally:
+                item = None
 
         return messages
 
@@ -521,7 +608,7 @@ class OutlookComClient:
         wanted: set[str],
         scan_limit: int = 500,
     ) -> dict[str, Any]:
-        items = inbox.Items
+        items = self._exclude_recall_items(inbox.Items)
         try:
             items.Sort("[ReceivedTime]", True)
         except Exception:
@@ -540,7 +627,7 @@ class OutlookComClient:
 
         matches: dict[str, Any] = {}
         for item in candidates:
-            if getattr(item, "Class", None) != 43:
+            if self._is_recall_item(item) or getattr(item, "Class", None) != 43:
                 continue
             copy_id = self._smtp_copy_id_from_item(item, wanted)
             if copy_id and copy_id not in matches:
@@ -799,9 +886,11 @@ class OutlookComClient:
         output_folder: Path,
     ) -> list[OutlookAttachment]:
         attachments: list[OutlookAttachment] = []
+        self._diagnostic("READ_ATTACHMENT_COUNT")
         count = int(getattr(item.Attachments, "Count", 0) or 0)
 
         for index in range(1, count + 1):
+            self._diagnostic("READ_ATTACHMENT", attachment_index=index)
             attachment = item.Attachments.Item(index)
             file_name = str(getattr(attachment, "FileName", "") or "")
             if not file_name:
@@ -809,7 +898,12 @@ class OutlookComClient:
 
             safe_name = self._safe_attachment_name(file_name)
             file_path = self._unique_path(output_folder / safe_name)
-            attachment.SaveAsFile(str(file_path))
+            self._diagnostic("SAVE_ATTACHMENT", attachment_index=index,
+                             filename=file_name, path=str(file_path))
+            try:
+                attachment.SaveAsFile(str(file_path))
+            finally:
+                attachment = None
             attachments.append(OutlookAttachment(file_name=file_name, path=file_path))
 
         return attachments

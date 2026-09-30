@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import re
 import shutil
+import weakref
 from types import SimpleNamespace
 
 import pytest
@@ -12,7 +13,9 @@ from openpyxl import Workbook, load_workbook
 import outlook.engine as outlook_engine
 from outlook.downloader import OutlookAttachment
 from outlook.downloader import OutlookMessage
+from outlook.downloader import OutlookComClient
 from outlook.engine import OutlookRevisiEngine
+from outlook.engine import OutlookProcessMessageResult
 from outlook.parser import AttendanceRevisionRecord
 from outlook.parser import OutlookAttachmentParser
 from outlook.parser import OutlookDataAnomaly
@@ -1342,3 +1345,193 @@ def test_reconciliation_mismatch_marks_warning(tmp_path: Path) -> None:
     assert result.reconciliation_issues == [
         "Valid row count does not match exported record count."
     ]
+
+class _BoundedInbox:
+    """Create wrappers on demand, as COM does; track surviving references."""
+    def __init__(self, count, fail_read=None, fail_attachment=None):
+        self.ids = [str(i) for i in range(count)]
+        self.live = weakref.WeakSet()
+        self.peak = 0
+        self.opened = []
+        self.fail_read = fail_read
+        self.fail_attachment = fail_attachment
+        self.sorted = False
+
+    @property
+    def Count(self):
+        return len(self.ids)
+
+    def Restrict(self, query):
+        assert query == OutlookComClient.RECALL_FILTER
+        return self
+
+    def Sort(self, field, descending):
+        assert (field, descending) == ('[ReceivedTime]', True)
+        self.sorted = True
+
+    def __iter__(self):
+        assert self.sorted
+        return (self.make_item(key) for key in self.ids)
+
+    def make_item(self, key):
+        inbox = self
+        class Item:
+            Class = 43
+            EntryID = key
+            Subject = 'ATT_REV 06-2026'
+            SenderName = 'HO User'
+            SenderEmailAddress = 'ho@example.com'
+            CC = 'cc@example.com'
+            Parent = SimpleNamespace(StoreID='store')
+            Attachments = SimpleNamespace(Count=0)
+            @property
+            def ReceivedTime(self):
+                if key == inbox.fail_read:
+                    raise RuntimeError(-2147467262, 'No such interface supported')
+                return None
+        item = Item()
+        if key == self.fail_attachment:
+            def save(_path):
+                raise OSError('attachment save denied')
+            item.Attachments = SimpleNamespace(
+                Count=1, Item=lambda _i: SimpleNamespace(FileName='bad.xlsx', SaveAsFile=save),
+            )
+        self.live.add(item)
+        self.peak = max(self.peak, len(self.live))
+        return item
+
+    def open(self, key, store):
+        assert store == 'store'
+        self.opened.append(key)
+        return self.make_item(key)
+
+
+def _bounded_engine(tmp_path, monkeypatch, count, **faults):
+    config = tmp_path / 'bounded.xlsx'
+    _configuration(config, tmp_path / 'output')
+    inbox = _BoundedInbox(count, **faults)
+    client = OutlookComClient('karina.hr.1@oto.co.id')
+    client._namespace = SimpleNamespace(GetItemFromID=inbox.open)
+    client._get_source_folder = lambda: SimpleNamespace(Items=inbox)
+    engine = OutlookRevisiEngine(config, 'HO', dry_run=True, client=client)
+    processed = []
+    def process(**kwargs):
+        message = kwargs['message']
+        assert message.raw_item is not None
+        assert len(inbox.live) == 1
+        processed.append(message)
+        # Simulate inbox mutation after processing: a stable snapshot must prevent skips.
+        inbox.ids.remove(message.entry_id)
+        return OutlookProcessMessageResult(
+            message.entry_id, message.subject, message.sender_email, 'HO',
+            'SUCCESS', [], [], False,
+        )
+    monkeypatch.setattr(engine, '_process_message', process)
+    return engine, inbox, processed
+
+
+@pytest.mark.parametrize('count', [5, 100, 250, 500])
+def test_large_batches_release_com_items_and_survive_inbox_moves(tmp_path, monkeypatch, count):
+    engine, inbox, processed = _bounded_engine(tmp_path, monkeypatch, count)
+    engine.message_limit = count + 10
+    result = engine.run()
+    assert result.success_email == count
+    assert inbox.opened == [str(i) for i in range(count)]
+    assert all(message.raw_item is None for message in processed)
+    assert inbox.peak == 1
+    assert not inbox.live
+    log = result.process_log.read_text(encoding='utf-8')
+    assert 'JOB_STARTED' in log and 'MESSAGE_RESULT' in log and 'FINALIZING' in log
+    assert engine.client.diagnostic_callback is None
+
+
+@pytest.mark.parametrize('fault,operation', [
+    ({'fail_read': '120'}, 'READ_PROPERTY'),
+    ({'fail_attachment': '120'}, 'SAVE_ATTACHMENT'),
+])
+def test_batch_failure_preserves_diagnostics_and_releases_items(tmp_path, monkeypatch, fault, operation):
+    engine, inbox, processed = _bounded_engine(tmp_path, monkeypatch, 250, **fault)
+    with pytest.raises((RuntimeError, OSError)):
+        engine.run()
+    records = [json.loads(line) for line in engine.process_log.read_text(encoding='utf-8').splitlines()]
+    assert records[0]['operation'] == 'JOB_STARTED'
+    assert records[-2]['operation'] == operation
+    assert records[-1]['operation'] == 'FATAL'
+    assert 'Traceback' in records[-1]['traceback']
+    assert any(record.get('entry_id') == '120' for record in records)
+    if operation == 'SAVE_ATTACHMENT':
+        assert records[-2]['filename'] == 'bad.xlsx'
+        assert len(processed) == 120
+    else:
+        assert records[-2]['property'] == 'ReceivedTime'
+        assert not processed
+    assert all(message.raw_item is None for message in processed)
+    assert not inbox.live
+    assert engine.client.diagnostic_callback is None
+
+
+def test_snapshot_limit_does_not_read_extra_item(tmp_path, monkeypatch):
+    engine, inbox, _ = _bounded_engine(tmp_path, monkeypatch, 101, fail_read='100')
+    engine.message_limit = 100
+    result = engine.run()
+    assert result.success_email == 100
+    assert inbox.ids == ['100']
+
+
+def test_snapshot_keeps_candidate_limit_and_skips_other_workflow_without_opening(tmp_path, monkeypatch):
+    engine, inbox, processed = _bounded_engine(tmp_path, monkeypatch, 8)
+    engine.message_limit = 3
+    monkeypatch.setattr(engine, '_detect_message_workflow',
+                        lambda _config, message: '' if int(message.entry_id) < 2 else
+                        'Branch' if message.entry_id == '2' else 'HO')
+    original_process = engine._process_message
+    def process(**kwargs):
+        if kwargs['detected_workflow'] == 'Branch':
+            return OutlookRevisiEngine._process_message(engine, **kwargs)
+        return original_process(**kwargs)
+    monkeypatch.setattr(engine, '_process_message', process)
+    result = engine.run()
+    assert result.total_email == 3
+    assert result.skipped_other_workflow == 1
+    assert inbox.opened == ['3', '4']
+    assert len(processed) == 2
+
+
+def test_snapshot_path_downloads_and_parses_real_attachment(tmp_path, monkeypatch):
+    engine, inbox, _ = _bounded_engine(tmp_path, monkeypatch, 1)
+    source = tmp_path / 'attendance.xlsx'
+    _ho_attachment(source)
+    original_make = inbox.make_item
+    def make_item(key):
+        item = original_make(key)
+        item.Attachments = SimpleNamespace(
+            Count=1, Item=lambda _index: SimpleNamespace(
+                FileName=source.name, SaveAsFile=lambda path: shutil.copy2(source, path),
+            ),
+        )
+        return item
+    monkeypatch.setattr(inbox, 'make_item', make_item)
+    monkeypatch.setattr(engine, '_process_message',
+                        OutlookRevisiEngine._process_message.__get__(engine))
+    result = engine.run()
+    assert result.success_email == 1
+    assert result.valid_row_count == 2
+    assert result.output_txt_count == 2
+    assert result.message_results[0].reply_result == 'NOT_ATTEMPTED'
+    assert not inbox.live
+
+
+def test_cancellation_during_snapshot_does_not_open_or_send(tmp_path, monkeypatch):
+    engine, inbox, processed = _bounded_engine(tmp_path, monkeypatch, 250)
+    cancelled = []
+    original_make = inbox.make_item
+    def make_item(key):
+        if key == '3':
+            cancelled.append(True)
+        return original_make(key)
+    monkeypatch.setattr(inbox, 'make_item', make_item)
+    engine.cancellation_requested = lambda: bool(cancelled)
+    result = engine.run()
+    assert result.cancelled
+    assert not inbox.opened and not processed and not inbox.live
+    assert result.process_log.is_file()

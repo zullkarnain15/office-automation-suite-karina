@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import patch
+import pytest
 
 from outlook.downloader import OutlookComClient
 from outlook.downloader import SmtpSentCopyResult
@@ -189,6 +190,15 @@ class _Items:
 
     def Sort(self, *_args) -> None:
         return None
+
+    def Restrict(self, query):
+        assert query == OutlookComClient.RECALL_FILTER
+        return _Items([
+            item for item in self._items
+            if not str(getattr(item, "MessageClass", "IPM.Note")).casefold().startswith(
+                ("ipm.outlook.recall", "ipm.recall.report")
+            )
+        ])
 
     def Item(self, index: int):
         return self._items[index - 1]
@@ -448,3 +458,118 @@ def test_move_failure_restores_unread_status() -> None:
 
     assert raw_item.UnRead is True
     assert saved_states == [False, True]
+
+class _RecallCollection:
+    """Recall fails during COM wrapping, before item.Class can be read."""
+    def __init__(self, records, calls):
+        self.records = records
+        self.calls = calls
+        self.Count = len(records)
+    def Restrict(self, query):
+        expected = ('@SQL=NOT ("http://schemas.microsoft.com/mapi/proptag/0x001A001F" '
+                    "LIKE 'IPM.Outlook.Recall%' OR "
+                    '"http://schemas.microsoft.com/mapi/proptag/0x001A001F" '
+                    "LIKE 'IPM.Recall.Report%')")
+        assert query == expected
+        self.calls.append('restrict')
+        return _RecallCollection([
+            record for record in self.records
+            if not record[0].lower().startswith(('ipm.outlook.recall', 'ipm.recall.report'))
+        ], self.calls)
+    def Sort(self, field, descending):
+        assert self.calls[0] == 'restrict'
+        assert (field, descending) == ('[ReceivedTime]', True)
+    def Item(self, index):
+        message_class, item = self.records[index - 1]
+        if message_class.lower().startswith(('ipm.outlook.recall', 'ipm.recall.report')):
+            raise RuntimeError(-2147467262, 'No such interface supported')
+        self.calls.append(item.EntryID)
+        return item
+    def __iter__(self):
+        return (self.Item(i) for i in range(1, self.Count + 1))
+
+
+def _normal_inbox_item(entry_id, message_class='IPM.Note'):
+    return SimpleNamespace(
+        Class=43, MessageClass=message_class, EntryID=entry_id,
+        Subject='Recall discussion - attendance', SenderName='Fixture',
+        SenderEmailAddress='fixture@example.com', Parent=SimpleNamespace(StoreID='store'),
+        CC='', Recipients=_Recipients([]), Attachments=SimpleNamespace(Count=0),
+        InternetMessageID='',
+    )
+
+
+@pytest.mark.parametrize('recall_class', [
+    'IPM.Outlook.Recall', 'IPM.Recall.Report', 'ipm.outlook.recall.Custom',
+])
+@pytest.mark.parametrize('snapshot', [False, True])
+def test_recall_is_filtered_before_com_wrapping_and_does_not_consume_limit(tmp_path, recall_class, snapshot):
+    calls = []
+    records = [('IPM.Note', _normal_inbox_item('before')),
+               (recall_class, None),
+               ('IPM.Note.SMIME', _normal_inbox_item('after', 'IPM.Note.SMIME'))]
+    items = _RecallCollection(records, calls)
+    client = OutlookComClient('mailbox@example.com')
+    client._namespace = SimpleNamespace()
+    client._get_source_folder = lambda: SimpleNamespace(Items=items)
+    diagnostics = []
+    client.diagnostic_callback = lambda operation, details: diagnostics.append((operation, details))
+    reader = client.scan_messages if snapshot else client.fetch_messages
+    messages = reader(attachment_folder=tmp_path, limit=2)
+    assert [message.entry_id for message in messages] == ['before', 'after']
+    assert calls == ['restrict', 'before', 'after']
+    assert ('RECALL_ITEMS_EXCLUDED', {'count': 1}) in diagnostics
+    assert len(items.records) == 3  # No inbox modification.
+
+
+def test_recall_is_excluded_when_searching_smtp_bcc_archives():
+    archive = _normal_inbox_item('archive')
+    archive.InternetMessageID = '<OASK-SENT-TEST-RECALL@example.com>'
+    calls = []
+    items = _RecallCollection([('IPM.Outlook.Recall', None), ('IPM.Note', archive)], calls)
+    client = OutlookComClient('mailbox@example.com')
+    matches = client._find_smtp_archive_items(SimpleNamespace(Items=items), {'OASK-SENT-TEST-RECALL'})
+    assert matches == {'OASK-SENT-TEST-RECALL': archive}
+    assert calls == ['restrict', 'archive']
+
+
+def test_recall_guard_runs_before_mail_properties_if_collection_changes(tmp_path):
+    class Recall:
+        MessageClass = 'IPM.Outlook.Recall'
+        def __getattr__(self, name):
+            raise AssertionError(f'Recall property must not be read: {name}')
+    items = _Items([Recall(), _normal_inbox_item('normal')])
+    items.Restrict = lambda _query: items  # Simulate an item appearing after filtering.
+    client = OutlookComClient('mailbox@example.com')
+    client._namespace = SimpleNamespace()
+    client._get_source_folder = lambda: SimpleNamespace(Items=items)
+    assert [m.entry_id for m in client.scan_messages(attachment_folder=tmp_path)] == ['normal']
+
+
+def test_recall_filter_failure_never_falls_back_to_unsafe_inbox(tmp_path):
+    class Items:
+        def Restrict(self, _query):
+            raise RuntimeError('filter unavailable')
+        def __iter__(self):
+            raise AssertionError('Must not enumerate unfiltered inbox')
+    client = OutlookComClient('mailbox@example.com')
+    client._namespace = SimpleNamespace()
+    client._get_source_folder = lambda: SimpleNamespace(Items=Items())
+    with pytest.raises(RuntimeError, match='filter unavailable'):
+        client.scan_messages(attachment_folder=tmp_path)
+
+@pytest.mark.parametrize('count', [0, 250, 500])
+def test_large_or_recall_only_inbox_continues_to_last_normal_email(tmp_path, count):
+    calls = []
+    records = [('IPM.Note', _normal_inbox_item(str(i))) for i in range(count)]
+    records.insert(count // 2, ('IPM.Outlook.Recall', None))
+    records.insert(0, ('IPM.Recall.Report', None))
+    records.append(('IPM.Outlook.Recall', None))
+    items = _RecallCollection(records, calls)
+    client = OutlookComClient('mailbox@example.com')
+    client._namespace = SimpleNamespace()
+    client._get_source_folder = lambda: SimpleNamespace(Items=items)
+    messages = client.scan_messages(attachment_folder=tmp_path, limit=count + 50)
+    assert [m.entry_id for m in messages] == [str(i) for i in range(count)]
+    assert all(m.raw_item is None for m in messages)
+    assert len(calls) == count + 1

@@ -1,0 +1,31 @@
+OAS-K 1.0.11
+29 September 2026
+
+Update aplikasi production dari OAS-K 1.0.10 dengan database utama schema 4.
+Schema database utama tetap 4; tidak memerlukan migrasi atau penggantian database.
+
+Attendance & OT:
+- Navigasi baru ATT & OT dengan dashboard, Data Terlambat, Detail Data,
+  Master Data, dan Source Files.
+- Detail Data menggabungkan Name, Branch, Pay Group, Department, Division,
+  dan Jabatan dari data karyawan serta mendukung filter tanggal dan divisi.
+- Format tanggal sumber MM/DD/YYYY didukung dan dinormalisasi sebelum disimpan.
+- Schedule ID custom/general dinormalisasi. Jika schedule tidak tersedia, kosong,
+  <N/A>, atau <use default schedule>, sistem memakai default 08:30-17:30 untuk
+  karyawan HO dan 08:30-16:30 untuk karyawan Branch. Hari Minggu tetap OFF DAY.
+- Dashboard memakai KPI card berwarna, Top 5 late employee/branch/department,
+  serta nominal OT dan Meal dalam format Rp.
+- Data Terlambat ditampilkan sebagai hirarki yang dapat dibuka, dengan warna cell
+  hijau/oranye berdasarkan jumlah keterlambatan.
+- Database analytics ATT & OT mempunyai migrasi internal schema 4 ke 5 dengan
+  backup terverifikasi. Schema analytics ini terpisah dari database utama OAS-K.
+
+Kapasitas:
+- Pipeline diuji dengan 1.000.001 baris menggunakan batch import/enrichment,
+  agregasi SQLite, pagination 200 baris, dan streaming export agar penggunaan
+  memori tetap terbatas.
+
+Paket hanya berisi aplikasi dan metadata update. Gunakan fitur Application Update
+untuk validasi paket dan membuat backup database sebelum penggantian EXE.
+Data Root, database, konfigurasi aktif, log, output, backup, dan recorder profiles
+tidak disertakan. Jangan mengganti database production secara manual.

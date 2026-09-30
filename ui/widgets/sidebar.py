@@ -32,7 +32,10 @@ class Sidebar(ttk.Frame):
         self._markers: dict[str, ttk.Label] = {}
         self._images: dict[str, object] = {}
         self.columnconfigure(1, weight=1)
-        self.rowconfigure(9, weight=1)
+        spacer_row = len(registry) + 1
+        self.mascot_row = spacer_row
+        version_row = spacer_row + 1
+        self.rowconfigure(spacer_row, weight=1)
 
         ttk.Label(self, text="OAS-K", style="SidebarBrand.TLabel").grid(
             row=0, column=0, columnspan=2, sticky="w", padx=6, pady=(0, 6)
@@ -69,7 +72,7 @@ class Sidebar(ttk.Frame):
             text=f"Versi {application_version}",
             style="SidebarCaption.TLabel",
         ).grid(
-            row=10,
+            row=version_row,
             column=0,
             columnspan=2,
             sticky="sw",

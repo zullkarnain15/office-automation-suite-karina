@@ -15,6 +15,7 @@ from shared.database.repositories import (
 from shared.database.time_utils import current_timestamp, validate_date_pair
 from shared.payroll_period import normalize_payroll_period
 from ui.services.protocols import (
+    AttendanceOTSourceDraft,
     GlobalSettingsDraft,
     HRISTxtSourceDraft,
     ModuleGlobalUsage,
@@ -35,6 +36,9 @@ MODULE_USAGE = (
 )
 HRIS_TXT_SOURCE_HO_KEY = "hris_txt_source_ho"
 HRIS_TXT_SOURCE_BRANCH_KEY = "hris_txt_source_branch"
+ATTENDANCE_OT_SOURCE_KEY = "attendance_ot_source"
+EMPLOYEE_DATA_SOURCE_KEY = "employee_data_source"
+SCHEDULE_DATA_SOURCE_KEY = "schedule_data_source"
 
 
 class DatabaseSettingsService:
@@ -139,6 +143,45 @@ class DatabaseSettingsService:
             )
         return saved
 
+    def load_attendance_ot_source_preferences(
+        self,
+        database_path: Path,
+    ) -> AttendanceOTSourceDraft:
+        keys = (
+            ATTENDANCE_OT_SOURCE_KEY,
+            EMPLOYEE_DATA_SOURCE_KEY,
+            SCHEDULE_DATA_SOURCE_KEY,
+        )
+        with self.factory.connect(database_path, read_only=True) as connection:
+            values = ApplicationPreferencesRepository(connection).get_text_values(keys)
+        return AttendanceOTSourceDraft(
+            values.get(ATTENDANCE_OT_SOURCE_KEY, ""),
+            values.get(EMPLOYEE_DATA_SOURCE_KEY, ""),
+            values.get(SCHEDULE_DATA_SOURCE_KEY, ""),
+        )
+
+    def save_attendance_ot_source_preferences(
+        self,
+        database_path: Path,
+        draft: AttendanceOTSourceDraft,
+    ) -> AttendanceOTSourceDraft:
+        saved = AttendanceOTSourceDraft(
+            self._normalize_optional_folder(
+                draft.attendance_ot_folder, "Attendance / OT"
+            ),
+            self._normalize_optional_folder(draft.employee_folder, "Employee Data"),
+            self._normalize_optional_folder(draft.schedule_folder, "Schedule Data"),
+        )
+        with self.factory.connect(database_path) as connection:
+            ApplicationPreferencesRepository(connection).save_text_values(
+                {
+                    ATTENDANCE_OT_SOURCE_KEY: saved.attendance_ot_folder,
+                    EMPLOYEE_DATA_SOURCE_KEY: saved.employee_folder,
+                    SCHEDULE_DATA_SOURCE_KEY: saved.schedule_folder,
+                }
+            )
+        return saved
+
     @staticmethod
     def _normalize_optional_folder(value: str, source_type: str) -> str:
         raw = value.strip()
@@ -147,7 +190,7 @@ class DatabaseSettingsService:
         folder = Path(raw).expanduser()
         if not folder.is_absolute() or not folder.is_dir():
             raise ValueError(
-                f"Folder HRIS TXT Source {source_type} tidak ditemukan: {raw}"
+                f"Folder source {source_type} tidak ditemukan: {raw}"
             )
         return str(folder)
 
