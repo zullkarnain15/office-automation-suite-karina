@@ -121,10 +121,12 @@ class HRISUploadSessionEngine:
             message="Opening HRIS browser session.",
         )
 
-        reader = HRISConfigurationReader(
-            self.configuration_file,
-        )
-        configuration = reader.read()
+        configuration = upload_engine.last_configuration
+        if configuration is None:
+            reader = HRISConfigurationReader(
+                self.configuration_file,
+            )
+            configuration = reader.read()
 
         browser_manager = HRISBrowserManager(
             configuration=configuration,

@@ -1,0 +1,311 @@
+Att Data Repair Sprint 7 Report
+Office Automation Suite - Karina (OAS-K)
+Generated: 2026-08-03
+
+1. Identitas Sprint
+Sprint: Att Data Repair - Sprint 7.
+Repository: D:\Python Project\OfficeAutomationSuite-Karina.
+Role scope: final audit, hardening, full regression, documentation, packaging risk review, and release readiness without EXE build.
+
+2. Status Kesiapan
+READY FOR MANUAL QA.
+Automated full suite is green. Manual visual Windows QA is still required before build/release. Commit readiness is good after human review of the current dirty/untracked scope.
+
+3. Ringkasan Final Feature
+Att Data Repair is now complete from core through SQLite configuration, import/export, Utilities UI, TaskRunner service, output artifacts, summary/report/log, and history.
+Final Utilities feature count: 3.
+Final UI label: Att Data Repair.
+
+4. Repository State Before Sprint 7
+Initial status contained Sprint 5/6 dirty changes and untracked sprint reports.
+Pre-existing docs/database/OAS-K_DB4_Recovery_Notes.md was modified before this feature and was not touched.
+Untracked assets/icons/png/hp_bar.png and assets/icons/png/root_icon.png were present at Sprint 7 start and were not touched.
+
+5. Audit Final Findings
+No dangerous duplicate repair logic found in UI.
+No production hardcoded local paths found; test-only paths are under tmp_path or sprint reports.
+No source workbook mutation path found; Sprint 7 hardening test verifies source SHA-256 unchanged.
+UI page does not read DB directly for Att Data Repair; service reads SQLite.
+UI page does not apply business rules; adapter/core handle workbook preflight and engine run.
+History writes are transactional through AttDataRepairJobAudit.safe_record; no orphan behavior found.
+Status layers are consistent for tested PARTIAL_SUCCESS and NO_VALID_RECORDS paths.
+Generate flags are consistent across request, summary, output artifacts, and history.
+NO_VALID_RECORDS, report-disabled, TXT-disabled, and both-disabled behaviors are covered.
+Cancellation remains safe-boundary only, not granular inside core run_job.
+
+6. Bugs Found
+Full suite found stale test contracts after schema v3 and UI service expansion:
+- old table count expectation 24 in storage/UI acceptance tests;
+- update package test manifest still used database schema 2;
+- UI boundary test did not whitelist Att Data Repair adapter/service imports.
+No Att Data Repair business-rule bug was found.
+
+7. Bugs Fixed
+Updated table count assertions to use len(REQUIRED_TABLES).
+Updated update package default manifest to use SCHEMA_VERSION.
+Updated UI boundary whitelist for att_data_repair_adapter.py and att_data_repair_service.py.
+Added status/source immutability hardening tests.
+
+8. Files New
+docs/modules/ATT_DATA_REPAIR.md.
+docs/ui/OAS-K_UI7_Att_Data_Repair_Manual_QA_Checklist.md.
+tests/test_att_data_repair_hardening.py.
+Att_Data_Repair_Sprint7_Report.txt.
+
+9. Files Changed
+docs/ui/OAS-K_UI7_Utilities_Architecture.md.
+tests/storage/test_boundaries_and_cli.py.
+tests/ui/attendance/test_attendance_fixture_acceptance.py.
+tests/ui/outlook_revisi/test_outlook_revisi_fixture_acceptance.py.
+tests/ui/test_boundaries.py.
+tests/update/test_update_package.py.
+
+10. Cancellation Final Behavior
+Granular cancellation was not added inside core run_job.
+Reason: adding checkpoints inside reader/normalizer/TXT/report pipeline would require broader engine API changes than Sprint 7 safety warranted.
+Final behavior: service/adapter can cancel before engine start; while engine is running, cancellation waits for the next safe service boundary. No thread is forcibly killed, no source workbook is deleted, and completed outputs are preserved.
+
+11. Error Handling Final
+Service/UI handle missing source, wrong extension, missing sheet/header, missing global period/output, invalid local period/output, disabled feature, both outputs disabled, corrupt/unreadable workbook, and history failure with user-facing messages or warning logs.
+Technical engine errors still go to Process.log when a job folder exists.
+
+12. UI Final State
+Utilities landing has three cards.
+Att Data Repair uses Source Report .xlsx file picker, global/local period, global/local output, Generate TXT, Generate Excel Report, progress, process log, result summary, Cancel, Open Output, Open Report, Open Log, and Retry.
+Recovery buttons are enabled only when artifacts exist.
+
+13. Output End-to-End Verification
+Sprint 7 hardening test runs the UI service through engine and audit, verifies output folder, artifacts, summary, report, Process.log, and history.
+Source workbook hash remains unchanged.
+
+14. TXT Verification
+TXT format and naming were not changed.
+Existing output regression verifies canonical TXT, HO/Branch split, random code per job, collision handling, split behavior, summary metadata, and Process.log.
+
+15. Excel Report Verification
+Report format was not changed.
+Existing report regression verifies eight sheets, Guide_Status, Process_Summary, Summary_Per_Karyawan, Final_Records, Changed_Records, Anomaly, Change_Log, Source_Inventory, and summary/report parity.
+
+16. Configuration Verification
+Schema remains v3.
+Template remains the Sprint 5 template; Sprint 7 made no template changes.
+Import/export roundtrip for Att_Data_Repair remains green.
+Old workbook without Att_Data_Repair remains compatible.
+
+17. Migration Verification
+No Sprint 7 migration was created.
+Existing v2_to_v3 migration remains the final migration for Att Data Repair.
+Database regression passed with schema v3 and 25 required tables.
+
+18. History Verification
+AttDataRepairJobAudit.safe_record writes job_history, job_files, and job_status_events.
+Sprint 7 hardening test verifies feature_code "Att Data Repair", legacy_status parity, unified_status mapping, job_files roles, and no source mutation.
+
+19. Status Consistency Matrix
+SUCCESS: core SUCCESS, summary SUCCESS, UI Berhasil, history COMPLETED, Process.log Job status SUCCESS.
+PARTIAL_SUCCESS: core PARTIAL_SUCCESS, summary PARTIAL_SUCCESS, Excel Process_Summary PARTIAL_SUCCESS, UI Berhasil dengan peringatan, history COMPLETED_WITH_WARNING, Process.log Job status PARTIAL_SUCCESS.
+NO_VALID_RECORDS: core NO_VALID_RECORDS, summary NO_VALID_RECORDS, UI Tidak ada data valid, history COMPLETED_WITH_WARNING, Process.log Job status NO_VALID_RECORDS.
+FAILED: core FAILED, summary FAILED when job folder exists, UI Gagal, history FAILED when auditable, Process.log Job status FAILED.
+CANCELLED: pre-engine UI/service cancellation only; no core persisted CANCELLED status is claimed.
+
+20. Test Baru
+tests/test_att_data_repair_hardening.py:
+- test_ui_e2e_preserves_source_and_keeps_status_layers_consistent.
+- test_report_disabled_no_valid_records_keeps_summary_and_history_consistent.
+
+21. Py_compile Command and Result
+First py_compile attempt with wildcard failed due PowerShell/Python wildcard argument handling: [Errno 22] Invalid argument: 'utilities/att_data_repair/*.py'.
+Final command used an explicit PowerShell-built file list:
+python -m py_compile @files
+Result: passed.
+
+22. Targeted Test Commands
+pytest tests/test_att_data_repair.py -q
+pytest tests/test_att_data_repair_output.py -q
+pytest tests/test_att_data_repair_report.py -q
+pytest tests/test_att_data_repair_configuration.py -q
+pytest tests/database/test_att_data_repair_settings.py -q
+pytest tests/database/test_att_data_repair_import_export.py -q
+pytest tests/test_att_data_repair_hardening.py -q
+pytest tests/ui/utilities/test_att_data_repair_service.py -q
+pytest tests/test_attachment_consolidation.py -q
+pytest tests/ui/utilities -q
+pytest tests/database -q
+pytest tests/recovery -q
+pytest tests/update/test_update_package.py -q
+pytest tests/ui/test_boundaries.py::test_ui_source_has_no_engine_imports -q
+
+23. Targeted Test Results
+Core Sprint 2: 19 passed.
+Output Sprint 3: 14 passed.
+Report Sprint 4: 8 passed.
+Configuration Sprint 5: 8 passed.
+Database settings: 3 passed.
+Import/export: 5 passed.
+Hardening: 2 passed.
+UI Att Data Repair service: 6 passed.
+Attachment Consolidation: 6 passed.
+UI Utilities: 23 passed, 1 skipped.
+Database: 127 passed.
+Recovery: 68 passed.
+Update package: 23 passed, 1 warning.
+UI boundary single test: 1 passed.
+
+24. Full Test Command
+pytest -q
+
+25. Full Test Result
+Final full suite: 772 passed, 2 skipped, 1 warning in 81.51s.
+Warning: duplicate ZIP member warning in tests/update/test_update_package.py::test_duplicate_path_rejected, expected by that negative test.
+
+26. Failed/Skipped Tests
+Initial full suite failed: 8 failed, 764 passed, 2 skipped, 1 warning.
+Failures were stale schema/boundary test contracts and were fixed.
+Final full suite failures: 0.
+Final skipped tests: 2. They are environment/optional skips from existing suite behavior.
+
+27. Manual Smoke Test
+NOT RUN.
+Reason: Codex environment does not provide a human-visible interactive Windows GUI session for visual/manual operation. Automated Tk/service tests were run, and a manual QA checklist was created.
+
+28. Manual QA Checklist Path
+docs/ui/OAS-K_UI7_Att_Data_Repair_Manual_QA_Checklist.md.
+
+29. Technical Documentation Path
+docs/modules/ATT_DATA_REPAIR.md.
+docs/ui/OAS-K_UI7_Utilities_Architecture.md was updated with Sprint 7 Att Data Repair addendum.
+
+30. Release Notes Update
+NOT UPDATED.
+Reason: no active release notes source file was found. Existing update tooling accepts a release_notes.txt during package creation, but no current release notes document/version entry pattern was present for direct editing.
+
+31. Blueprint/SAD/SDD Update
+UPDATED: docs/ui/OAS-K_UI7_Utilities_Architecture.md received an Att Data Repair addendum.
+NOT UPDATED: database blueprint/decisions were not rewritten to avoid broad historical document churn.
+
+32. Packaging Risk Review
+No spec change required.
+OAS-K.spec already collects submodules for ui, shared, and utilities.
+OAS-K.spec already includes config/templates/OAS-K_Configuration_Template.xlsx, shared/database/schema, and shared/database/migrations.
+openpyxl is already an existing dependency path.
+No new assets or fonts were required by Sprint 7.
+No dynamic import, hidden import, secret, or development-only path risk was found.
+PyInstaller was not run.
+
+33. Known Limitations
+Manual visual QA not run.
+Mid-run Att Data Repair cancellation is not granular inside run_job.
+No dedicated Att Data Repair icon asset yet.
+No release notes file updated because no active release notes source was found.
+
+34. Manual Fallback
+Users can import/export Att_Data_Repair configuration through Unified Configuration, run core tests/source-level service, and inspect Process.log, summary.json, TXT, Excel report, and History records.
+
+35. Performance Notes
+The engine currently reads workbook rows into memory for analysis/reporting. This is acceptable for current tested datasets and TXT split behavior, but very large workbooks should be manually QA-tested before release.
+
+36. Security/Privacy Notes
+Source workbook is read-only and hash-verified unchanged in hardening test.
+No source workbook contents are written to SQLite as permanent configuration.
+Generated artifacts remain in the selected output root.
+History stores file paths and summary counts, not credentials.
+
+37. Git Diff Check
+Full git diff --check failed only on pre-existing docs/database/OAS-K_DB4_Recovery_Notes.md trailing whitespace at lines 3-6.
+Selected Sprint 7 tracked files git diff --check passed with LF-to-CRLF warnings only.
+Selected Sprint 7 untracked files trailing whitespace scan passed.
+
+38. Git Diff Stat
+Full tracked diff at report time: 31 files changed, 834 insertions, 91 deletions, plus template binary change from Sprint 5.
+Sprint 7 tracked diff only: 6 files changed, 65 insertions, 12 deletions.
+Untracked Sprint 7 files are listed separately because git diff --stat does not include untracked files.
+
+39. Git Status Final
+Final status includes Sprint 5, Sprint 6, Sprint 7, and pre-existing docs recovery notes changes:
+M config/templates/OAS-K_Configuration_Template.xlsx
+M docs/database/OAS-K_DB4_Recovery_Notes.md
+M docs/ui/OAS-K_UI7_Utilities_Architecture.md
+M shared/database/constants.py
+M shared/database/database_validator.py
+M shared/database/exporting/constants.py
+M shared/database/exporting/current_config_exporter.py
+M shared/database/exporting/template_builder.py
+M shared/database/importing/constants.py
+M shared/database/importing/preview_builder.py
+M shared/database/importing/unified/unified_mapper.py
+M shared/database/importing/validator.py
+M shared/database/migration_manager.py
+M tests/database/exporting/test_template.py
+M tests/database/test_backup_and_isolation.py
+M tests/database/test_schema.py
+M tests/database/test_startup_migration.py
+M tests/recovery/test_candidate_and_backup.py
+M tests/recovery/test_import_and_reset.py
+M tests/storage/test_boundaries_and_cli.py
+M tests/ui/attendance/test_attendance_fixture_acceptance.py
+M tests/ui/outlook_revisi/test_outlook_revisi_fixture_acceptance.py
+M tests/ui/test_boundaries.py
+M tests/ui/utilities/test_utilities_page_contract.py
+M tests/ui/utilities/test_utilities_services.py
+M tests/ui/utilities/test_utilities_zero_side_effect.py
+M tests/update/test_update_package.py
+M ui/pages/utilities_page.py
+M ui/services/service_container.py
+M ui/services/utilities_service.py
+M ui/utilities_models.py
+Untracked includes Sprint reports, untracked Att Data Repair package/tests, docs/modules/, docs/ui/OAS-K_UI7_Att_Data_Repair_Manual_QA_Checklist.md, ui/adapters/att_data_repair_adapter.py, ui/services/att_data_repair_service.py, shared/database/migrations/v2_to_v3.sql, and two pre-existing untracked icon PNG files.
+
+40. File Inventory
+docs/ui/OAS-K_UI7_Utilities_Architecture.md: 74 lines, 7272 bytes.
+docs/ui/OAS-K_UI7_Att_Data_Repair_Manual_QA_Checklist.md: 43 lines, 4188 bytes.
+docs/modules/ATT_DATA_REPAIR.md: 128 lines, 6410 bytes.
+tests/test_att_data_repair_hardening.py: 206 lines, 7307 bytes.
+tests/storage/test_boundaries_and_cli.py: 109 lines, 3477 bytes.
+tests/ui/attendance/test_attendance_fixture_acceptance.py: 225 lines, 8560 bytes.
+tests/ui/outlook_revisi/test_outlook_revisi_fixture_acceptance.py: 367 lines, 13030 bytes.
+tests/ui/test_boundaries.py: 147 lines, 6045 bytes.
+tests/update/test_update_package.py: 258 lines, 12752 bytes.
+
+41. Untracked Sprint Reports
+Att_Data_Repair_Sprint1_Audit_Plan.txt.
+Att_Data_Repair_Sprint2_Report.txt.
+Att_Data_Repair_Sprint3_Report.txt.
+Att_Data_Repair_Sprint4_Report.txt.
+Att_Data_Repair_Sprint5_Report.txt.
+Att_Data_Repair_Sprint6_Report.txt.
+Att_Data_Repair_Sprint7_Report.txt.
+They were not staged, moved, or deleted.
+
+42. Hal yang Tidak Dilakukan
+No business rule change.
+No TXT format or naming change.
+No report structure change.
+No database schema change.
+No migration created in Sprint 7.
+No template configuration change in Sprint 7.
+No Unified UI redesign.
+No report_writer.py refactor.
+No dependency added.
+No EXE build, PyInstaller, packaging, commit, staging, reset, checkout, clean, or stash.
+No edit to docs/database/OAS-K_DB4_Recovery_Notes.md.
+No deletion of user/untracked files.
+
+43. Definition of Done Sprint 7
+Final audit completed.
+No business rule/schema/template/TXT/report format change in Sprint 7.
+Cancellation behavior is explicit and documented.
+Status consistency is tested and documented.
+Targeted tests passed.
+Full pytest -q passed.
+Manual QA checklist exists.
+Technical documentation exists.
+Release notes audit completed.
+Packaging risk review completed.
+No build EXE, commit, reset, or clean was performed.
+Sprint 7 report created.
+
+44. Recommendation
+Manual QA: run docs/ui/OAS-K_UI7_Att_Data_Repair_Manual_QA_Checklist.md on Windows before release.
+Commit: ready after human review of the combined Sprint 5-7 dirty/untracked scope and unrelated pre-existing files.
+Build: do not build until manual QA passes and the user explicitly requests EXE build.
+Release: prepare release notes text during packaging because no active release notes source file was updated in Sprint 7.

@@ -1,0 +1,30 @@
+Office Automation Suite - Karina (OAS-K) 1.0.9
+Tanggal rilis: 9 September 2026
+
+Kompatibilitas update
+- Versi aplikasi minimum: 1.0.0.
+- Database production yang didukung paket ini: schema 4.
+- Database tetap schema 4; tidak memerlukan migrasi schema.
+- Paket hanya berisi aplikasi. Database, konfigurasi lokal, output, backup,
+  log, dan recorder profiles tidak disertakan dalam paket update.
+- Aplikasi membuat dan memvalidasi backup database sebelum staging update.
+
+Perubahan
+- Optimasi pemindaian folder Comparison Result dan Attachment Consolidation.
+- Pengurangan pembacaan workbook berulang pada Att Data Repair dengan
+  pemeriksaan isi file untuk mencegah penggunaan cache yang sudah berubah.
+- Optimasi pemetaan file Attachment Consolidation dan penulisan style Excel
+  Att Data Repair dengan mempertahankan isi dan format laporan.
+- Perbaikan pengelolaan pemilihan source HO/Branch dan hasil pencarian TXT
+  asynchronous pada HRIS; kontrol source dikunci selama proses berjalan.
+- Peringatan saat folder global HRIS HO dan Branch diatur ke path yang sama.
+
+Cara update dari aplikasi lama
+1. Pastikan seluruh job selesai dan Application Root dapat ditulis.
+2. Buka Settings > Application Update, pilih OAS-K_Update_v1.0.9.zip.
+3. Klik Validate Package, lalu Prepare Update. Setelah backup dan staging
+   berhasil, klik Close and Apply Update.
+4. Tunggu updater selesai dan aplikasi terbuka kembali. Periksa versi 1.0.9
+   dan database schema 4 di aplikasi.
+5. Pertahankan Data Root yang sudah digunakan; jangan menyalin database baru
+   atau file SQL ke database production.

@@ -56,6 +56,8 @@ class HRISFileManager:
         self,
         artifacts: HRISJobArtifacts,
         plan_items: list[HRISUploadPlanItem],
+        *,
+        move_failed_files: bool = True,
     ) -> list[HRISFileMoveResult]:
         """
         Move uploaded files based on item status.
@@ -67,7 +69,7 @@ class HRISFileManager:
 
             if item.status == FILE_STATUS_SUCCESS:
                 destination_folder = artifacts.upload_folder
-            elif item.status == FILE_STATUS_FAILED:
+            elif item.status == FILE_STATUS_FAILED and move_failed_files:
                 destination_folder = artifacts.failed_folder
             else:
                 results.append(
