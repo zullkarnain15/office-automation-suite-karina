@@ -29,6 +29,8 @@ ATTENDANCE_ANCHORS = frozenset(
         "location descr",
         "name",
         "paylink",
+        "job title",
+        "jobcd desc",
     }
 )
 EMPLOYEE_ANCHORS = frozenset(
@@ -72,7 +74,12 @@ HEADER_ALIASES = {
     "business description": "business desc",
     "jobcd desc.": "jobcd desc",
     "job code desc": "jobcd desc",
+    "job code description": "jobcd desc",
+    "jobcd description": "jobcd desc",
     "job description": "jobcd desc",
+    "position": "job title",
+    "position title": "job title",
+    "jabatan": "job title",
     "effective date": "effdt",
     "end effective date": "end effdt",
     "snapshot date": "snapshot date",
@@ -151,6 +158,51 @@ def iter_source_rows(
 
 
 def _iter_xlsx(path: Path, expected_type: SourceType) -> Iterator[ParsedSourceRow]:
+    try:
+        from python_calamine import CalamineWorkbook
+    except ImportError:
+        yield from _iter_xlsx_openpyxl(path, expected_type)
+        return
+
+    workbook = CalamineWorkbook.from_path(path)
+    matched = False
+    mismatches: set[str] = set()
+    try:
+        for sheet_name in workbook.sheet_names:
+            worksheet = workbook.get_sheet_by_name(sheet_name)
+            start_row = int(worksheet.start[0]) + 1
+            rows = iter(worksheet.iter_rows())
+            found = _find_header(rows, start_row=start_row)
+            if found is None:
+                continue
+            header_row, headers, detected, subtype = found
+            if detected is not expected_type:
+                mismatches.add(detected.value)
+                continue
+            matched = True
+            for row_number, values in enumerate(rows, start=header_row + 1):
+                row = tuple(values)
+                if _has_identifier(row, headers, subtype):
+                    yield ParsedSourceRow(
+                        expected_type,
+                        sheet_name,
+                        row_number,
+                        headers,
+                        row,
+                        subtype,
+                    )
+            del worksheet
+    finally:
+        workbook.close()
+    if not matched:
+        raise _format_error(path, expected_type, mismatches)
+
+
+def _iter_xlsx_openpyxl(
+    path: Path, expected_type: SourceType
+) -> Iterator[ParsedSourceRow]:
+    """Compatibility fallback when the native Calamine reader is unavailable."""
+
     workbook = load_workbook(path, read_only=True, data_only=True, keep_links=False)
     matched = False
     mismatches: set[str] = set()
@@ -224,8 +276,10 @@ def _iter_xls(path: Path, expected_type: SourceType) -> Iterator[ParsedSourceRow
         raise _format_error(path, expected_type, mismatches)
 
 
-def _find_header(rows: Iterator[tuple[object, ...]]):
-    for row_number, values in enumerate(rows, start=1):
+def _find_header(
+    rows: Iterator[tuple[object, ...]], *, start_row: int = 1
+):
+    for row_number, values in enumerate(rows, start=start_row):
         row = tuple(values)
         headers = header_map(row)
         detected = detect_source_contract(headers)
@@ -337,7 +391,13 @@ def parse_date_value(value: object) -> date | None:
             return converted
         raise ValueError(f"Serial tanggal Excel tidak valid: {value!r}.")
 
-    text = _WHITESPACE.sub(" ", str(value).replace("\u00a0", " ").strip())
+    raw_text = str(value).strip()
+    if len(raw_text) >= 10 and raw_text[4:5] == "-" and raw_text[7:8] == "-":
+        try:
+            return date.fromisoformat(raw_text[:10])
+        except ValueError:
+            pass
+    text = _WHITESPACE.sub(" ", raw_text.replace("\u00a0", " "))
     iso = re.fullmatch(
         r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T].*)?", text
     )
@@ -403,7 +463,12 @@ def parse_time_value(value: object) -> time | None:
         seconds = round(number * 86400) % 86400
         return (datetime.min + timedelta(seconds=seconds)).time()
 
-    text = _WHITESPACE.sub(" ", str(value).replace("\u00a0", " ").strip())
+    raw_text = str(value).strip()
+    try:
+        return time.fromisoformat(raw_text).replace(microsecond=0)
+    except ValueError:
+        pass
+    text = _WHITESPACE.sub(" ", raw_text.replace("\u00a0", " "))
     text = re.sub(r"(?<=\d)[.](?=\d)", ":", text)
     text = re.sub(r"(?i)\b([AP])\s*\.?\s*M\.?\b", r"\1M", text).upper()
     if "T" in text or re.match(r"^\d{4}-\d{1,2}-\d{1,2} ", text):

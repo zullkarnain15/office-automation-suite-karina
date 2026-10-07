@@ -1,0 +1,29 @@
+OAS-K 1.0.13
+30 September 2026
+
+Update aplikasi production dari OAS-K 1.0.12 dengan database utama schema 4.
+Schema database utama tetap 4; tidak memerlukan migrasi atau penggantian database.
+Database analytics Attendance & OT tetap menggunakan schema 5.
+
+Attendance & OT:
+- Tabel Detail Data, Master Data, Source Files, preview duplicate, dan Data
+  Terlambat mendukung copy read-only ke clipboard dalam format tab-separated.
+- Ctrl+C mendukung satu atau banyak row dan hasil paste ke Excel terpisah per
+  kolom.
+- Context menu menyediakan Copy Cell, Copy Selected Row(s), dan Copy Selected +
+  Header tanpa menambahkan fungsi edit data.
+- Dashboard menampilkan enam KPI yang responsif: Records, Employees, Late
+  Records, OT Hours, OT Amount, dan Meal Amount.
+- Dashboard menampilkan Attendance Record Trend dan Late Record Trend Jan-Dec
+  dengan chart native Tkinter.
+- Trend Dashboard menggunakan satu agregasi bulanan read-only dan tidak lagi
+  membaca seluruh Detail Data, sehingga perpindahan tab tetap responsif.
+- Dashboard menampilkan Top 5 Late HO Departments dan Top 5 Late Branches
+  beserta nilai dan bar proporsional.
+- Tipografi Dashboard menggunakan Segoe UI bold yang tegas dan tetap mengikuti
+  warna serta struktur SNES 16-bit OAS-K.
+
+Paket hanya berisi aplikasi dan metadata update. Gunakan fitur Application Update
+untuk validasi paket dan membuat backup database utama sebelum penggantian EXE.
+Data Root, database, konfigurasi aktif, log, output, backup, dan recorder profiles
+tidak disertakan. Jangan mengganti database production secara manual.

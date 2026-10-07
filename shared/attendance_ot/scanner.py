@@ -21,7 +21,7 @@ def fingerprint_file(path: Path) -> str:
 
 
 def scan_source_folder(
-    root: Path, source_type: SourceType
+    root: Path, source_type: SourceType, *, include_fingerprint: bool = True
 ) -> tuple[tuple[SourceCandidate, ...], tuple[ScanIssue, ...]]:
     root = Path(root).expanduser()
     if not root.is_dir():
@@ -45,7 +45,7 @@ def scan_source_folder(
                         filename=filename,
                         size_bytes=stat.st_size,
                         modified_time_ns=stat.st_mtime_ns,
-                        fingerprint=fingerprint_file(path),
+                        fingerprint=(fingerprint_file(path) if include_fingerprint else ""),
                     )
                 )
             except OSError as exc:

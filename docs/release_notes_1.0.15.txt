@@ -1,0 +1,29 @@
+OAS-K 1.0.15
+1 October 2026
+
+Release production untuk OAS-K core database schema 4 dan database analytics
+Attendance & OT schema 5.
+
+Attendance & OT:
+- Menambahkan Data Update terpisah untuk Employee, Schedule, Attendance & OT,
+  serta Update All menggunakan folder source yang tersimpan di Settings.
+- Refresh Dashboard dan Records hanya membaca attendance_ot.db.
+- Import incremental mengklasifikasikan file NEW, CHANGED, dan UNCHANGED dari
+  path, ukuran file, dan modified time tanpa membaca ulang file unchanged.
+- Employee dan Schedule menggunakan batch compare serta hanya menulis record
+  yang baru atau berubah.
+- Attendance & OT memproses ulang file berubah tanpa menghasilkan duplicate.
+- Setiap source menggunakan transaksi database independen dengan rollback aman.
+- Dashboard menampilkan indikator update, status import rinci, headline, dan
+  KPI card dengan ikon transparan.
+- Nama, branch, pay group, dan jabatan mengutamakan data source Attendance & OT;
+  employee status mengikuti Master Data dan mempertahankan status Unmapped.
+
+Kompatibilitas database:
+- Core OAS-K tetap schema 4 dan tidak memerlukan migrasi core.
+- Database Attendance & OT production schema 5 dimigrasikan otomatis secara
+  berurutan ke schema 9 dengan verified backup sebelum setiap tahap migrasi.
+- Data existing dipertahankan dan divalidasi setelah migrasi.
+
+Paket update hanya berisi aplikasi dan metadata update. Data Root, database,
+konfigurasi aktif, log, output, backup, dan recorder profiles tidak disertakan.

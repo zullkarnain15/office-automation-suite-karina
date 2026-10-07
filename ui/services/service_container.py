@@ -34,6 +34,7 @@ class AppServices:
     attendance_ot_analytics_service: Any = None
     attendance_ot_export_service: Any = None
     attendance_ot_maintenance_service: Any = None
+    attendance_ot_database_transfer_service: Any = None
 
 
 def build_default_app_services(
@@ -82,6 +83,7 @@ def build_default_app_services(
     from ui.services.karina_mascot_preferences import KarinaMascotPreferencesService
     from shared.attendance_ot import (
         AttendanceOTAnalyticsQueryService,
+        AttendanceOTDatabaseTransferService,
         AttendanceOTImportService,
         AttendanceOTStorageService,
     )
@@ -145,6 +147,9 @@ def build_default_app_services(
         attendance_ot_analytics_service=attendance_ot_queries,
         attendance_ot_export_service=AttendanceOTExportService(attendance_ot_queries),
         attendance_ot_maintenance_service=AttendanceOTMaintenanceService(
+            attendance_ot_storage_service
+        ),
+        attendance_ot_database_transfer_service=AttendanceOTDatabaseTransferService(
             attendance_ot_storage_service
         ),
     )

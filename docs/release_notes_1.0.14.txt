@@ -1,0 +1,29 @@
+OAS-K 1.0.14
+30 September 2026
+
+Update aplikasi production dari OAS-K 1.0.13 dengan database utama schema 4.
+Schema database utama tetap 4; tidak memerlukan migrasi atau penggantian database.
+Database analytics Attendance & OT tetap menggunakan schema 5.
+
+Attendance & OT performance update:
+- Dashboard tidak lagi membaca seluruh Detail Data untuk membuat grafik bulanan.
+- Attendance Record Trend dan Late Record Trend dihitung langsung melalui
+  agregasi read-only pada data yang sudah tersedia.
+- Dashboard hanya menjalankan ranking Top 5 Late HO Departments dan Top 5 Late
+  Branches yang benar-benar ditampilkan. Query ranking employee yang tidak
+  digunakan oleh tampilan tidak dijalankan.
+- Pilihan Period, Branch, Pay Group, Department, dan Division di-cache selama
+  data analytics tidak berubah.
+- Cache pilihan filter otomatis diperbarui setelah Refresh Data, penghapusan
+  duplicate, purge, atau reset analytics.
+- Detail Data tetap lazy-loaded dan menggunakan pagination; membuka Dashboard
+  tidak memuat semua baris Detail Data.
+- Filter Dashboard tetap memperbarui KPI, dua grafik Jan-Dec, dan dua Top 5.
+
+Perubahan ini hanya mengoptimalkan pembacaan data. Tidak ada perubahan database,
+schema, filter logic, analytics calculation, export Excel, atau operasi tulis.
+
+Paket hanya berisi aplikasi dan metadata update. Gunakan fitur Application Update
+untuk validasi paket dan membuat backup database utama sebelum penggantian EXE.
+Data Root, database, konfigurasi aktif, log, output, backup, dan recorder profiles
+tidak disertakan. Jangan mengganti database production secara manual.

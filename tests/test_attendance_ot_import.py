@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import tracemalloc
 from datetime import date, datetime, time
@@ -229,6 +230,576 @@ def _create_three_sources(folders: dict[str, Path]) -> tuple[Path, Path, Path]:
     return attendance, employee, schedule
 
 
+def _create_data_update_sources(folders: dict[str, Path]) -> tuple[Path, Path, Path]:
+    attendance = folders["attendance"] / "nested" / "attendance.xlsx"
+    _xlsx(
+        attendance,
+        0,
+        [
+            "EMPLID", "Date In", "Time In", "Date Out", "Time Out",
+            "Overtime Hour", "Overtime Minute", "OT Amount",
+            "Meal OT Amount", "Location Descr", "Name", "Paylink",
+            "JobCd Desc",
+        ],
+        [["E1", "2026-09-01", "08:00", "2026-09-01", "17:00", 1, 0,
+          100, 20, "HEAD OFFICE", "Alice", "PG1", "Analyst"]],
+    )
+    employee = folders["employee"] / "nested" / "employee.xlsx"
+    _xlsx(
+        employee,
+        0,
+        ["EMPLID", "Name", "Pay Group", "Status", "Location Descr", "Dept Desc"],
+        [["E1", "Master Alice", "MASTER-PG", "Permanent", "Master Branch", "Finance"]],
+    )
+    schedule = folders["schedule"] / "nested" / "schedule.xlsx"
+    _xlsx(
+        schedule,
+        0,
+        ["EMPLID", "Schedule ID", "Schedule Descr", "EFFDT"],
+        [["E1", "SCH01", "Normal", "2026-01-01"]],
+    )
+    return attendance, employee, schedule
+
+
+@pytest.mark.parametrize(
+    "source_type,table,expected",
+    [
+        (SourceType.EMPLOYEE, "employee_records", 1),
+        (SourceType.SCHEDULE, "schedule_records", 1),
+        (SourceType.ATTENDANCE_OT, "attendance_records", 1),
+    ],
+)
+def test_data_update_can_replace_each_source_independently(
+    import_environment, source_type, table, expected
+) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    _create_data_update_sources(folders)
+
+    result = service.update_source(source_type)
+
+    assert result.status == "SUCCESS"
+    assert result.file_count == 1
+    assert result.record_count == expected
+    with sqlite3.connect(storage.database_path(data_root)) as connection:
+        assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == expected
+
+
+def test_attendance_update_uses_full_first_build_then_incremental_sources(
+    import_environment, monkeypatch
+) -> None:
+    _data_root, _core, folders, _storage, service = import_environment
+    _create_data_update_sources(folders)
+    calls = []
+    original = service.enrichment_service.rebuild_connection
+
+    def capture(connection, **kwargs):
+        calls.append(kwargs)
+        return original(connection, **kwargs)
+
+    monkeypatch.setattr(service.enrichment_service, "rebuild_connection", capture)
+
+    first = service.update_source(SourceType.ATTENDANCE_OT)
+    assert first.status == "SUCCESS"
+    assert len(calls) == 1
+    assert calls[0]["full_rebuild"] is True
+
+    calls.clear()
+    _xlsx(
+        folders["attendance"] / "second.xlsx",
+        0,
+        [
+            "EMPLID", "Date In", "Time In", "Date Out", "Time Out",
+            "Overtime Hour", "Overtime Minute", "OT Amount",
+            "Meal OT Amount", "Location Descr", "Name", "Paylink",
+        ],
+        [["E2", "2026-09-02", "08:00", "2026-09-02", "17:00", 1, 0,
+          125, 20, "BRANCH", "Bob", "PG2"]],
+    )
+    result = service.update_source(SourceType.ATTENDANCE_OT)
+
+    assert result.status == "SUCCESS"
+    assert len(calls) == 1
+    assert calls[0]["full_rebuild"] is False
+    assert len(calls[0]["attendance_source_ids"]) == 1
+
+
+def test_employee_update_uses_targeted_employee_rebuild(
+    import_environment, monkeypatch
+) -> None:
+    _data_root, _core, folders, _storage, service = import_environment
+    _attendance, employee, _schedule = _create_data_update_sources(folders)
+    assert all(result.status == "SUCCESS" for result in service.update_all())
+    calls = []
+    original = service.enrichment_service.rebuild_connection
+
+    def capture(connection, **kwargs):
+        calls.append(kwargs)
+        return original(connection, **kwargs)
+
+    monkeypatch.setattr(service.enrichment_service, "rebuild_connection", capture)
+    _xlsx(
+        employee,
+        0,
+        ["EMPLID", "Name", "Pay Group", "Status", "Location Descr", "Dept Desc"],
+        [["E1", "Master Alice", "MASTER-PG", "Permanent", "Master Branch", "Risk"]],
+    )
+
+    result = service.update_source(SourceType.EMPLOYEE)
+
+    assert result.status == "SUCCESS"
+    assert len(calls) == 1
+    assert calls[0]["full_rebuild"] is False
+    assert calls[0]["attendance_source_ids"] == set()
+    assert calls[0]["employee_scope"] == {"E1": "0001-01-01"}
+
+
+def test_schedule_assignment_update_uses_targeted_employee_rebuild(
+    import_environment, monkeypatch
+) -> None:
+    _data_root, _core, folders, _storage, service = import_environment
+    _attendance, _employee, schedule = _create_data_update_sources(folders)
+    assert all(result.status == "SUCCESS" for result in service.update_all())
+    calls = []
+    original = service.enrichment_service.rebuild_connection
+
+    def capture(connection, **kwargs):
+        calls.append(kwargs)
+        return original(connection, **kwargs)
+
+    monkeypatch.setattr(service.enrichment_service, "rebuild_connection", capture)
+    _xlsx(
+        schedule,
+        0,
+        ["EMPLID", "Schedule ID", "Schedule Descr", "EFFDT"],
+        [["E1", "SCH02", "Changed", "2026-06-01"]],
+    )
+
+    result = service.update_source(SourceType.SCHEDULE)
+
+    assert result.status == "SUCCESS"
+    assert len(calls) == 1
+    assert calls[0]["full_rebuild"] is False
+    assert calls[0]["attendance_source_ids"] == set()
+    assert calls[0]["employee_scope"] == {"E1": "2026-01-01"}
+
+
+def test_schedule_rule_update_keeps_full_rebuild_safety(
+    import_environment, monkeypatch
+) -> None:
+    _data_root, _core, folders, _storage, service = import_environment
+    _attendance, _employee, schedule = _create_data_update_sources(folders)
+
+    def write_schedule(scheduled_in: str) -> None:
+        workbook = Workbook()
+        assignment = workbook.active
+        assignment.title = "Assignments"
+        assignment.append(["EMPLID", "Schedule ID", "Schedule Descr", "EFFDT"])
+        assignment.append(["E1", "SCH01", "Normal", "2026-01-01"])
+        rules = workbook.create_sheet("Rules")
+        rules.append(
+            [
+                "Schedule ID",
+                "Schedule Descr",
+                "Scheduled In",
+                "Scheduled Out",
+            ]
+        )
+        rules.append(["SCH01", "Normal", scheduled_in, "17:00"])
+        workbook.save(schedule)
+
+    write_schedule("08:00")
+    assert all(result.status == "SUCCESS" for result in service.update_all())
+    calls = []
+    original = service.enrichment_service.rebuild_connection
+
+    def capture(connection, **kwargs):
+        calls.append(kwargs)
+        return original(connection, **kwargs)
+
+    monkeypatch.setattr(service.enrichment_service, "rebuild_connection", capture)
+    write_schedule("08:30")
+
+    result = service.update_source(SourceType.SCHEDULE)
+
+    assert result.status == "SUCCESS"
+    assert len(calls) == 1
+    assert calls[0]["full_rebuild"] is True
+
+
+def test_update_all_rebuilds_analytics_once_after_all_imports(
+    import_environment, monkeypatch
+) -> None:
+    _data_root, _core, folders, _storage, service = import_environment
+    _create_data_update_sources(folders)
+    calls = []
+    original = service.enrichment_service.rebuild_connection
+
+    def capture(connection, **kwargs):
+        calls.append(kwargs)
+        return original(connection, **kwargs)
+
+    monkeypatch.setattr(service.enrichment_service, "rebuild_connection", capture)
+
+    results = service.update_all()
+
+    assert all(result.status == "SUCCESS" for result in results)
+    assert len(calls) == 1
+    assert calls[0]["full_rebuild"] is True
+
+
+def test_update_all_keeps_employee_only_change_incremental(
+    import_environment, monkeypatch
+) -> None:
+    _data_root, _core, folders, _storage, service = import_environment
+    _attendance, employee, _schedule = _create_data_update_sources(folders)
+    assert all(result.status == "SUCCESS" for result in service.update_all())
+    calls = []
+    original = service.enrichment_service.rebuild_connection
+
+    def capture(connection, **kwargs):
+        calls.append(kwargs)
+        return original(connection, **kwargs)
+
+    monkeypatch.setattr(service.enrichment_service, "rebuild_connection", capture)
+    _xlsx(
+        employee,
+        0,
+        ["EMPLID", "Name", "Pay Group", "Status", "Location Descr", "Dept Desc"],
+        [["E1", "Master Alice", "MASTER-PG", "Permanent", "Master Branch", "Risk"]],
+    )
+
+    results = service.update_all()
+
+    assert all(result.status == "SUCCESS" for result in results)
+    assert len(calls) == 1
+    assert calls[0]["full_rebuild"] is False
+    assert calls[0]["attendance_source_ids"] == set()
+    assert calls[0]["employee_scope"] == {"E1": "0001-01-01"}
+
+
+def test_data_update_does_not_hash_files(import_environment, monkeypatch) -> None:
+    _data_root, _core, folders, _storage, service = import_environment
+    _create_data_update_sources(folders)
+
+    monkeypatch.setattr(
+        "shared.attendance_ot.scanner.fingerprint_file",
+        lambda _path: (_ for _ in ()).throw(AssertionError("hash called")),
+    )
+
+    assert service.update_source(SourceType.ATTENDANCE_OT).status == "SUCCESS"
+
+
+def test_data_update_rerun_skips_unchanged_without_opening_excel(
+    import_environment, monkeypatch
+) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    _create_data_update_sources(folders)
+    first = service.update_source(SourceType.ATTENDANCE_OT)
+    monkeypatch.setattr(
+        "shared.attendance_ot.import_service.iter_source_rows",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("unchanged Excel file was opened")
+        ),
+    )
+
+    second = service.update_source(SourceType.ATTENDANCE_OT)
+
+    assert first.files_new == first.files_processed == 1
+    assert second.status == "SUCCESS"
+    assert second.files_found == second.files_skipped == 1
+    assert second.files_processed == 0
+    assert second.rows_inserted == second.rows_updated == 0
+    persisted = {
+        item.source_type: item for item in service.data_update_statuses()
+    }[SourceType.ATTENDANCE_OT.value]
+    assert persisted.files_found == persisted.files_skipped == 1
+    assert persisted.files_processed == 0
+    with sqlite3.connect(storage.database_path(data_root)) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM attendance_records"
+        ).fetchone()[0] == 1
+
+
+def test_data_update_rebinds_unique_filename_after_database_transfer(
+    import_environment,
+) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    attendance, _employee, _schedule = _create_data_update_sources(folders)
+    assert service.update_source(SourceType.ATTENDANCE_OT).status == "SUCCESS"
+    database = storage.database_path(data_root)
+    old_path = r"Z:\Source-PC\Attendance\attendance.xlsx"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE source_registry SET source_path=? "
+            "WHERE source_type='ATTENDANCE_OT'",
+            (old_path,),
+        )
+        connection.execute(
+            "UPDATE source_file_registry SET full_path=? "
+            "WHERE source_type='ATTENDANCE_OT'",
+            (old_path,),
+        )
+
+    result = service.update_source(SourceType.ATTENDANCE_OT)
+
+    assert result.status == "SUCCESS"
+    assert result.files_skipped == 1
+    assert result.files_processed == 0
+    with sqlite3.connect(database) as connection:
+        paths = connection.execute(
+            "SELECT source_path FROM source_registry "
+            "WHERE source_type='ATTENDANCE_OT'"
+        ).fetchall()
+        file_paths = connection.execute(
+            "SELECT full_path FROM source_file_registry "
+            "WHERE source_type='ATTENDANCE_OT'"
+        ).fetchall()
+    assert paths == [(str(attendance),)]
+    assert file_paths == [(str(attendance),)]
+
+
+def test_data_update_processes_only_new_file(import_environment) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    _create_data_update_sources(folders)
+    service.update_source(SourceType.ATTENDANCE_OT)
+    _xlsx(
+        folders["attendance"] / "second.xlsx",
+        0,
+        [
+            "EMPLID", "Date In", "Time In", "Date Out", "Time Out",
+            "Overtime Hour", "Overtime Minute", "OT Amount",
+            "Meal OT Amount", "Location Descr", "Name", "Paylink",
+        ],
+        [["E2", "2026-09-02", "08:00", "2026-09-02", "17:00", 1, 0,
+          125, 20, "BRANCH", "Bob", "PG2"]],
+    )
+
+    result = service.update_source(SourceType.ATTENDANCE_OT)
+
+    assert result.status == "SUCCESS"
+    assert result.files_found == 2
+    assert result.files_new == result.files_processed == 1
+    assert result.files_changed == 0
+    assert result.files_skipped == 1
+    assert result.rows_inserted == 1
+    with sqlite3.connect(storage.database_path(data_root)) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM attendance_records"
+        ).fetchone()[0] == 2
+        assert connection.execute(
+            "SELECT COUNT(*) FROM enriched_attendance"
+        ).fetchone()[0] == 2
+        assert connection.execute(
+            "SELECT SUM(total_records) FROM analytics_monthly_employee"
+        ).fetchone()[0] == 2
+
+
+def test_changed_attendance_file_updates_without_duplicate(import_environment) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    attendance, _employee, _schedule = _create_data_update_sources(folders)
+    service.update_source(SourceType.ATTENDANCE_OT)
+    _xlsx(
+        attendance,
+        0,
+        [
+            "EMPLID", "Date In", "Time In", "Date Out", "Time Out",
+            "Overtime Hour", "Overtime Minute", "OT Amount",
+            "Meal OT Amount", "Location Descr", "Name", "Paylink",
+        ],
+        [["E1", "2026-09-01", "08:00", "2026-09-01", "17:00", 1, 0,
+          175, 20, "HEAD OFFICE", "Alice", "PG1"]],
+    )
+
+    result = service.update_source(SourceType.ATTENDANCE_OT)
+
+    assert result.status == "SUCCESS"
+    assert result.files_changed == result.files_processed == 1
+    assert result.rows_inserted == 0
+    assert result.rows_updated == 1
+    with sqlite3.connect(storage.database_path(data_root)) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM attendance_records"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT ot_amount FROM attendance_records"
+        ).fetchone()[0] == 175
+        assert connection.execute(
+            "SELECT ot_amount FROM enriched_attendance"
+        ).fetchone()[0] == 175
+
+
+def test_changed_attendance_file_removes_stale_rows_and_monthly_aggregate(
+    import_environment,
+) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    attendance, _employee, _schedule = _create_data_update_sources(folders)
+    headers = [
+        "EMPLID", "Date In", "Time In", "Date Out", "Time Out",
+        "Overtime Hour", "Overtime Minute", "OT Amount",
+        "Meal OT Amount", "Location Descr", "Name", "Paylink",
+    ]
+    january = [
+        "E1", "2026-01-15", "08:00", "2026-01-15", "17:00", 1, 0,
+        100, 20, "HEAD OFFICE", "Alice", "PG1",
+    ]
+    february = [
+        "E1", "2026-02-15", "08:00", "2026-02-15", "17:00", 1, 0,
+        100, 20, "HEAD OFFICE", "Alice", "PG1",
+    ]
+    _xlsx(attendance, 0, headers, [january, february])
+    assert all(result.status == "SUCCESS" for result in service.update_all())
+
+    _xlsx(attendance, 0, headers, [january])
+    result = service.update_source(SourceType.ATTENDANCE_OT)
+
+    assert result.status == "SUCCESS"
+    assert result.rows_updated == 1
+    with sqlite3.connect(storage.database_path(data_root)) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM attendance_records"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM enriched_attendance"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT year_month, SUM(total_records) "
+            "FROM analytics_monthly_employee GROUP BY year_month"
+        ).fetchall() == [("2026-01", 1)]
+
+
+def test_changed_employee_metadata_does_not_rewrite_unchanged_row(
+    import_environment,
+) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    _attendance, employee, _schedule = _create_data_update_sources(folders)
+    service.update_source(SourceType.EMPLOYEE)
+    database = storage.database_path(data_root)
+    with sqlite3.connect(database) as connection:
+        original_id = connection.execute(
+            "SELECT employee_record_id FROM employee_records"
+        ).fetchone()[0]
+    stat = employee.stat()
+    os.utime(
+        employee,
+        ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000),
+    )
+
+    result = service.update_source(SourceType.EMPLOYEE)
+
+    assert result.files_changed == result.files_processed == 1
+    assert result.rows_inserted == result.rows_updated == 0
+    assert result.rows_unchanged == 1
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT employee_record_id FROM employee_records"
+        ).fetchone()[0] == original_id
+        registry = connection.execute(
+            """
+            SELECT source_type, full_path, file_size, modified_time_ns,
+                   last_imported, status
+            FROM source_file_registry
+            WHERE source_type='EMPLOYEE'
+            """
+        ).fetchone()
+    assert registry is not None
+    assert registry[1] == str(employee)
+    assert registry[4]
+    assert registry[5] == "CHANGED"
+
+
+def test_changed_schedule_metadata_does_not_rewrite_unchanged_row(
+    import_environment,
+) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    _attendance, _employee, schedule = _create_data_update_sources(folders)
+    service.update_source(SourceType.SCHEDULE)
+    database = storage.database_path(data_root)
+    with sqlite3.connect(database) as connection:
+        original_id = connection.execute(
+            "SELECT schedule_record_id FROM schedule_records"
+        ).fetchone()[0]
+    stat = schedule.stat()
+    os.utime(
+        schedule,
+        ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000),
+    )
+
+    result = service.update_source(SourceType.SCHEDULE)
+
+    assert result.files_changed == result.files_processed == 1
+    assert result.rows_inserted == result.rows_updated == 0
+    assert result.rows_unchanged == 1
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT schedule_record_id FROM schedule_records"
+        ).fetchone()[0] == original_id
+
+
+def test_data_update_rolls_back_whole_source_on_file_error(
+    import_environment,
+) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    _attendance, _employee, _schedule = _create_data_update_sources(folders)
+    first = service.update_source(SourceType.ATTENDANCE_OT)
+    database = storage.database_path(data_root)
+    with sqlite3.connect(database) as connection:
+        before = tuple(connection.iterdump())
+        before_rows = connection.execute(
+            "SELECT emplid, ot_amount FROM attendance_records"
+        ).fetchall()
+
+    (folders["attendance"] / "zz_broken.xlsx").write_bytes(
+        b"not an Excel workbook"
+    )
+    failed = service.update_source(SourceType.ATTENDANCE_OT)
+
+    assert first.status == "SUCCESS"
+    assert failed.status == "ERROR"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT emplid, ot_amount FROM attendance_records"
+        ).fetchall() == before_rows
+        after_without_status = tuple(
+            line for line in connection.iterdump()
+            if "data_update_status" not in line
+            and "source_file_registry" not in line
+        )
+    before_without_status = tuple(
+        line
+        for line in before
+        if "data_update_status" not in line
+        and "source_file_registry" not in line
+    )
+    assert after_without_status == before_without_status
+
+
+def test_update_all_uses_independent_source_transactions(import_environment) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    _attendance, _employee, schedule = _create_data_update_sources(folders)
+    schedule.write_bytes(b"broken schedule")
+
+    results = service.update_all()
+
+    assert [result.source_type for result in results] == [
+        "EMPLOYEE", "SCHEDULE", "ATTENDANCE_OT"
+    ]
+    assert [result.status for result in results] == ["SUCCESS", "ERROR", "SUCCESS"]
+    with sqlite3.connect(storage.database_path(data_root)) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM employee_records").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM schedule_records").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM attendance_records").fetchone()[0] == 1
+        statuses = dict(
+            connection.execute(
+                "SELECT source_type, status FROM data_update_status"
+            ).fetchall()
+        )
+    assert statuses == {
+        "EMPLOYEE": "SUCCESS",
+        "SCHEDULE": "ERROR",
+        "ATTENDANCE_OT": "SUCCESS",
+    }
+
+
 def test_refresh_canonicalizes_production_mdy_and_ampm(
     import_environment,
 ) -> None:
@@ -250,6 +821,7 @@ def test_refresh_canonicalizes_production_mdy_and_ampm(
             "Location Descr",
             "Name",
             "Paylink",
+            "JobCd Desc",
         ],
         [
             [
@@ -265,6 +837,7 @@ def test_refresh_canonicalizes_production_mdy_and_ampm(
                 "HEAD OFFICE",
                 "Alice",
                 "PG1",
+                "Source Analyst",
             ]
         ],
     )
@@ -275,9 +848,47 @@ def test_refresh_canonicalizes_production_mdy_and_ampm(
     database = storage.database_path(data_root)
     with sqlite3.connect(database) as connection:
         row = connection.execute(
-            "SELECT date_in,time_in,date_out,time_out FROM attendance_records"
+            "SELECT date_in,time_in,date_out,time_out,job_title FROM attendance_records"
         ).fetchone()
-    assert row == ("2026-09-30", "08:20:00", "2026-09-30", "18:30:00")
+    assert row == (
+        "2026-09-30",
+        "08:20:00",
+        "2026-09-30",
+        "18:30:00",
+        "Source Analyst",
+    )
+
+
+def test_update_attendance_backfills_jobcd_desc_after_schema_upgrade(
+    import_environment,
+) -> None:
+    data_root, _core, folders, storage, service = import_environment
+    source = folders["attendance"] / "production-format.xlsx"
+    _xlsx(
+        source,
+        0,
+        [
+            "EMPLID", "Date In", "Time In", "Date Out", "Time Out",
+            "Overtime Hour", "Overtime Minute", "OT Amount",
+            "Meal OT Amount", "Location Descr", "Name", "Paylink",
+            "JobCd Desc",
+        ],
+        [["E1", "2026-09-30", "08:20", "2026-09-30", "18:30", 1, 0,
+          100, 20, "HEAD OFFICE", "Alice", "PG1", "Source Analyst"]],
+    )
+    assert service.update_source(SourceType.ATTENDANCE_OT).status == "SUCCESS"
+    database = storage.database_path(data_root)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE attendance_records SET job_title=NULL")
+
+    result = service.update_source(SourceType.ATTENDANCE_OT)
+
+    assert result.status == "SUCCESS"
+    assert result.files_changed == result.files_processed == 1
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT job_title FROM attendance_records"
+        ).fetchone()[0] == "Source Analyst"
 
 
 def test_new_import_is_recursive_dynamic_batched_and_supports_xls_xlsx(
@@ -298,6 +909,8 @@ def test_new_import_is_recursive_dynamic_batched_and_supports_xls_xlsx(
     assert result.rows_imported == 4
     assert [event.phase for event in progress][0] == "SCANNING"
     assert [event.phase for event in progress][-1] == "COMPLETED"
+    assert progress[0].percent == 5
+    assert progress[-1].percent == 100
     database = storage.database_path(data_root)
     with sqlite3.connect(database) as connection:
         assert (
@@ -511,8 +1124,8 @@ def test_v1_database_migrates_sequentially_to_v3_idempotently(tmp_path: Path) ->
     first = storage.initialize()
     second = storage.initialize()
 
-    assert first.schema_version == ANALYTICS_SCHEMA_VERSION == 5
-    assert second.schema_version == 5
+    assert first.schema_version == ANALYTICS_SCHEMA_VERSION == 9
+    assert second.schema_version == 9
     with sqlite3.connect(database) as connection:
         tables = {
             row[0]
@@ -530,6 +1143,8 @@ def test_v1_database_migrates_sequentially_to_v3_idempotently(tmp_path: Path) ->
         "schedule_rule_master",
         "enriched_attendance",
         "analytics_monthly_employee",
+        "data_update_status",
+        "source_file_registry",
     } <= tables
 
 

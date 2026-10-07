@@ -4,6 +4,12 @@ from shared.attendance_ot.schema import ANALYTICS_SCHEMA_VERSION
 from shared.attendance_ot.import_service import AttendanceOTImportService
 from shared.attendance_ot.enrichment import AttendanceOTEnrichmentService
 from shared.attendance_ot.queries import AttendanceOTAnalyticsQueryService
+from shared.attendance_ot.database_transfer import (
+    AnalyticsDatabaseExportResult,
+    AnalyticsDatabaseImportResult,
+    AnalyticsDatabaseValidation,
+    AttendanceOTDatabaseTransferService,
+)
 from shared.attendance_ot.models import (
     RefreshProgress,
     RefreshFileSummary,
@@ -26,6 +32,10 @@ __all__ = [
     "AttendanceOTImportService",
     "AttendanceOTEnrichmentService",
     "AttendanceOTAnalyticsQueryService",
+    "AttendanceOTDatabaseTransferService",
+    "AnalyticsDatabaseValidation",
+    "AnalyticsDatabaseExportResult",
+    "AnalyticsDatabaseImportResult",
     "AttendanceOTStorageService",
     "AttendanceOTStorageStatus",
     "RefreshProgress",

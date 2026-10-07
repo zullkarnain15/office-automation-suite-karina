@@ -57,6 +57,8 @@ def test_filters_match_dashboard_details_matrix_and_source_amounts(
     dash = query.view(filters)
     detail = query.view(filters, tab="Detail Data")
     matrix = query.view(filters, tab="Data Terlambat", year=2026)
+    with query.snapshot() as session:
+        trends = session.monthly_trends(filters, 2026)
     assert detail.total == expected == dash["kpi"]["records"]
     assert dash["kpi"]["late_records"] == sum(
         r["late_status"] == "LATE" for r in detail.items
@@ -66,6 +68,8 @@ def test_filters_match_dashboard_details_matrix_and_source_amounts(
     assert sum(r["Total"] for r in matrix.items) == dash["kpi"]["late_records"]
     assert all(sum(r[m] for m in MONTHS) == r["Total"] for r in matrix.items)
     assert dash["kpi"]["employees"] == len({r["emplid"] for r in detail.items})
+    assert sum(trends["attendance"]) == dash["kpi"]["records"]
+    assert sum(trends["late"]) == dash["kpi"]["late_records"]
 
 
 def test_rankings_count_records_not_minutes_and_query_uses_aggregate(reports):
@@ -85,6 +89,20 @@ def test_rankings_count_records_not_minutes_and_query_uses_aggregate(reports):
     assert all(r["late_count"] == 1 for r in result["rankings"]["BRANCH Employees"])
 
 
+def test_dashboard_can_skip_rankings_not_rendered_by_the_ui(reports):
+    _, _, query = reports
+    with query.snapshot() as session:
+        statements = []
+        session.connection.set_trace_callback(statements.append)
+        result = session.dashboard(
+            AnalyticsFilters(),
+            ranking_keys=("HO Departments", "Branches"),
+        )
+
+    assert tuple(result["rankings"]) == ("Branches", "HO Departments")
+    assert sum("LIMIT 5" in statement.upper() for statement in statements) == 2
+
+
 def test_detail_and_master_pagination_are_bounded(reports):
     _, _, query = reports
     with query.snapshot() as session:
@@ -100,13 +118,150 @@ def test_detail_and_master_pagination_are_bounded(reports):
             assert tuple(page.items[0]) == MASTER_COLUMNS[kind]
         assert session.master("Employee Snapshot", search="Alice").total == 1
         assert session.sources(limit=2).total == 3
-    assert query.filter_options()["pay_groups"] == ("PG-BR", "PG-HO")
+    assert query.filter_options()["pay_groups"] == ("PG-BR", "PG-FUT", "PG-HO")
     assert query.filter_options()["divisions"] == (
         "Corporate",
+        "Future Division",
         "Operations",
         "Retail",
         "Technology",
     )
+
+
+def test_exact_nik_search_uses_employee_date_index(reports):
+    _storage, _database, query = reports
+    filters = AnalyticsFilters(search="E1")
+
+    with query.snapshot() as session:
+        resolved = session._resolved_filters(filters)
+        sql, args = session.detail_sql(filters)
+        plan = " ".join(
+            str(row[3])
+            for row in session.connection.execute(
+                "EXPLAIN QUERY PLAN " + sql + " LIMIT ? OFFSET ?",
+                args + (200, 0),
+            )
+        )
+        result = session.details(filters)
+
+    assert resolved.search == ""
+    assert resolved.emplid == "E1"
+    assert result.total == 4
+    assert "idx_enriched_attendance_employee_date" in plan
+
+
+def test_transaction_authority_employee_status_and_unmapped_reconciliation(
+    tmp_path,
+):
+    storage, database = _environment(tmp_path)
+    _seed(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO source_registry (
+                source_id, source_type, source_path, filename, size_bytes,
+                modified_time_ns, row_count, status, imported_at, fingerprint,
+                error_detail, last_seen_at, created_at, updated_at
+            ) VALUES (
+                4, 'EMPLOYEE', 'C:/fixture/latest-employee.xlsx',
+                'latest-employee.xlsx', 1, 2, 1, 'NEW',
+                '2026-10-01T00:00:00', 'latest', NULL,
+                '2026-10-01T00:00:00', '2026-10-01T00:00:00',
+                '2026-10-01T00:00:00'
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO employee_records (
+                source_id, source_file, source_sheet, source_row, emplid,
+                name, pay_group, status, location_descr, regional, dept_desc,
+                organization_json, snapshot_date, division, job_title
+            ) VALUES (
+                4, 'latest-employee.xlsx', 'Data', 2, 'E1',
+                'Latest Master Name', 'PG-NEW', 'Permanent', 'HEAD OFFICE',
+                'WEST', 'Finance', '{}', '2026-10-01', 'Corporate', 'Manager'
+            )
+            """
+        )
+        connection.execute(
+            """
+            UPDATE attendance_records
+            SET name='Attendance Authority Name',
+                location_descr='Attendance Authority Branch'
+            WHERE source_row=2
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO attendance_records (
+                source_id, source_file, source_sheet, source_row, emplid,
+                date_in, time_in, date_out, time_out, overtime_hour,
+                overtime_minute, ot_amount, meal_ot_amount, location_descr,
+                name, paylink, job_title
+            ) VALUES (
+                1, 'attendance.xlsx', 'Data', 99, 'E99',
+                '2026-02-02', '08:00', '2026-02-02', '17:00', 1,
+                0, 123.45, 7.5, 'Source Location',
+                'Source Only Name', 'PG-SOURCE', 'Source Position'
+            )
+            """
+        )
+
+    service = AttendanceOTEnrichmentService(batch_size=2)
+    service.rebuild(database)
+    service.rebuild(database)
+    query = AttendanceOTAnalyticsQueryService(storage)
+
+    all_rows = query.view(AnalyticsFilters(), tab="Detail Data")
+    active = query.view(
+        AnalyticsFilters(employee_status="Active"), tab="Detail Data"
+    )
+    inactive = query.view(
+        AnalyticsFilters(employee_status="Inactive"), tab="Detail Data"
+    )
+    unmapped = query.view(
+        AnalyticsFilters(employee_status="Unmapped"), tab="Detail Data"
+    )
+    source_group = AnalyticsFilters(period="2026-02", pay_groups=("PG-SOURCE",))
+    source_detail = query.view(source_group, tab="Detail Data")
+    source_dashboard = query.view(source_group)
+    source_branch = query.view(
+        AnalyticsFilters(branches=("Attendance Authority Branch",)),
+        tab="Detail Data",
+    )
+    with query.snapshot() as session:
+        master_statuses = {
+            row["emplid"]: row["empl_status"].title()
+            for row in session.master("Employee Snapshot").items
+        }
+
+    assert (all_rows.total, active.total, inactive.total, unmapped.total) == (9, 4, 4, 1)
+    assert {row["employee_status"] for row in active.items} == {"Active"}
+    assert {row["emplid"] for row in inactive.items} == {"E2", "E3", "E4", "E5"}
+    assert len(unmapped.items) == 1
+    row = unmapped.items[0]
+    assert row["emplid"] == "E99"
+    assert row["employee_name"] == "Source Only Name"
+    assert row["pay_group"] == "PG-SOURCE"
+    assert row["job_title"] == "Source Position"
+    assert row["department"] is None
+    assert row["branch"] == "Source Location"
+    assert source_detail.total == source_dashboard["kpi"]["records"] == 1
+    assert source_detail.items[0]["ot_amount"] == 123.45
+    assert source_dashboard["kpi"]["ot_amount"] == 123.45
+    assert source_branch.total == 1
+    assert source_branch.items[0]["employee_name"] == "Attendance Authority Name"
+    assert source_branch.items[0]["branch"] == "Attendance Authority Branch"
+    assert all(
+        row["employee_status"] == master_statuses[row["emplid"]]
+        for row in all_rows.items
+        if row["emplid"] in master_statuses
+    )
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM enriched_attendance WHERE attendance_record_id=(SELECT attendance_record_id FROM attendance_records WHERE source_row=99)"
+        ).fetchone()[0] == 1
 
 
 def test_employee_master_keeps_one_current_row_and_marks_missing_inactive(reports):
@@ -199,8 +354,8 @@ def test_excel_all_filtered_and_header_aware_split(reports, tmp_path):
             assert values[0] == DETAIL_LABELS
             rows.extend(values[1:])
         assert len(rows) == 8
-        assert sum(row[16] for row in rows) == 310
-        assert sum(row[17] for row in rows) == 62
+        assert sum(row[17] for row in rows) == 310
+        assert sum(row[18] for row in rows) == 62
     finally:
         book.close()
     filters = AnalyticsFilters(
@@ -254,7 +409,7 @@ def test_purge_reset_vacuum_core_and_config_preserved(reports):
     assert query.view()["kpi"]["late_records"] == 3
     assert query.view(tab="Master Data").total == 5
     info = service.info()
-    assert info["schema_version"] == 5 and info["last_cleanup"]
+    assert info["schema_version"] == 9 and info["last_cleanup"]
     assert info["period_from"] == info["period_to"] == "2026-02-02"
     service.vacuum()
     preview = service.preview("RESET")

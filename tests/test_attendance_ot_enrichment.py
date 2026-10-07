@@ -137,17 +137,20 @@ def _seed(database: Path) -> None:
             """
         )
         attendance = (
-            ("E1", "2026-01-02", "09:30", "23:59", 1, 30, 100, 20),
-            ("E1", "2026-01-03", "09:45", "10:00", 0, 0, 0, 0),
-            ("E1", "2026-01-04", "12:00", "13:00", 0, 0, 0, 0),
-            ("E1", "2026-02-02", "08:31", "09:00", 2, 0, 200, 40),
-            ("E2", "2026-02-02", "09:00", "17:00", 0, 0, 0, 0),
-            ("E3", "2026-02-02", "08:31", "17:00", 0, 15, 10, 2),
-            ("E4", "2026-02-02", "08:30", "17:30", 0, 0, 0, 0),
-            ("E5", "2026-02-02", "07:50", "16:15", 0, 0, 0, 0),
+            ("E1", "2026-01-02", "09:30", "23:59", 1, 30, 100, 20, "PG-HO", "HEAD OFFICE", "Alice"),
+            ("E1", "2026-01-03", "09:45", "10:00", 0, 0, 0, 0, "PG-HO", "HEAD OFFICE", "Alice"),
+            ("E1", "2026-01-04", "12:00", "13:00", 0, 0, 0, 0, "PG-HO", "HEAD OFFICE", "Alice"),
+            ("E1", "2026-02-02", "08:31", "09:00", 2, 0, 200, 40, "PG-BR", "Branch Bandung", "Alice"),
+            ("E2", "2026-02-02", "09:00", "17:00", 0, 0, 0, 0, "PG-FUT", "HEAD OFFICE", "Future Only"),
+            ("E3", "2026-02-02", "08:31", "17:00", 0, 15, 10, 2, "PG-BR", "Branch Surabaya", "Branch User"),
+            ("E4", "2026-02-02", "08:30", "17:30", 0, 0, 0, 0, "PG-HO", "head office", "HO User"),
+            ("E5", "2026-02-02", "07:50", "16:15", 0, 0, 0, 0, "PG-BR", "Branch Medan", "Custom Rule"),
         )
         for row_number, row in enumerate(attendance, 2):
-            emplid, day, time_in, time_out, ot_hour, ot_minute, amount, meal = row
+            (
+                emplid, day, time_in, time_out, ot_hour, ot_minute,
+                amount, meal, paylink, location, source_name,
+            ) = row
             connection.execute(
                 """
                 INSERT INTO attendance_records (
@@ -155,7 +158,7 @@ def _seed(database: Path) -> None:
                     date_in, time_in, date_out, time_out, overtime_hour,
                     overtime_minute, ot_amount, meal_ot_amount,
                     location_descr, name, paylink
-                ) VALUES (1, 'attendance.xlsx', 'Data', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'source-location', 'source-name', 'source-paylink')
+                ) VALUES (1, 'attendance.xlsx', 'Data', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row_number,
@@ -168,6 +171,9 @@ def _seed(database: Path) -> None:
                     ot_minute,
                     amount,
                     meal,
+                    location,
+                    source_name,
+                    paylink,
                 ),
             )
 
@@ -210,8 +216,9 @@ def test_enrichment_snapshot_schedule_late_overtime_and_aggregates(
         assert rows[3]["resolved_schedule_id"] == "WS_CCD"
         assert rows[3]["scheduled_in"] == "08:30"
         assert rows[3]["late_minutes"] == 1
-        assert rows[4]["employee_snapshot_id"] is None
-        assert rows[4]["pay_group"] is None
+        assert rows[4]["employee_snapshot_id"] is not None
+        assert rows[4]["pay_group"] == "PG-FUT"
+        assert rows[4]["employee_status"] == "Active"
         assert rows[5]["classification"] == "BRANCH"
         assert rows[5]["scheduled_in"] == "08:30"
         assert rows[5]["late_status"] == "LATE"
@@ -252,6 +259,49 @@ def test_enrichment_snapshot_schedule_late_overtime_and_aggregates(
     assert len(query.top3_late_departments_ho()) <= 3
     assert query.monthly_late_matrix()
 
+
+def test_employee_scope_rebuild_preserves_unaffected_history(tmp_path: Path) -> None:
+    _storage, database = _environment(tmp_path)
+    _seed(database)
+    service = AttendanceOTEnrichmentService(batch_size=2)
+    service.rebuild(database)
+
+    with service.factory.connect(database) as connection:
+        connection.execute("UPDATE enriched_attendance SET updated_at='PRESERVED'")
+        connection.execute(
+            """
+            UPDATE employee_records SET dept_desc='Risk'
+            WHERE emplid='E1' AND snapshot_date='2026-02-01'
+            """
+        )
+        result = service.rebuild_connection(
+            connection,
+            full_rebuild=False,
+            employee_scope={"E1": "2026-02-01"},
+        )
+        connection.commit()
+
+    assert result.full_rebuild is False
+    assert result.attendance_rows == 1
+    with sqlite3.connect(database) as connection:
+        rows = connection.execute(
+            """
+            SELECT attendance_date, department, updated_at
+            FROM enriched_attendance WHERE emplid='E1'
+            ORDER BY attendance_date
+            """
+        ).fetchall()
+        assert rows[:3] == [
+            ("2026-01-02", "Finance", "PRESERVED"),
+            ("2026-01-03", "Finance", "PRESERVED"),
+            ("2026-01-04", "Finance", "PRESERVED"),
+        ]
+        assert rows[3][0:2] == ("2026-02-02", "Risk")
+        assert rows[3][2] != "PRESERVED"
+        assert connection.execute(
+            "SELECT COUNT(*) FROM enriched_attendance WHERE emplid='E3' "
+            "AND updated_at='PRESERVED'"
+        ).fetchone()[0] == 1
 
 def test_employee_without_snapshot_date_is_timeless_fallback(
     tmp_path: Path,
@@ -537,13 +587,21 @@ def test_v2_to_v3_migration_is_idempotent_and_preserves_raw_rows(
     first = storage.initialize()
     second = storage.initialize()
 
-    assert first.schema_version == second.schema_version == 5
+    assert first.schema_version == second.schema_version == 9
     with sqlite3.connect(database) as connection:
         assert (
             connection.execute("SELECT emplid FROM attendance_records").fetchone()[0]
             == "00001"
         )
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
         assert connection.execute(
             "SELECT division, job_title FROM employee_records WHERE emplid='00001'"
         ).fetchone() == ("Legacy Division", "Legacy Job")
+        attendance_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(attendance_records)")
+        }
+        enriched_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(enriched_attendance)")
+        }
+        assert "job_title" in attendance_columns
+        assert "employee_status" in enriched_columns

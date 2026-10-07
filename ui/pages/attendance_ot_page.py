@@ -8,21 +8,37 @@ from dataclasses import replace
 from datetime import date
 from tkinter import ttk
 
+from PIL import Image, ImageTk
+
 from shared.attendance_ot.reporting import (
     AnalyticsFilters,
     DETAIL_COLUMNS,
     DETAIL_LABELS,
+    EMPLOYEE_STATUSES,
     MASTER_COLUMNS,
     MONTHS,
     STATUSES,
 )
-from ui.constants import CARD_BACKGROUND, MAIN_HEADER, TEXT_PRIMARY, TEXT_SECONDARY
+from shared.attendance_ot.models import SourceType
+from ui.constants import (
+    ATTENDANCE_OT_BACKGROUND,
+    ATTENDANCE_OT_CARD,
+    ATTENDANCE_OT_CHALK_BLUE,
+    ATTENDANCE_OT_CHALK_PINK,
+    ATTENDANCE_OT_CHALK_WHITE,
+    ATTENDANCE_OT_CHALK_YELLOW,
+    ATTENDANCE_OT_SELECTION,
+    ATTENDANCE_OT_SURFACE,
+)
 from ui.pages.base_page import BasePage
 from ui.pages.attendance_ot_widgets import (
     DataTable,
+    KPICard,
     LateMatrixTable,
     MultiSelect,
     ScrollBody,
+    SimpleTrendPanel,
+    TopFiveBarList,
     bind_wheel,
 )
 from ui.widgets import DateEntry
@@ -30,25 +46,18 @@ from ui.widgets.pagination_bar import PaginationBar
 
 
 DETAIL_HEADER_COLORS = {
-    "actual_time_in": "#2563EB",
-    "actual_time_out": "#2563EB",
-    "late_status": "#EA7600",
+    "actual_time_in": ATTENDANCE_OT_CHALK_BLUE,
+    "actual_time_out": ATTENDANCE_OT_CHALK_BLUE,
+    "late_status": ATTENDANCE_OT_CHALK_PINK,
 }
 
-RANK_CARD_STYLES = (
-    ("Blue", "#DCEBFF", "#234E8A"),
-    ("Orange", "#FFE4C4", "#9A4D00"),
-    ("Green", "#DDF3D2", "#356B20"),
-    ("Gold", "#F8E8BD", "#76520B"),
-)
-
-KPI_CARD_STYLES = (
-    ("Blue", "#DCEBFF", "#4D72B8", "#234E8A"),
-    ("Teal", "#D8F0ED", "#2F8F83", "#246D65"),
-    ("Orange", "#FFE4C4", "#EA7600", "#934A00"),
-    ("Purple", "#E9E0F7", "#8064A2", "#594472"),
-    ("Green", "#DDF3D2", "#5E9C3A", "#356B20"),
-    ("Gold", "#F8E8BD", "#D2A15A", "#76520B"),
+KPI_CARD_SPECS = (
+    ("records", "Records", ATTENDANCE_OT_CHALK_BLUE, "records.ico"),
+    ("employees", "Employees", ATTENDANCE_OT_CHALK_YELLOW, "employee.ico"),
+    ("late_records", "Late Records", ATTENDANCE_OT_CHALK_PINK, "late_records.ico"),
+    ("ot_hours", "OT Hours", ATTENDANCE_OT_CHALK_BLUE, "ot_hours.ico"),
+    ("ot_amount", "OT Amount", ATTENDANCE_OT_CHALK_YELLOW, "ot_amount.ico"),
+    ("meal_amount", "Meal Amount", ATTENDANCE_OT_CHALK_PINK, "meal_amount.ico"),
 )
 
 
@@ -63,6 +72,7 @@ class AttendanceOTPage(BasePage):
         "Detail Data",
         "Master Data",
         "Source Files",
+        "Data Update",
     )
     page_size = 200
     show_page_heading = False
@@ -73,11 +83,13 @@ class AttendanceOTPage(BasePage):
         self._navigation_locked = False
         self._disposed = False
         self._pending_reload = False
+        self._filter_options_cache = None
         self.filters = AnalyticsFilters()
         self.matrix_year = date.today().year
         self.offsets = {name: 0 for name in self.TAB_TITLES}
         self.totals = {name: 0 for name in self.TAB_TITLES}
         self._source_items = ()
+        self._data_update_pending = False
         self._actions = []
         super().__init__(parent, context)
 
@@ -86,6 +98,7 @@ class AttendanceOTPage(BasePage):
         self.storage_service = self.services.attendance_ot_service
         self.queries = getattr(self.services, "attendance_ot_analytics_service", None)
         self._configure_professional_styles()
+        self.configure(style="AttendanceOTPage.TFrame")
         self.rowconfigure(1, weight=0)
         self.rowconfigure(3, weight=1)
         self.progress_var = tk.StringVar(value="Ready. Refresh Data dijalankan manual.")
@@ -94,9 +107,9 @@ class AttendanceOTPage(BasePage):
         ttk.Label(
             self.prompt_frame,
             text="Storage analytics perlu dibuat / dimigrasikan. Create untuk melanjutkan.",
-            style="AttendanceOTBody.TLabel",
+            style="AttendanceOTCardBody.TLabel",
         ).pack(side="left")
-        actions = ttk.Frame(self.prompt_frame)
+        actions = ttk.Frame(self.prompt_frame, style="AttendanceOTCard.TFrame")
         actions.pack(side="right")
         self._button(actions, "Create", self.create_storage).pack(side="left")
         self._button(actions, "Later", self.dismiss_prompt).pack(side="left")
@@ -114,6 +127,7 @@ class AttendanceOTPage(BasePage):
             state="readonly",
             width=15,
             font=("Segoe UI", 9),
+            style="AttendanceOT.TCombobox",
         ).pack(side="left", padx=(12, 4))
         self._button(toolbar, "Export Excel", self.export_excel).pack(side="left")
         self.maintenance_button = self._button(
@@ -124,10 +138,26 @@ class AttendanceOTPage(BasePage):
             toolbar, "Cek Duplicate Data", self.duplicate_data
         )
         self.duplicate_button.pack(side="left", padx=(4, 8))
+        progress_area = ttk.Frame(toolbar, style="AttendanceOTSurface.TFrame")
+        progress_area.pack(side="right")
         self.refresh_progress = ttk.Progressbar(
-            toolbar, mode="indeterminate", length=110
+            progress_area,
+            mode="determinate",
+            maximum=100,
+            value=0,
+            length=140,
+            style="AttendanceOT.Horizontal.TProgressbar",
         )
-        self.refresh_progress.pack(side="right")
+        self.refresh_progress.pack(side="left")
+        self.progress_percent_var = tk.StringVar(value="0%")
+        self.progress_percent_label = ttk.Label(
+            progress_area,
+            textvariable=self.progress_percent_var,
+            style="AttendanceOTProgress.TLabel",
+            width=5,
+            anchor="e",
+        )
+        self.progress_percent_label.pack(side="left", padx=(6, 0))
         self.notebook = ttk.Notebook(self, style="AttendanceOT.TNotebook")
         self.notebook.grid(row=3, column=0, sticky="nsew")
         self.tabs = {}
@@ -140,12 +170,13 @@ class AttendanceOTPage(BasePage):
             self.notebook.add(frame, text=name)
             self.tabs[name] = frame
         self._build_dashboard()
+        self._build_data_update()
         self._build_tables()
         self.notebook.bind("<<NotebookTabChanged>>", lambda e: self.load_view())
         ttk.Label(
             self,
             textvariable=self.progress_var,
-            style="AttendanceOTStatus.TLabel",
+            style="AttendanceOTPageStatus.TLabel",
             wraplength=1000,
         ).grid(row=4, column=0, sticky="ew", pady=(6, 0))
 
@@ -161,14 +192,23 @@ class AttendanceOTPage(BasePage):
         panel.grid(row=1, column=0, sticky="ew")
         self.filter_vars = {
             key: tk.StringVar()
-            for key in ("period", "date_from", "date_to", "search", "status")
+            for key in (
+                "period",
+                "date_from",
+                "date_to",
+                "search",
+                "status",
+                "employee_status",
+            )
         }
+        self.filter_vars["employee_status"].set("All")
         labels = (
             "Period (YYYY / YYYY-MM)",
             "Date From (MM/DD/YYYY)",
             "Date To (MM/DD/YYYY)",
             "NIK / Name",
             "Attendance Status",
+            "Employee Status",
         )
         self.period_box = None
         self.date_from_entry = None
@@ -178,14 +218,24 @@ class AttendanceOTPage(BasePage):
             ttk.Label(panel, text=label, style="AttendanceOTStatus.TLabel").grid(
                 row=0, column=index, sticky="w", padx=4
             )
-            if key in ("period", "status"):
+            if key in ("period", "status", "employee_status"):
+                choices = (
+                    ("All", *EMPLOYEE_STATUSES)
+                    if key == "employee_status"
+                    else (("", *STATUSES) if key == "status" else ("",))
+                )
                 widget = ttk.Combobox(
                     panel,
                     textvariable=self.filter_vars[key],
-                    values=("", *STATUSES) if key == "status" else ("",),
-                    state="readonly" if key == "status" else "normal",
+                    values=choices,
+                    state=(
+                        "readonly"
+                        if key in ("status", "employee_status")
+                        else "normal"
+                    ),
                     width=17,
                     font=("Segoe UI", 9),
+                    style="AttendanceOT.TCombobox",
                 )
                 if key == "period":
                     self.period_box = widget
@@ -199,12 +249,16 @@ class AttendanceOTPage(BasePage):
                     self.date_from_entry = widget
                 else:
                     self.date_to_entry = widget
+                widget.configure(style="AttendanceOTSurface.TFrame")
+                widget.entry.configure(style="AttendanceOT.TEntry")
+                widget.calendar_button.configure(style="AttendanceOT.TButton")
             else:
                 widget = ttk.Entry(
                     panel,
                     textvariable=self.filter_vars[key],
                     width=18,
                     font=("Segoe UI", 9),
+                    style="AttendanceOT.TEntry",
                 )
             widget.grid(row=1, column=index, sticky="ew", padx=4)
             entry = widget.entry if isinstance(widget, DateEntry) else widget
@@ -221,48 +275,79 @@ class AttendanceOTPage(BasePage):
         for index, widget in enumerate(self.multis.values()):
             widget.grid(row=2, column=index, sticky="ew", padx=4, pady=6)
         actions = ttk.Frame(panel, style="AttendanceOTSurface.TFrame")
-        actions.grid(row=2, column=4, sticky="e")
-        self._button(actions, "Apply", self.apply_filters).pack(side="left", padx=4)
-        self._button(actions, "Reset", self.reset_filters).pack(side="left", padx=4)
+        actions.grid(row=2, column=4, columnspan=2, sticky="e")
+        self.apply_button = self._button(actions, "Apply", self.apply_filters)
+        self.apply_button.configure(style="AttendanceOTApply.TButton")
+        self.apply_button.pack(side="left", padx=4)
+        self.reset_button = self._button(actions, "Reset", self.reset_filters)
+        self.reset_button.configure(style="AttendanceOTReset.TButton")
+        self.reset_button.pack(side="left", padx=4)
         self.active_filters = tk.StringVar(value="Active filters: All Data")
         ttk.Label(
             panel,
             textvariable=self.active_filters,
             style="AttendanceOTStatus.TLabel",
             wraplength=1000,
-        ).grid(row=3, column=0, columnspan=5, sticky="ew", padx=4)
+        ).grid(row=3, column=0, columnspan=6, sticky="ew", padx=4)
 
     def _build_dashboard(self):
         body = ScrollBody(self.tabs["Dashboard"])
         body.grid(row=1, column=0, sticky="nsew")
         self.dashboard_scroll = body
         body.content.columnconfigure(0, weight=1)
+        self.dashboard_header = tk.Frame(
+            body.content,
+            background=ATTENDANCE_OT_CHALK_WHITE,
+            borderwidth=0,
+            padx=2,
+            pady=2,
+        )
+        self.dashboard_header.grid(
+            row=0, column=0, sticky="ew", padx=4, pady=(0, 10)
+        )
+        header_body = tk.Frame(
+            self.dashboard_header,
+            background=ATTENDANCE_OT_CARD,
+            padx=14,
+            pady=10,
+        )
+        header_body.pack(fill="both", expand=True)
+        self.dashboard_header_accent = tk.Frame(
+            header_body,
+            background=ATTENDANCE_OT_CHALK_YELLOW,
+            height=6,
+            borderwidth=0,
+        )
+        self.dashboard_header_accent.pack(fill="x", pady=(0, 10))
+        self.dashboard_header_accent.pack_propagate(False)
+        self.dashboard_title = tk.Label(
+            header_body,
+            text="Attendance & Overtime Overview",
+            background=ATTENDANCE_OT_CARD,
+            foreground=ATTENDANCE_OT_CHALK_WHITE,
+            font=("Segoe UI", 18, "bold"),
+            anchor="center",
+        )
+        self.dashboard_title.pack(fill="x")
         cards = ttk.Frame(body.content, style="AttendanceOTSurface.TFrame")
-        cards.grid(row=0, column=0, sticky="ew")
+        cards.grid(row=1, column=0, sticky="ew")
         self.kpi_vars = {}
         self.kpi_cards = {}
         self.kpi_card_bodies = {}
-        for index, ((key, label), style_info) in enumerate(
-            zip(
-                (
-                    ("records", "Records"),
-                    ("employees", "Employees"),
-                    ("late_records", "Late Records"),
-                    ("ot_hours", "OT Hours"),
-                    ("ot_amount", "OT Amount"),
-                    ("meal_amount", "Meal Amount"),
-                ),
-                KPI_CARD_STYLES,
-            )
-        ):
-            cards.columnconfigure(index % 3, weight=1)
-            _name, background, border, foreground = style_info
-            card = tk.Frame(
+        self.kpi_icons = {}
+        for column in range(3):
+            cards.columnconfigure(column, weight=1, uniform="attendance-kpi")
+        for index, (key, label, accent, icon_name) in enumerate(KPI_CARD_SPECS):
+            variable = tk.StringVar(value="—")
+            self.kpi_vars[key] = variable
+            icon = self._load_kpi_icon(icon_name)
+            self.kpi_icons[key] = icon
+            card = KPICard(
                 cards,
-                background=border,
-                borderwidth=0,
-                padx=2,
-                pady=2,
+                title=label,
+                variable=variable,
+                accent=accent,
+                icon=icon,
             )
             card.grid(
                 row=index // 3,
@@ -271,88 +356,76 @@ class AttendanceOTPage(BasePage):
                 padx=4,
                 pady=4,
             )
-            body_frame = tk.Frame(
-                card,
-                background=background,
-                padx=12,
-                pady=10,
-            )
-            body_frame.pack(fill="both", expand=True)
             self.kpi_cards[key] = card
-            self.kpi_card_bodies[key] = body_frame
-            tk.Label(
-                body_frame,
-                text=label,
-                background=background,
-                foreground=foreground,
-                font=("Segoe UI", 10, "bold"),
-            ).pack(anchor="w")
-            variable = tk.StringVar(value="—")
-            self.kpi_vars[key] = variable
-            tk.Label(
-                body_frame,
-                textvariable=variable,
-                background=background,
-                foreground=foreground,
-                font=("Segoe UI", 16, "bold"),
-            ).pack(anchor="w", pady=(4, 0))
-        self.rank_vars = {}
-        self.rank_cards = {}
-        self.rank_lists = {}
+            self.kpi_card_bodies[key] = card.body
+
+        self.attendance_trend_panel = SimpleTrendPanel(
+            body.content,
+            MONTHS,
+            title="Attendance Record Trend",
+            accent=ATTENDANCE_OT_CHALK_BLUE,
+        )
+        self.attendance_trend_panel.grid(
+            row=2,
+            column=0,
+            sticky="ew",
+            padx=4,
+            pady=(8, 4),
+        )
+
+        self.trend_panel = SimpleTrendPanel(
+            body.content,
+            MONTHS,
+            title="Late Record Trend",
+            accent=ATTENDANCE_OT_CHALK_PINK,
+        )
+        self.trend_panel.grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            padx=4,
+            pady=4,
+        )
+
         rankings = ttk.Frame(
             body.content,
             style="AttendanceOTSurface.TFrame",
         )
-        rankings.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        rankings.grid(row=4, column=0, sticky="ew", pady=(4, 0))
         rankings.columnconfigure((0, 1), weight=1, uniform="rank-card")
-        for index, (title, style_info) in enumerate(
-            zip(
-                (
-                    "HO Employees",
-                    "BRANCH Employees",
-                    "Branches",
-                    "HO Departments",
-                ),
-                RANK_CARD_STYLES,
-            )
-        ):
-            style_name = style_info[0]
-            frame = ttk.Frame(
-                rankings,
-                style=f"AttendanceOTRank{style_name}.TFrame",
-                padding=14,
-                relief="solid",
-                borderwidth=1,
-            )
-            frame.grid(
-                row=index // 2,
-                column=index % 2,
-                sticky="nsew",
-                padx=4,
-                pady=4,
-            )
-            self.rank_cards[title] = frame
-            ttk.Label(
-                frame,
-                text="Top 5 Late " + title,
-                style=f"AttendanceOTRank{style_name}Title.TLabel",
-            ).pack(anchor="w")
-            variable = tk.StringVar(value="Belum ada hasil.")
-            self.rank_vars[title] = variable
-            listing = tk.Frame(
-                frame,
-                background=style_info[1],
-            )
-            listing.pack(fill="x", anchor="w", pady=4)
-            self.rank_lists[title] = listing
-            tk.Label(
-                listing,
-                text="Belum ada hasil.",
-                background=style_info[1],
-                foreground=TEXT_PRIMARY,
-                font=("Segoe UI", 9),
-            ).pack(anchor="w")
+        self.top_department_panel = TopFiveBarList(
+            rankings,
+            title="Top 5 Late HO Departments",
+            accent=ATTENDANCE_OT_CHALK_YELLOW,
+        )
+        self.top_department_panel.grid(
+            row=0, column=0, sticky="nsew", padx=(4, 2), pady=4
+        )
+        self.top_branch_panel = TopFiveBarList(
+            rankings,
+            title="Top 5 Late Branches",
+            accent=ATTENDANCE_OT_CHALK_BLUE,
+        )
+        self.top_branch_panel.grid(
+            row=0, column=1, sticky="nsew", padx=(2, 4), pady=4
+        )
         body.bind_children()
+
+    def _load_kpi_icon(self, icon_name):
+        """Load the transparent ICO directly for an ATT&OT KPI symbol."""
+
+        path = self.context.assets_path / "icons" / icon_name
+        if not path.is_file():
+            return None
+        try:
+            with Image.open(path) as source:
+                image = source.convert("RGBA").resize(
+                    (52, 52), Image.Resampling.LANCZOS
+                )
+            return ImageTk.PhotoImage(image, master=self)
+        except (OSError, RuntimeError, tk.TclError) as exc:
+            self.context.logger.warning("KPI icon cannot be loaded: %s (%s)", path, exc)
+            return None
 
     def _pager(self, parent, tab):
         pager = PaginationBar(
@@ -395,6 +468,7 @@ class AttendanceOTPage(BasePage):
                 state="readonly" if values else "normal",
                 width=10,
                 font=("Segoe UI", 9),
+                style="AttendanceOT.TCombobox",
             ).pack(side="left")
         self._button(controls, "Apply year / class", self.apply_filters).pack(
             side="left", padx=8
@@ -418,7 +492,12 @@ class AttendanceOTPage(BasePage):
         ttk.Label(
             controls, text="Read-only audit search", style="AttendanceOTBody.TLabel"
         ).pack(side="left", padx=4)
-        ttk.Entry(controls, textvariable=self.master_search, font=("Segoe UI", 9)).pack(
+        ttk.Entry(
+            controls,
+            textvariable=self.master_search,
+            font=("Segoe UI", 9),
+            style="AttendanceOT.TEntry",
+        ).pack(
             side="left"
         )
         self._button(controls, "Search master", self.search_master).pack(
@@ -459,45 +538,215 @@ class AttendanceOTPage(BasePage):
             wraplength=900,
         ).grid(row=3, column=0, sticky="ew")
 
+    def _build_data_update(self):
+        frame = self.tabs["Data Update"]
+        frame.rowconfigure(1, weight=0)
+        ttk.Label(
+            frame,
+            text=(
+                "Update memindai folder Settings dan subfoldernya, lalu hanya "
+                "memproses file baru atau berubah. Setiap source memakai transaksi "
+                "terpisah."
+            ),
+            style="AttendanceOTBody.TLabel",
+            wraplength=1000,
+        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        panel = ttk.Frame(frame, style="AttendanceOTSurface.TFrame", padding=8)
+        panel.grid(row=1, column=0, sticky="ew")
+        panel.columnconfigure(1, weight=1)
+        self.data_update_vars = {}
+        specs = (
+            (SourceType.EMPLOYEE, "Update Employee"),
+            (SourceType.SCHEDULE, "Update Schedule"),
+            (SourceType.ATTENDANCE_OT, "Update Attendance & OT"),
+        )
+        for row, (source_type, label) in enumerate(specs):
+            self._button(
+                panel,
+                label,
+                lambda value=source_type: self.update_data_source(value),
+            ).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=5)
+            variable = tk.StringVar(
+                value="Last Update: — | Found: 0 | Processed: 0 | Never"
+            )
+            self.data_update_vars[source_type.value] = variable
+            ttk.Label(
+                panel,
+                textvariable=variable,
+                style="AttendanceOTStatus.TLabel",
+                wraplength=850,
+            ).grid(row=row, column=1, sticky="w", pady=5)
+        self._button(panel, "Update All", self.update_all_data).grid(
+            row=len(specs), column=0, sticky="w", padx=(0, 12), pady=(12, 5)
+        )
+        self.data_update_notice = tk.StringVar()
+        ttk.Label(
+            frame,
+            textvariable=self.data_update_notice,
+            style="AttendanceOTStatus.TLabel",
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=2, column=0, sticky="w", pady=(10, 0))
+
     def _configure_professional_styles(self):
         style = ttk.Style(self)
-        for suffix in ("Surface.TFrame", "Card.TFrame"):
-            style.configure("AttendanceOT" + suffix, background=CARD_BACKGROUND)
-        style.configure("AttendanceOT.TNotebook", background=CARD_BACKGROUND)
         style.configure(
-            "AttendanceOT.TNotebook.Tab", font=("Segoe UI", 9, "bold"), padding=(12, 7)
+            "AttendanceOTPage.TFrame",
+            background=ATTENDANCE_OT_BACKGROUND,
+        )
+        style.configure(
+            "AttendanceOTSurface.TFrame",
+            background=ATTENDANCE_OT_SURFACE,
+        )
+        style.configure(
+            "AttendanceOTCard.TFrame",
+            background=ATTENDANCE_OT_CARD,
+        )
+        style.configure("AttendanceOT.TNotebook", background=ATTENDANCE_OT_SURFACE)
+        style.configure(
+            "AttendanceOT.TNotebook.Tab",
+            background=ATTENDANCE_OT_CARD,
+            foreground=ATTENDANCE_OT_CHALK_WHITE,
+            font=("Segoe UI", 9, "bold"),
+            padding=(12, 7),
+        )
+        style.map(
+            "AttendanceOT.TNotebook.Tab",
+            background=[
+                ("selected", ATTENDANCE_OT_SURFACE),
+                ("active", ATTENDANCE_OT_SELECTION),
+            ],
+            foreground=[
+                ("selected", ATTENDANCE_OT_CHALK_YELLOW),
+                ("active", ATTENDANCE_OT_CHALK_WHITE),
+            ],
         )
         for name, size, weight, color in (
-            ("Title", 14, "bold", MAIN_HEADER),
-            ("Body", 10, "normal", TEXT_SECONDARY),
-            ("Status", 9, "normal", TEXT_PRIMARY),
+            ("Title", 14, "bold", ATTENDANCE_OT_CHALK_YELLOW),
+            ("Body", 10, "normal", ATTENDANCE_OT_CHALK_WHITE),
+            ("Status", 9, "normal", ATTENDANCE_OT_CHALK_BLUE),
         ):
             style.configure(
                 f"AttendanceOT{name}.TLabel",
-                background=CARD_BACKGROUND,
+                background=ATTENDANCE_OT_SURFACE,
                 foreground=color,
                 font=("Segoe UI", size, weight),
             )
-        style.configure("AttendanceOT.TButton", font=("Segoe UI", 9))
-        style.configure("AttendanceOT.Treeview", font=("Segoe UI", 9), rowheight=25)
-        style.configure("AttendanceOT.Treeview.Heading", font=("Segoe UI", 9, "bold"))
-        for name, background, foreground in RANK_CARD_STYLES:
+        style.configure(
+            "AttendanceOTCardBody.TLabel",
+            background=ATTENDANCE_OT_CARD,
+            foreground=ATTENDANCE_OT_CHALK_WHITE,
+            font=("Segoe UI", 10),
+        )
+        style.configure(
+            "AttendanceOTPageStatus.TLabel",
+            background=ATTENDANCE_OT_BACKGROUND,
+            foreground=ATTENDANCE_OT_CHALK_BLUE,
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "AttendanceOTProgress.TLabel",
+            background=ATTENDANCE_OT_SURFACE,
+            foreground=ATTENDANCE_OT_CHALK_YELLOW,
+            font=("Segoe UI", 9, "bold"),
+        )
+        for name, color in (
+            ("AttendanceOT", ATTENDANCE_OT_CHALK_BLUE),
+            ("AttendanceOTSuccess", ATTENDANCE_OT_CHALK_YELLOW),
+            ("AttendanceOTError", ATTENDANCE_OT_CHALK_PINK),
+        ):
             style.configure(
-                f"AttendanceOTRank{name}.TFrame",
-                background=background,
+                f"{name}.Horizontal.TProgressbar",
+                background=color,
+                troughcolor=ATTENDANCE_OT_CARD,
+                bordercolor=ATTENDANCE_OT_CHALK_WHITE,
+                lightcolor=color,
+                darkcolor=color,
+                relief="solid",
+                borderwidth=1,
             )
-            style.configure(
-                f"AttendanceOTRank{name}Title.TLabel",
-                background=background,
-                foreground=foreground,
-                font=("Segoe UI", 11, "bold"),
-            )
-            style.configure(
-                f"AttendanceOTRank{name}Body.TLabel",
-                background=background,
-                foreground=TEXT_PRIMARY,
-                font=("Segoe UI", 9),
-            )
+        style.configure(
+            "AttendanceOT.TButton",
+            background=ATTENDANCE_OT_SURFACE,
+            foreground=ATTENDANCE_OT_CHALK_WHITE,
+            bordercolor=ATTENDANCE_OT_CHALK_BLUE,
+            borderwidth=1,
+            font=("Segoe UI", 9),
+        )
+        style.map(
+            "AttendanceOT.TButton",
+            background=[("pressed", ATTENDANCE_OT_CARD), ("active", ATTENDANCE_OT_SURFACE)],
+            foreground=[("active", ATTENDANCE_OT_CHALK_YELLOW)],
+        )
+        style.configure(
+            "AttendanceOTApply.TButton",
+            background=ATTENDANCE_OT_SURFACE,
+            foreground=ATTENDANCE_OT_CHALK_YELLOW,
+            bordercolor=ATTENDANCE_OT_CHALK_YELLOW,
+            borderwidth=1,
+            font=("Segoe UI", 9, "bold"),
+            padding=(12, 7),
+        )
+        style.map(
+            "AttendanceOTApply.TButton",
+            background=[("pressed", ATTENDANCE_OT_CARD), ("active", ATTENDANCE_OT_SURFACE)],
+            foreground=[("active", ATTENDANCE_OT_CHALK_WHITE)],
+        )
+        style.configure(
+            "AttendanceOTReset.TButton",
+            background=ATTENDANCE_OT_SURFACE,
+            foreground=ATTENDANCE_OT_CHALK_PINK,
+            bordercolor=ATTENDANCE_OT_CHALK_PINK,
+            borderwidth=1,
+            font=("Segoe UI", 9, "bold"),
+            padding=(12, 7),
+        )
+        style.map(
+            "AttendanceOTReset.TButton",
+            background=[("pressed", ATTENDANCE_OT_CARD), ("active", ATTENDANCE_OT_SURFACE)],
+            foreground=[("active", ATTENDANCE_OT_CHALK_WHITE)],
+        )
+        style.configure(
+            "AttendanceOT.TEntry",
+            fieldbackground=ATTENDANCE_OT_CARD,
+            foreground=ATTENDANCE_OT_CHALK_WHITE,
+            bordercolor=ATTENDANCE_OT_CHALK_BLUE,
+            lightcolor=ATTENDANCE_OT_CHALK_BLUE,
+            darkcolor=ATTENDANCE_OT_CHALK_BLUE,
+            insertcolor=ATTENDANCE_OT_CHALK_WHITE,
+        )
+        style.configure(
+            "AttendanceOT.TCombobox",
+            fieldbackground=ATTENDANCE_OT_CARD,
+            background=ATTENDANCE_OT_CARD,
+            foreground=ATTENDANCE_OT_CHALK_WHITE,
+            bordercolor=ATTENDANCE_OT_CHALK_BLUE,
+            arrowcolor=ATTENDANCE_OT_CHALK_YELLOW,
+        )
+        style.map(
+            "AttendanceOT.TCombobox",
+            fieldbackground=[("readonly", ATTENDANCE_OT_CARD)],
+            background=[("active", ATTENDANCE_OT_SURFACE)],
+            foreground=[("disabled", ATTENDANCE_OT_CHALK_BLUE)],
+        )
+        style.configure(
+            "AttendanceOT.Treeview",
+            background=ATTENDANCE_OT_CARD,
+            fieldbackground=ATTENDANCE_OT_CARD,
+            foreground=ATTENDANCE_OT_CHALK_WHITE,
+            font=("Segoe UI", 9),
+            rowheight=25,
+        )
+        style.map(
+            "AttendanceOT.Treeview",
+            background=[("selected", ATTENDANCE_OT_SELECTION)],
+            foreground=[("selected", ATTENDANCE_OT_CHALK_YELLOW)],
+        )
+        style.configure(
+            "AttendanceOT.Treeview.Heading",
+            background=ATTENDANCE_OT_SURFACE,
+            foreground=ATTENDANCE_OT_CHALK_WHITE,
+            font=("Segoe UI", 9, "bold"),
+        )
 
     def on_show(self):
         if not self._storage_checked:
@@ -539,6 +788,8 @@ class AttendanceOTPage(BasePage):
             }
             values["date_from"] = self.date_from_entry.get_iso() or ""
             values["date_to"] = self.date_to_entry.get_iso() or ""
+            if values["employee_status"] == "All":
+                values["employee_status"] = ""
             filters = AnalyticsFilters(
                 **values,
                 **{key: multi.selected for key, multi in self.multis.items()},
@@ -559,12 +810,38 @@ class AttendanceOTPage(BasePage):
     def reset_filters(self):
         for var in self.filter_vars.values():
             var.set("")
+        self.filter_vars["employee_status"].set("All")
         self.class_var.set("")
         for multi in self.multis.values():
             multi.set_selected(())
         self.apply_filters()
 
-    def load_view(self, *, options=False):
+    def _dashboard_view(self, filters, year):
+        """Compose dashboard visuals from existing read-only report methods."""
+
+        with self.queries.snapshot() as session:
+            value = session.dashboard(
+                filters,
+                ranking_keys=("HO Departments", "Branches"),
+            )
+            trends = session.monthly_trends(filters, year)
+        return {
+            **value,
+            "attendance_trend": trends["attendance"],
+            "trend": trends["late"],
+        }
+
+    def _filter_options_for_load(self):
+        """Reuse immutable filter choices until analytics data changes."""
+
+        if self._filter_options_cache is None:
+            self._filter_options_cache = self.queries.filter_options()
+        return self._filter_options_cache
+
+    def _invalidate_filter_options(self):
+        self._filter_options_cache = None
+
+    def load_view(self, *, options=False, on_success=None):
         if not self.queries or self._disposed:
             return
         if self._busy:
@@ -580,14 +857,23 @@ class AttendanceOTPage(BasePage):
         search = self.master_search.get().strip()
 
         def work():
-            return self.queries.view(
-                filters,
-                tab=tab,
-                offset=offset,
-                year=year,
-                master_kind=kind,
-                master_search=search,
-            ), self.queries.filter_options() if options else None
+            if tab == "Dashboard":
+                value = self._dashboard_view(filters, year)
+            elif tab == "Data Update":
+                service = getattr(
+                    self.services, "attendance_ot_import_service", None
+                )
+                value = service.data_update_statuses() if service else ()
+            else:
+                value = self.queries.view(
+                    filters,
+                    tab=tab,
+                    offset=offset,
+                    year=year,
+                    master_kind=kind,
+                    master_search=search,
+                )
+            return value, self._filter_options_for_load() if options else None
 
         def done(result):
             value, choices = result
@@ -596,6 +882,8 @@ class AttendanceOTPage(BasePage):
                 for key, multi in self.multis.items():
                     multi.set_values(choices[key])
             self._render(tab, value, kind)
+            if on_success is not None:
+                on_success()
 
         # Initial and filtered report reads run in the background. They must not
         # trap the user on this page while a large analytics database is read.
@@ -611,25 +899,27 @@ class AttendanceOTPage(BasePage):
                     var.set(f"{number:,.2f}")
                 else:
                     var.set(f"{number:,}")
-            for title, rows in value["rankings"].items():
-                lines = tuple(
-                    (
-                        r.get("employee_name")
-                        or r.get("branch")
-                        or r.get("department")
-                        or r.get("emplid"),
-                        r["late_count"],
-                    )
-                    for r in rows
+            self.attendance_trend_panel.set_values(
+                value.get("attendance_trend", (0,) * len(MONTHS))
+            )
+            self.trend_panel.set_values(value.get("trend", (0,) * len(MONTHS)))
+
+            departments = tuple(
+                (
+                    row.get("department") or "—",
+                    int(row.get("late_count") or 0),
                 )
-                self.rank_vars[title].set(
-                    "\n".join(
-                        f"{index}. {name} — {count:,} LATE RECORDS"
-                        for index, (name, count) in enumerate(lines, 1)
-                    )
-                    or "No late records for these filters."
-                )
-                self._render_ranking_list(title, lines)
+                for row in value["rankings"].get("HO Departments", ())[:5]
+            )
+            branches = tuple(
+                (row.get("branch") or "—", int(row.get("late_count") or 0))
+                for row in value["rankings"].get("Branches", ())[:5]
+            )
+            self.top_department_panel.set_items(departments)
+            self.top_branch_panel.set_items(branches)
+            return
+        if tab == "Data Update":
+            self._render_data_update_statuses(value)
             return
         self.totals[tab] = value.total
         self.pagers[tab].update_state(
@@ -656,55 +946,6 @@ class AttendanceOTPage(BasePage):
             )
         elif tab == "Data Terlambat":
             self.tables[tab].set_rows(value.items)
-
-    def _render_ranking_list(self, title, lines):
-        listing = self.rank_lists[title]
-        for child in listing.winfo_children():
-            child.destroy()
-        background = listing.cget("background")
-        if not lines:
-            tk.Label(
-                listing,
-                text="No late records for these filters.",
-                background=background,
-                foreground=TEXT_PRIMARY,
-                font=("Segoe UI", 9),
-            ).pack(anchor="w")
-            return
-        emphasize_name = title in {
-            "HO Employees",
-            "BRANCH Employees",
-            "Branches",
-            "HO Departments",
-        }
-        for index, (name, count) in enumerate(lines, 1):
-            row = tk.Frame(listing, background=background)
-            row.pack(fill="x", anchor="w", pady=1)
-            if emphasize_name:
-                tk.Label(
-                    row,
-                    text=f"{index}. ",
-                    background=background,
-                    foreground=TEXT_PRIMARY,
-                    font=("Segoe UI", 9),
-                ).pack(side="left")
-                tk.Label(
-                    row,
-                    text=name,
-                    background=background,
-                    foreground=TEXT_PRIMARY,
-                    font=("Segoe UI", 11, "bold"),
-                ).pack(side="left")
-                suffix = f" — {count:,} LATE RECORDS"
-            else:
-                suffix = f"{index}. {name} — {count:,} LATE RECORDS"
-            tk.Label(
-                row,
-                text=suffix,
-                background=background,
-                foreground=TEXT_PRIMARY,
-                font=("Segoe UI", 9),
-            ).pack(side="left")
 
     def turn_page(self, tab, direction):
         if self._busy:
@@ -744,65 +985,84 @@ class AttendanceOTPage(BasePage):
             self.offsets["Detail Data"] = 0
             self.notebook.select(self.tabs["Detail Data"])
 
-    def refresh_data(self):
+    def _legacy_source_refresh(self):
+        self.refresh_data()
+
+    def _render_data_update_statuses(self, results):
+        for result in results:
+            last_update = result.last_update or "—"
+            detail = f" | Error: {result.error_detail}" if result.error_detail else ""
+            variable = self.data_update_vars.get(result.source_type)
+            if variable is not None:
+                variable.set(
+                    f"Last Update: {last_update} | Found: {result.files_found} | "
+                    f"New: {result.files_new} | Changed: {result.files_changed} | "
+                    f"Skipped: {result.files_skipped} | "
+                    f"Processed: {result.files_processed} | "
+                    f"Rows I/U/S: {result.rows_inserted:,}/"
+                    f"{result.rows_updated:,}/{result.rows_unchanged:,} | "
+                    f"{result.duration_seconds:.2f}s | {result.status.title()}"
+                    f"{detail}"
+                )
+
+    def update_data_source(self, source_type):
         service = getattr(self.services, "attendance_ot_import_service", None)
         if service is None:
             return
-
-        def preview_ready(plan):
-            lines = ["REFRESH DATA PREVIEW", ""]
-            for status, label in (
-                ("NEW", "File baru"),
-                ("CHANGED", "File berubah"),
-                ("UNCHANGED", "File tidak berubah"),
-                ("MISSING", "File tidak ditemukan"),
-                ("ERROR", "File error"),
-            ):
-                items = tuple(item for item in plan.files if item.status == status)
-                lines.append(f"{label}: {len(items)}")
-                if status in {"NEW", "CHANGED", "MISSING", "ERROR"}:
-                    lines.extend(
-                        f"- [{item.source_type}] {item.filename}" for item in items
-                    )
-            lines.extend(("", "Lanjutkan Refresh Data?"))
-            if not self.services.dialog_service.confirm(
-                "Refresh Data", "\n".join(lines)
-            ):
-                self.progress_var.set("Refresh Data dibatalkan.")
-                return
-            self.run_task(
-                lambda report: service.refresh(report, plan=plan),
-                done,
-                "Scanning files",
-                reporting=True,
-            )
-
-        def done(result):
-            self.progress_var.set(
-                f"Completed | Processed {result.files_processed} | Skipped {result.files_skipped} | Error {result.files_error} | Rows {result.rows_imported:,}"
-            )
-            if result.files_processed or result.files_error or result.files_missing:
-                message = (
-                    "REFRESH COMPLETED WITH UPDATES\n\n"
-                    f"Files processed: {result.files_processed}\n"
-                    f"Files skipped: {result.files_skipped}\n"
-                    f"Files error: {result.files_error}\n"
-                    f"Rows imported: {result.rows_imported:,}"
-                )
-            else:
-                message = (
-                    "Refresh completed — no source file changes detected.\n\n"
-                    f"Files checked: {result.files_discovered}\n"
-                    f"Files unchanged: {result.files_skipped}"
-                )
-            self.services.dialog_service.info("Refresh Data", message)
-            self.load_view(options=True)
-
         self.run_task(
-            service.prepare_refresh,
-            preview_ready,
-            "Preparing refresh preview",
+            lambda report: service.update_source(source_type, report),
+            lambda result: self._data_update_completed((result,)),
+            f"Updating {source_type.value}",
+            reporting=True,
+            cancellable=False,
         )
+
+    def update_all_data(self):
+        service = getattr(self.services, "attendance_ot_import_service", None)
+        if service is None:
+            return
+        self.run_task(
+            service.update_all,
+            self._data_update_completed,
+            "Updating all Attendance & OT sources",
+            reporting=True,
+            cancellable=False,
+        )
+
+    def _data_update_completed(self, results):
+        results = tuple(results)
+        self._render_data_update_statuses(results)
+        success = tuple(result for result in results if result.status == "SUCCESS")
+        errors = tuple(result for result in results if result.status == "ERROR")
+        if success:
+            self._data_update_pending = True
+            self.data_update_notice.set("Data updated — Refresh to view latest data")
+        lines = [
+            f"{result.source_type}: {result.status.title()} | "
+            f"Found {result.files_found} | New {result.files_new} | "
+            f"Changed {result.files_changed} | Skipped {result.files_skipped} | "
+            f"Processed {result.files_processed} | Rows I/U/S "
+            f"{result.rows_inserted:,}/{result.rows_updated:,}/"
+            f"{result.rows_unchanged:,} | {result.duration_seconds:.2f}s"
+            + (f" | {result.error_detail}" if result.error_detail else "")
+            for result in results
+        ]
+        if errors:
+            self.services.dialog_service.warning("Data Update", "\n".join(lines))
+        else:
+            self.services.dialog_service.info("Data Update", "\n".join(lines))
+
+    def refresh_data(self):
+        """Reload database-backed views only; never scan configured sources."""
+
+        self._invalidate_filter_options()
+
+        def refreshed():
+            self._data_update_pending = False
+            self.data_update_notice.set("")
+            self.progress_var.set("Refresh completed from attendance_ot.db.")
+
+        self.load_view(options=True, on_success=refreshed)
 
     def export_excel(self):
         service = getattr(self.services, "attendance_ot_export_service", None)
@@ -844,8 +1104,8 @@ class AttendanceOTPage(BasePage):
                 window,
                 wrap="word",
                 font=("Segoe UI", 10),
-                background=CARD_BACKGROUND,
-                foreground=TEXT_PRIMARY,
+                background=ATTENDANCE_OT_CARD,
+                foreground=ATTENDANCE_OT_CHALK_WHITE,
                 padx=12,
                 pady=12,
             )
@@ -980,6 +1240,7 @@ class AttendanceOTPage(BasePage):
                 ),
             )
             self.offsets = {tab: 0 for tab in self.TAB_TITLES}
+            self._invalidate_filter_options()
             self.load_view(options=True)
 
         self.run_task(
@@ -1046,6 +1307,7 @@ class AttendanceOTPage(BasePage):
             f"Deleted {value['deleted_records']:,} attendance records.\nBackup: {value['backup']}",
         )
         self.offsets = {tab: 0 for tab in self.TAB_TITLES}
+        self._invalidate_filter_options()
         self.load_view(options=True)
 
     def compact(self):
@@ -1073,7 +1335,7 @@ class AttendanceOTPage(BasePage):
         self._busy = True
         self._navigation_locked = lock_navigation
         self.progress_var.set(message)
-        self.refresh_progress.start(12)
+        self._set_refresh_progress(None)
         for button in self._actions:
             if button.winfo_exists():
                 button.configure(state="disabled")
@@ -1086,22 +1348,31 @@ class AttendanceOTPage(BasePage):
                     )
                 else:
                     self.progress_var.set(str(event))
+                percent = getattr(event, "percent", None)
+                if percent is None and isinstance(event, str):
+                    percent = self._export_progress_percent(event)
+                self._set_refresh_progress(percent)
 
         def done(result):
             if self._disposed:
                 return
             self._busy = False
             self._navigation_locked = False
-            self.refresh_progress.stop()
             self._actions = [
                 button for button in self._actions if button.winfo_exists()
             ]
             for button in self._actions:
                 button.configure(state="normal")
             if result.success:
+                business_error = self._result_contains_errors(result.value)
+                self._set_refresh_progress(
+                    100,
+                    state="error" if business_error else "success",
+                )
                 self.progress_var.set(message + " completed")
                 on_success(result.value)
             else:
+                self._set_refresh_progress(100, state="error")
                 self.progress_var.set(result.error or "Operation failed")
                 self.services.dialog_service.error(
                     message, result.error or "Operation failed"
@@ -1117,6 +1388,55 @@ class AttendanceOTPage(BasePage):
             )
         else:
             runner.submit(function, on_done=done, cancellable=cancellable)
+
+    def _set_refresh_progress(
+        self,
+        percent: int | None,
+        *,
+        state: str = "running",
+    ) -> None:
+        self.refresh_progress.stop()
+        styles = {
+            "running": "AttendanceOT.Horizontal.TProgressbar",
+            "success": "AttendanceOTSuccess.Horizontal.TProgressbar",
+            "error": "AttendanceOTError.Horizontal.TProgressbar",
+        }
+        if percent is None:
+            self.refresh_progress.configure(
+                mode="indeterminate",
+                value=0,
+                style=styles[state],
+            )
+            self.progress_percent_var.set("…")
+            self.refresh_progress.start(12)
+            return
+        value = max(0, min(100, int(percent)))
+        self.refresh_progress.configure(
+            mode="determinate",
+            value=value,
+            style=styles[state],
+        )
+        self.progress_percent_var.set(f"{value}%")
+
+    @staticmethod
+    def _export_progress_percent(message: str) -> int | None:
+        stages = (
+            ("Export Overview", 10),
+            ("Export Late_Summary", 25),
+            ("Export Detail_Data", 45),
+            ("Export Employee_Summary", 70),
+            ("Export Source_Files", 85),
+            ("Export completed", 100),
+        )
+        return next(
+            (percent for prefix, percent in stages if message.startswith(prefix)),
+            None,
+        )
+
+    @staticmethod
+    def _result_contains_errors(value) -> bool:
+        values = value if isinstance(value, (tuple, list)) else (value,)
+        return any(getattr(item, "status", None) == "ERROR" for item in values)
 
     def can_navigate_away(self):
         return not self._navigation_locked

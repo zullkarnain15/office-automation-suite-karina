@@ -9,6 +9,7 @@ from config.app_config import PROJECT_ROOT
 from ui.dialogs.typed_confirmation_dialog import typed_value_matches
 from ui.pages.settings_page import SettingsPage
 from ui.pages.settings.general_section import GeneralSection
+from ui.pages.settings.storage_section import StorageSection
 
 
 class _Widget:
@@ -210,6 +211,21 @@ def test_configuration_preview_and_commit_are_separate_actions() -> None:
     assert "Commit Preview Modules" not in source
 
 
+def test_storage_exposes_attendance_ot_database_manager() -> None:
+    source = (
+        PROJECT_ROOT
+        / "ui"
+        / "pages"
+        / "settings"
+        / "storage_section.py"
+    ).read_text(encoding="utf-8")
+    assert "Kelola Database ATTENDANCE & OT" in source
+    assert "validate_attendance_ot_database_file" in source
+    assert "export_attendance_ot_database" in source
+    assert "import_attendance_ot_database" in source
+    assert "GANTI ATTENDANCE OT" in source
+
+
 def test_settings_on_show_auto_refreshes_read_only_state() -> None:
     source = (
         PROJECT_ROOT / "ui" / "pages" / "settings_page.py"
@@ -250,3 +266,31 @@ def test_general_settings_mouse_wheel_scrolls_canvas() -> None:
 
     assert result == "break"
     assert calls == [(3, "units")]
+
+
+def test_storage_settings_mouse_wheel_scrolls_canvas() -> None:
+    calls = []
+    section = object.__new__(StorageSection)
+    section._canvas = SimpleNamespace(
+        yview=lambda: (0.0, 0.5),
+        yview_scroll=lambda amount, unit: calls.append((amount, unit)),
+    )
+
+    result = section._scroll_page(SimpleNamespace(delta=-30, num=None))
+
+    assert result == "break"
+    assert calls == [(3, "units")]
+
+
+def test_storage_settings_mouse_wheel_is_ignored_when_content_fits() -> None:
+    calls = []
+    section = object.__new__(StorageSection)
+    section._canvas = SimpleNamespace(
+        yview=lambda: (0.0, 1.0),
+        yview_scroll=lambda amount, unit: calls.append((amount, unit)),
+    )
+
+    result = section._scroll_page(SimpleNamespace(delta=-120, num=None))
+
+    assert result is None
+    assert calls == []

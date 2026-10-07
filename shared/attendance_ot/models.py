@@ -79,6 +79,7 @@ class RefreshProgress:
     files_skipped: int = 0
     files_error: int = 0
     rows_imported: int = 0
+    percent: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +123,25 @@ class EnrichmentResult:
     attendance_rows: int
     aggregate_rows: int
     full_rebuild: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DataUpdateResult:
+    source_type: str
+    last_update: str
+    file_count: int
+    record_count: int
+    status: str
+    error_detail: str | None = None
+    files_found: int = 0
+    files_new: int = 0
+    files_changed: int = 0
+    files_skipped: int = 0
+    files_processed: int = 0
+    rows_inserted: int = 0
+    rows_updated: int = 0
+    rows_unchanged: int = 0
+    duration_seconds: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)

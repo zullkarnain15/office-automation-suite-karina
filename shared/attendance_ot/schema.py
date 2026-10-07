@@ -9,7 +9,7 @@ from pathlib import Path
 from shared.database.connection_factory import SQLiteConnectionFactory
 from shared.database.time_utils import current_timestamp
 
-ANALYTICS_SCHEMA_VERSION = 5
+ANALYTICS_SCHEMA_VERSION = 9
 
 V1_TO_V2_STATEMENTS = (
     """
@@ -270,10 +270,186 @@ class AnalyticsSchemaManager:
                 self._migrate_v4_to_v5(database_path)
                 version = 5
                 continue
+            if version == 5:
+                self._migrate_v5_to_v6(database_path)
+                version = 6
+                continue
+            if version == 6:
+                self._migrate_v6_to_v7(database_path)
+                version = 7
+                continue
+            if version == 7:
+                self._migrate_v7_to_v8(database_path)
+                version = 8
+                continue
+            if version == 8:
+                self._migrate_v8_to_v9(database_path)
+                version = 9
+                continue
             raise RuntimeError(
                 f"Migration analytics dari schema v{version} tidak tersedia."
             )
         return version
+
+    def _migrate_v8_to_v9(self, database_path: Path) -> None:
+        """Add lightweight file metadata and persisted incremental metrics."""
+
+        from shared.attendance_ot.backup import verified_backup
+
+        verified_backup(database_path, "before-v9")
+        with self.factory.connect(database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                CREATE TABLE source_file_registry (
+                    source_file_id INTEGER PRIMARY KEY,
+                    source_type TEXT NOT NULL CHECK (
+                        source_type IN ('EMPLOYEE', 'SCHEDULE', 'ATTENDANCE_OT')
+                    ),
+                    full_path TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                    file_size INTEGER NOT NULL CHECK (file_size >= 0),
+                    modified_time_ns INTEGER NOT NULL CHECK (modified_time_ns >= 0),
+                    last_imported TEXT,
+                    status TEXT NOT NULL CHECK (
+                        status IN ('NEW', 'CHANGED', 'UNCHANGED', 'ERROR', 'MISSING')
+                    ),
+                    error_detail TEXT,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX idx_source_file_registry_type_status "
+                "ON source_file_registry(source_type, status)"
+            )
+            connection.execute(
+                """
+                INSERT INTO source_file_registry (
+                    source_type, full_path, file_size, modified_time_ns,
+                    last_imported, status, error_detail, updated_at
+                )
+                SELECT source_type, source_path, size_bytes, modified_time_ns,
+                       imported_at,
+                       CASE WHEN status='ERROR' THEN 'ERROR' ELSE 'UNCHANGED' END,
+                       error_detail, updated_at
+                FROM source_registry
+                """
+            )
+            for column, definition in (
+                ("files_found", "INTEGER NOT NULL DEFAULT 0"),
+                ("files_new", "INTEGER NOT NULL DEFAULT 0"),
+                ("files_changed", "INTEGER NOT NULL DEFAULT 0"),
+                ("files_skipped", "INTEGER NOT NULL DEFAULT 0"),
+                ("files_processed", "INTEGER NOT NULL DEFAULT 0"),
+                ("rows_inserted", "INTEGER NOT NULL DEFAULT 0"),
+                ("rows_updated", "INTEGER NOT NULL DEFAULT 0"),
+                ("rows_unchanged", "INTEGER NOT NULL DEFAULT 0"),
+                ("duration_seconds", "REAL NOT NULL DEFAULT 0"),
+            ):
+                connection.execute(
+                    f"ALTER TABLE data_update_status ADD COLUMN {column} {definition}"
+                )
+            cursor = connection.execute(
+                """
+                UPDATE analytics_metadata
+                SET schema_version=9, last_migrated_at=?
+                WHERE metadata_id=1 AND schema_version=8
+                """,
+                (current_timestamp(),),
+            )
+            if cursor.rowcount != 1:
+                raise sqlite3.DatabaseError("Schema analytics berubah saat migration.")
+            connection.execute("PRAGMA user_version=9")
+
+    def _migrate_v7_to_v8(self, database_path: Path) -> None:
+        """Add compact per-source Data Update status without changing raw data."""
+
+        from shared.attendance_ot.backup import verified_backup
+
+        verified_backup(database_path, "before-v8")
+        with self.factory.connect(database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                CREATE TABLE data_update_status (
+                    source_type TEXT PRIMARY KEY CHECK (
+                        source_type IN ('EMPLOYEE', 'SCHEDULE', 'ATTENDANCE_OT')
+                    ),
+                    last_update TEXT,
+                    file_count INTEGER NOT NULL DEFAULT 0 CHECK (file_count >= 0),
+                    record_count INTEGER NOT NULL DEFAULT 0 CHECK (record_count >= 0),
+                    status TEXT NOT NULL DEFAULT 'NEVER' CHECK (
+                        status IN ('NEVER', 'SUCCESS', 'ERROR')
+                    ),
+                    error_detail TEXT
+                )
+                """
+            )
+            connection.executemany(
+                "INSERT INTO data_update_status(source_type) VALUES (?)",
+                (("EMPLOYEE",), ("SCHEDULE",), ("ATTENDANCE_OT",)),
+            )
+            cursor = connection.execute(
+                """
+                UPDATE analytics_metadata
+                SET schema_version=8, last_migrated_at=?
+                WHERE metadata_id=1 AND schema_version=7
+                """,
+                (current_timestamp(),),
+            )
+            if cursor.rowcount != 1:
+                raise sqlite3.DatabaseError("Schema analytics berubah saat migration.")
+            connection.execute("PRAGMA user_version=8")
+
+    def _migrate_v6_to_v7(self, database_path: Path) -> None:
+        """Invalidate derived rows after aligning status with Master Data."""
+
+        from shared.attendance_ot.backup import verified_backup
+
+        verified_backup(database_path, "before-v7")
+        with self.factory.connect(database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                """
+                UPDATE analytics_metadata
+                SET schema_version=7, last_migrated_at=?, derived_dirty=1
+                WHERE metadata_id=1 AND schema_version=6
+                """,
+                (current_timestamp(),),
+            )
+            if cursor.rowcount != 1:
+                raise sqlite3.DatabaseError("Schema analytics berubah saat migration.")
+            connection.execute("PRAGMA user_version=7")
+
+    def _migrate_v5_to_v6(self, database_path: Path) -> None:
+        """Retain transaction-owned job title and materialize employee status."""
+
+        from shared.attendance_ot.backup import verified_backup
+
+        verified_backup(database_path, "before-v6")
+        with self.factory.connect(database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("ALTER TABLE attendance_records ADD COLUMN job_title TEXT")
+            connection.execute(
+                "ALTER TABLE enriched_attendance ADD COLUMN employee_status "
+                "TEXT NOT NULL DEFAULT 'Unmapped' CHECK ("
+                "employee_status IN ('Active', 'Inactive', 'Unmapped'))"
+            )
+            connection.execute(
+                "CREATE INDEX idx_enriched_attendance_employee_status_date "
+                "ON enriched_attendance(employee_status, attendance_date)"
+            )
+            cursor = connection.execute(
+                """
+                UPDATE analytics_metadata
+                SET schema_version=6, last_migrated_at=?, derived_dirty=1
+                WHERE metadata_id=1 AND schema_version=5
+                """,
+                (current_timestamp(),),
+            )
+            if cursor.rowcount != 1:
+                raise sqlite3.DatabaseError("Schema analytics berubah saat migration.")
+            connection.execute("PRAGMA user_version=6")
 
     def _migrate_v4_to_v5(self, database_path: Path) -> None:
         from shared.attendance_ot.backup import verified_backup

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 
 STATUSES = ("ON_TIME", "LATE", "OFF_DAY", "NO_SCHEDULE", "UNMAPPED_SCHEDULE")
+EMPLOYEE_STATUSES = ("Active", "Inactive", "Unmapped")
 MONTHS = (
     "Jan",
     "Feb",
@@ -26,6 +27,7 @@ DETAIL_COLUMNS = (
     "pay_group",
     "emplid",
     "employee_name",
+    "employee_status",
     "date_in",
     "date_out",
     "actual_time_in",
@@ -47,6 +49,7 @@ DETAIL_LABELS = (
     "Pay Group",
     "EMPLID",
     "Name",
+    "Employee Status",
     "Date In",
     "Date Out",
     "Actual In",
@@ -134,6 +137,7 @@ class AnalyticsFilters:
     divisions: tuple[str, ...] = ()
     search: str = ""
     status: str = ""
+    employee_status: str = ""
     classification: str = ""
     emplid: str = ""
 
@@ -151,6 +155,8 @@ class AnalyticsFilters:
             raise ValueError("Date From harus <= Date To.")
         if self.status and self.status not in STATUSES:
             raise ValueError("Attendance Status tidak valid.")
+        if self.employee_status and self.employee_status not in EMPLOYEE_STATUSES:
+            raise ValueError("Employee Status tidak valid.")
         if self.classification not in ("", "HO", "BRANCH"):
             raise ValueError("Classification tidak valid.")
 
@@ -184,6 +190,7 @@ class AnalyticsFilters:
             (time_col, ">=", self.date_from),
             (time_col, "<=", self.date_to),
             (prefix + "late_status", "=", self.status),
+            (prefix + "employee_status", "=", self.employee_status),
             (prefix + "classification", "=", self.classification),
             (prefix + "emplid", "=", self.emplid),
         ):
@@ -202,11 +209,13 @@ class AnalyticsFilters:
                 )
                 values.extend(choices)
         if self.search:
-            # instr treats %, _ and quotes literally; identifiers remain text.
+            search = self.search.strip()
+            # Non-exact text keeps the existing contains semantics. Exact NIK is
+            # promoted to indexed equality by ReportingSession._resolved_filters.
             clauses.append(
                 f"(instr(lower({prefix}emplid), lower(?)) > 0 OR instr(lower(COALESCE({prefix}employee_name,'')), lower(?)) > 0)"
             )
-            values.extend((self.search, self.search))
+            values.extend((search, search))
         return " AND ".join(clauses) or "1=1", tuple(values)
 
 
@@ -223,9 +232,36 @@ class ReportingSession:
 
     def __init__(self, connection):
         self.connection = connection
+        self._exact_search_cache: dict[str, bool] = {}
+
+    def _resolved_filters(self, filters):
+        """Turn an exact NIK typed in NIK/Name into an indexed equality."""
+
+        search = filters.search.strip()
+        if not search or filters.emplid:
+            return filters
+        exact = self._exact_search_cache.get(search)
+        if exact is None:
+            exact = (
+                self.connection.execute(
+                    "SELECT 1 FROM enriched_attendance WHERE emplid=? LIMIT 1",
+                    (search,),
+                ).fetchone()
+                is not None
+            )
+            self._exact_search_cache[search] = exact
+        if exact:
+            return replace(filters, search="", emplid=search)
+        return filters
 
     def relation(self, filters):
-        monthly = not (filters.date_from or filters.date_to or filters.status)
+        filters = self._resolved_filters(filters)
+        monthly = not (
+            filters.date_from
+            or filters.date_to
+            or filters.status
+            or filters.employee_status
+        )
         where, args = filters.sql(monthly=monthly)
         if monthly:
             sql = f"SELECT year_month, emplid, employee_name, classification, branch, department, division, pay_group, total_records, late_count, total_ot_minutes, ot_amount, meal_ot_amount FROM analytics_monthly_employee WHERE {where}"
@@ -233,7 +269,7 @@ class ReportingSession:
             sql = f"SELECT substr(attendance_date,1,7) year_month, emplid, employee_name, classification, branch, department, division, pay_group, 1 total_records, CASE WHEN late_status='LATE' THEN 1 ELSE 0 END late_count, total_ot_minutes, ot_amount, meal_ot_amount FROM enriched_attendance WHERE {where}"
         return sql, args
 
-    def dashboard(self, filters):
+    def dashboard(self, filters, *, ranking_keys=None):
         sql, args = self.relation(filters)
         row = self.connection.execute(
             f"""WITH filtered AS ({sql})
@@ -242,8 +278,7 @@ class ReportingSession:
             COALESCE(SUM(ot_amount),0) ot_amount, COALESCE(SUM(meal_ot_amount),0) meal_amount FROM filtered""",
             args,
         ).fetchone()
-        rankings = {}
-        for key, dims, condition in (
+        ranking_specs = (
             (
                 "HO Employees",
                 "emplid, MAX(employee_name) employee_name",
@@ -264,7 +299,14 @@ class ReportingSession:
                 "department",
                 "classification='HO' AND COALESCE(department,'')<>''",
             ),
-        ):
+        )
+        if ranking_keys is not None:
+            requested = frozenset(ranking_keys)
+            ranking_specs = tuple(
+                spec for spec in ranking_specs if spec[0] in requested
+            )
+        rankings = {}
+        for key, dims, condition in ranking_specs:
             group = dims.split(",")[0]
             rankings[key] = tuple(
                 dict(r)
@@ -277,7 +319,42 @@ class ReportingSession:
             )
         return {"kpi": dict(row), "rankings": rankings}
 
+    def monthly_trends(self, filters, year):
+        """Return Jan-Dec record and late totals without loading detail rows."""
+
+        if not 1 <= int(year) <= 9999:
+            raise ValueError("Year tidak valid.")
+        sql, args = self.relation(filters)
+        rows = self.connection.execute(
+            f"""WITH filtered AS ({sql})
+            SELECT substr(year_month,6,2) month,
+                   COALESCE(SUM(total_records),0) attendance_records,
+                   COALESCE(SUM(late_count),0) late_records
+            FROM filtered
+            WHERE year_month>=? AND year_month<?
+            GROUP BY month ORDER BY month""",
+            args + (f"{int(year):04d}-01", f"{int(year) + 1:04d}-01"),
+        ).fetchall()
+        by_month = {
+            str(row["month"]): (
+                int(row["attendance_records"]),
+                int(row["late_records"]),
+            )
+            for row in rows
+        }
+        return {
+            "attendance": tuple(
+                by_month.get(f"{index:02d}", (0, 0))[0]
+                for index in range(1, 13)
+            ),
+            "late": tuple(
+                by_month.get(f"{index:02d}", (0, 0))[1]
+                for index in range(1, 13)
+            ),
+        }
+
     def detail_sql(self, filters):
+        filters = self._resolved_filters(filters)
         where, args = filters.sql(alias="e")
         raw_fields = {"date_in", "date_out", "source_file"}
         fields = ", ".join(
@@ -293,6 +370,7 @@ class ReportingSession:
 
     def details(self, filters, limit=200, offset=0):
         limit, offset = self._bounds(limit, offset)
+        filters = self._resolved_filters(filters)
         where, args = filters.sql()
         total = self.connection.execute(
             f"SELECT COUNT(*) FROM enriched_attendance WHERE {where}", args
