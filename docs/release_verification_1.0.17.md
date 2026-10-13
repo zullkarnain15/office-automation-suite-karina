@@ -1,6 +1,6 @@
 # OAS-K 1.0.17 Release Verification
 
-Date: 8 October 2026
+Date: 13 October 2026
 Status: PASS
 
 ## Production database gate
@@ -29,9 +29,7 @@ integrity check passed, and the existing attendance fixture was unchanged.
 
 ## Automated validation
 
-- Mandatory update and startup-migration suites: 57 passed.
-- Full regression suite: 1026 passed.
-- Changed-file Ruff checks: PASS.
+- Mandatory update, startup-migration, and Attendance & OT suites: 70 passed.
 - PyInstaller updater build: PASS.
 - PyInstaller application build: PASS.
 - Frozen Tk application shell smoke test: PASS.
@@ -45,15 +43,15 @@ integrity check passed, and the existing attendance fixture was unchanged.
 ## Artifacts
 
 - Package: `dist/release/v1.0.17/OAS-K_Update_v1.0.17.zip`
-- Package size: 88,892,122 bytes
+- Package size: 99,898,162 bytes
 - Package SHA-256:
-  `4643f5346ff7c2b577f7ade4cf5c366328dac1b788cf628a9a3455daeeb6a36d`
+  `b13c6de5357314ce866879e48d2482c5c31d57c34a84269657e6bc19fcb17929`
 - Executable: `dist/release/v1.0.17/application/OAS-K.exe`
-- Executable size: 89,572,120 bytes
+- Executable size: 100,615,266 bytes
 - Executable SHA-256:
-  `bd33cbc0eeb418a2c1505dd3a16cd5f6ac8feb32ec8cc6783c6114ef1c554a79`
+  `cde5b0a9d81d04728139d9d2bf31373fa4825d75fad1d04e52daa9f3373d5fba`
 - Updater SHA-256:
-  `c5e961bdd7e713fdac23528c6d2d84c5d2021e9d3734b280b8d9e8aad46a99ac`
+  `819eac5df20dae8dedc256063d25e356137ab95643eaa51a59a499fa80491c7e`
 
 ## Package manifest
 

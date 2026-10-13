@@ -4,18 +4,21 @@ OAS-K 1.0.17
 Release production untuk OAS-K core database schema 4 dan database analytics
 Attendance & OT schema 9.
 
-Attendance & OT Academic Chalkboard:
-- Menambahkan tema terpusat yang hanya berlaku pada modul Attendance & OT.
-- Menambahkan font private Cabin Sketch dan Fredericka the Great dengan
-  fallback aman tanpa instalasi permanen atau akses administrator.
-- Memperjelas judul, KPI, grafik, tabel, status, tab sage seragam, dan chalk
-  border.
-- Menggunakan permukaan warna solid tanpa background PNG agar konten tetap
-  terbaca dan rendering resize tetap ringan.
-- Memperjelas tombol Apply, Reset, filter multi-select, dan Data Update dengan
-  warna pastel terang serta kontras teks yang lebih baik.
-- Status Data Update berwarna kuning sebelum update, putih setelah berhasil,
-  dan pink ketika terjadi error.
+Tampilan Attendance & OT dan Fingerprint Monitoring:
+- Attendance & OT menggunakan tema default yang seragam dengan modul lain;
+  tidak lagi menggunakan tampilan Chalkboard.
+- Font pixel dipakai secara terbatas pada header tabel dan tombol; teks
+  dashboard, tab, dan isi tabel menggunakan font standar agar terbaca jelas.
+- Warna teks Dashboard dan Data Terlambat dikontraskan kembali agar tidak
+  putih di atas latar terang. Detail data memakai garis dan zebra striping
+  ringan agar baris lebih mudah dibaca.
+- Fingerprint Monitoring mengikuti tema default, dengan indikator online
+  hijau yang terlihat jelas, teks status perangkat netral, dan progress
+  percentage yang tidak terpotong.
+- Tab History pada Fingerprint Monitoring menyediakan tombol kalender untuk
+  tanggal From dan To.
+- Database Maintenance Attendance & OT dipindahkan ke Settings > Storage &
+  Database agar toolbar utama lebih ringkas.
 
 Application shell:
 - Status database pada footer kini disinkronkan setelah startup, System Health,
