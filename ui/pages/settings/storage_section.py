@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import tkinter as tk
 from tkinter import ttk
 
@@ -13,6 +14,7 @@ from ui.dialogs.database_validation_dialog import DatabaseValidationDialog
 from ui.dialogs.operation_result_dialog import OperationResultDialog
 from ui.pages.settings.common import SettingsSection
 from ui.widgets import ResultSummary
+from shared.attendance_ot.reporting import AnalyticsFilters
 
 
 class StorageSection(SettingsSection):
@@ -112,19 +114,25 @@ class StorageSection(SettingsSection):
             button.grid(row=0, column=column, sticky="ew", padx=4, pady=4)
             self.page.register_action(button)
 
+        maintenance_button = ttk.Button(
+            attendance_buttons,
+            text="Database Maintenance",
+            command=self.attendance_ot_maintenance,
+        )
+        maintenance_button.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            padx=4,
+            pady=4,
+        )
+        self.page.register_action(maintenance_button)
         manage_button = ttk.Button(
             attendance_buttons,
             text="Kelola Database ATTENDANCE & OT",
             command=self.manage_attendance_ot_database,
         )
-        manage_button.grid(
-            row=1,
-            column=0,
-            columnspan=2,
-            sticky="ew",
-            padx=4,
-            pady=4,
-        )
+        manage_button.grid(row=1, column=1, sticky="ew", padx=4, pady=4)
         self.page.register_action(manage_button)
         self._bind_page_scrolling(viewport)
 
@@ -341,6 +349,121 @@ class StorageSection(SettingsSection):
             lambda: self.services.storage_service.validate_database(database),
             on_success=done,
             message="Memvalidasi database...",
+        )
+
+    def attendance_ot_maintenance(self) -> None:
+        service = getattr(self.services, "attendance_ot_maintenance_service", None)
+        if service is None:
+            self.services.dialog_service.warning(
+                "Database Maintenance",
+                "Service maintenance ATTENDANCE & OT tidak tersedia.",
+            )
+            return
+
+        def show(info) -> None:
+            window = tk.Toplevel(self)
+            window.title("ATTENDANCE & OT — Database Maintenance")
+            window.transient(self.winfo_toplevel())
+            window.configure(background=MAIN_BACKGROUND)
+            window.columnconfigure(0, weight=1)
+            details = "\n".join(
+                f"{key.replace('_', ' ').title()}: {value if value is not None else '-'}"
+                for key, value in info.items()
+            )
+            ttk.Label(
+                window,
+                text=(
+                    details
+                    + "\n\nPurge menghapus attendance pada periode terpilih. "
+                    "Reset menghapus seluruh data analytics. Backup terverifikasi "
+                    "dibuat sebelum data diubah."
+                ),
+                justify="left",
+                wraplength=720,
+            ).grid(row=0, column=0, sticky="ew", padx=16, pady=16)
+            actions = ttk.Frame(window)
+            actions.grid(row=1, column=0, pady=(0, 16))
+            for label, command in (
+                ("Purge Period/Year", lambda: self._preview_attendance_ot_cleanup("PURGE")),
+                ("Reset Analytics Database", lambda: self._preview_attendance_ot_cleanup("RESET")),
+                ("Compact / VACUUM", self._compact_attendance_ot_database),
+            ):
+                ttk.Button(actions, text=label, command=command).pack(
+                    side="left", padx=4
+                )
+
+        self.page.run_task(
+            service.info,
+            on_success=show,
+            message="Membaca status maintenance ATTENDANCE & OT...",
+        )
+
+    def _preview_attendance_ot_cleanup(self, operation: str) -> None:
+        service = self.services.attendance_ot_maintenance_service
+        low = high = ""
+        if operation == "PURGE":
+            value = self.services.dialog_service.prompt_text(
+                "Purge Period/Year",
+                "Hapus attendance untuk periode YYYY atau YYYY-MM:",
+            )
+            if value is None:
+                return
+            try:
+                value = value.strip()
+                AnalyticsFilters(period=value)
+                if not value:
+                    raise ValueError("Period wajib diisi.")
+                year = int(value[:4])
+                if len(value) == 4:
+                    low, high = f"{year:04d}-01-01", f"{year:04d}-12-31"
+                else:
+                    month = int(value[5:7])
+                    low, high = value + "-01", value + f"-{calendar.monthrange(year, month)[1]:02d}"
+            except ValueError as exc:
+                self.services.dialog_service.warning("Purge", str(exc))
+                return
+
+        def confirm(preview) -> None:
+            if not self.services.dialog_service.typed_confirm(
+                operation,
+                preview.describe()
+                + f"\n\nBackup dibuat dahulu. Ketik {operation} untuk menghapus data.",
+                operation,
+            ):
+                return
+            self.page.run_task(
+                lambda: service.execute(preview, confirmation=operation),
+                on_success=self._attendance_ot_cleanup_done,
+                message=f"Menjalankan {operation} ATTENDANCE & OT...",
+                destructive=True,
+                cancellable=False,
+            )
+
+        self.page.run_task(
+            lambda: service.preview(operation, low, high),
+            on_success=confirm,
+            message="Menyiapkan ringkasan penghapusan ATTENDANCE & OT...",
+        )
+
+    def _attendance_ot_cleanup_done(self, value) -> None:
+        self.show_status(self.services.storage_service.resolve_status())
+        self.services.dialog_service.info(
+            "Database Maintenance",
+            f"Deleted {value['deleted_records']:,} attendance records.\n"
+            f"Backup: {value['backup']}",
+        )
+
+    def _compact_attendance_ot_database(self) -> None:
+        service = self.services.attendance_ot_maintenance_service
+        self.page.run_task(
+            service.vacuum,
+            on_success=lambda value: self.services.dialog_service.info(
+                "VACUUM",
+                f"Compact selesai. Size: {value['size_bytes']:,} bytes",
+            ),
+            message="Memadatkan database ATTENDANCE & OT...",
+            destructive=True,
+            cancellable=False,
         )
 
     def manage_attendance_ot_database(self) -> None:

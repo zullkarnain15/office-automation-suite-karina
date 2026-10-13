@@ -220,6 +220,8 @@ def test_storage_exposes_attendance_ot_database_manager() -> None:
         / "storage_section.py"
     ).read_text(encoding="utf-8")
     assert "Kelola Database ATTENDANCE & OT" in source
+    assert "Database Maintenance" in source
+    assert "attendance_ot_maintenance" in source
     assert "validate_attendance_ot_database_file" in source
     assert "export_attendance_ot_database" in source
     assert "import_attendance_ot_database" in source

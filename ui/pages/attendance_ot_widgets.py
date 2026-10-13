@@ -430,9 +430,13 @@ class DataTable(ttk.Frame):
         hierarchy=False,
         header_colors=None,
         theme=None,
+        tree_style="AttendanceOT.Treeview",
+        frame_style="AttendanceOTSurface.TFrame",
+        zebra_stripes=False,
     ):
         self.theme = _theme(theme)
-        super().__init__(parent, style="AttendanceOTSurface.TFrame")
+        self.zebra_stripes = zebra_stripes
+        super().__init__(parent, style=frame_style)
         columns = tuple(columns)
         labels = tuple(labels or columns)
         self.header_colors = dict(header_colors or {})
@@ -444,10 +448,21 @@ class DataTable(ttk.Frame):
             self,
             columns=columns,
             show="tree headings" if hierarchy else "headings",
-            style="AttendanceOT.Treeview",
+            style=tree_style,
             selectmode="extended",
             height=8,
         )
+        if self.zebra_stripes:
+            self.tree.tag_configure(
+                "detail-even",
+                background=self.theme.palette.card,
+                foreground=self.theme.palette.ink,
+            )
+            self.tree.tag_configure(
+                "detail-odd",
+                background=self.theme.palette.surface,
+                foreground=self.theme.palette.ink,
+            )
         for column, label in zip(columns, labels):
             self.tree.column(column, width=145, minwidth=70, stretch=False)
             self.tree.heading(column, text=label, anchor="center")
@@ -485,6 +500,8 @@ class DataTable(ttk.Frame):
                 values=tuple(
                     item.get(c) if item.get(c) is not None else "" for c in columns
                 ),
+                tags=(("detail-even" if index % 2 == 0 else "detail-odd",)
+                      if self.zebra_stripes else ()),
             )
 
 

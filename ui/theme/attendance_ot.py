@@ -150,4 +150,36 @@ def apply_attendance_ot_styles(root: tk.Misc, theme: AttendanceOTTheme) -> ttk.S
     style.configure("AttendanceOT.Treeview", background=colors.card, fieldbackground=colors.card, foreground=colors.ink, font=(fonts.ui_family, 9), rowheight=25)
     style.map("AttendanceOT.Treeview", background=[("selected", colors.selection)], foreground=[("selected", colors.chalk_white)])
     style.configure("AttendanceOT.Treeview.Heading", background=colors.selection, foreground=colors.chalk_white, font=(fonts.heading_family, 9, "bold"))
+    style.configure(
+        "AttendanceOTDetail.TFrame",
+        background=colors.card,
+        bordercolor=colors.ink,
+        relief="solid",
+        borderwidth=1,
+    )
+    style.configure(
+        "AttendanceOTDetail.Treeview",
+        background=colors.card,
+        fieldbackground=colors.card,
+        foreground=colors.ink,
+        bordercolor=colors.ink,
+        relief="solid",
+        borderwidth=1,
+        font=(fonts.ui_family, 9),
+        rowheight=25,
+    )
+    style.map(
+        "AttendanceOTDetail.Treeview",
+        background=[("selected", colors.selection)],
+        foreground=[("selected", colors.chalk_white)],
+    )
+    style.configure(
+        "AttendanceOTDetail.Treeview.Heading",
+        background=colors.selection,
+        foreground=colors.chalk_white,
+        bordercolor=colors.ink,
+        relief="solid",
+        borderwidth=1,
+        font=(fonts.heading_family, 9, "bold"),
+    )
     return style

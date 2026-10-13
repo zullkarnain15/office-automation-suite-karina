@@ -273,7 +273,7 @@ def test_source_files_tab_has_refresh_and_registry_columns(tk_root, tmp_path) ->
     page = AttendanceOTPage(tk_root, context)
 
     assert page.refresh_button.cget("text") == "Refresh Data"
-    assert page.maintenance_button.cget("text") == "Database Maintenance"
+    assert not hasattr(page, "maintenance_button")
     assert page.duplicate_button.cget("text") == "Cek Duplicate Data"
     assert tuple(page.source_tree.heading(column, "text") for column in page.source_tree["columns"]) == (
         "File",
@@ -362,11 +362,7 @@ def test_detail_data_highlights_actual_and_attendance_headers(
     page = AttendanceOTPage(tk_root, context)
     table = page.tables["Detail Data"]
 
-    assert table.header_colors == {
-        "actual_time_in": ATTENDANCE_OT_CHALK_BLUE,
-        "actual_time_out": ATTENDANCE_OT_CHALK_BLUE,
-        "late_status": ATTENDANCE_OT_CHALK_PINK,
-    }
+    assert table.header_colors == {}
     assert table.heading_images == {}
 
 

@@ -45,12 +45,6 @@ from ui.widgets import DateEntry
 from ui.widgets.pagination_bar import PaginationBar
 
 
-DETAIL_HEADER_COLORS = {
-    "actual_time_in": ATTENDANCE_OT_CHALK_BLUE,
-    "actual_time_out": ATTENDANCE_OT_CHALK_BLUE,
-    "late_status": ATTENDANCE_OT_CHALK_PINK,
-}
-
 KPI_CARD_SPECS = (
     ("records", "Records", ATTENDANCE_OT_CHALK_BLUE, "records.ico"),
     ("employees", "Employees", ATTENDANCE_OT_CHALK_YELLOW, "employee.ico"),
@@ -135,14 +129,10 @@ class AttendanceOTPage(BasePage):
             style="AttendanceOT.TCombobox",
         ).pack(side="left", padx=(12, 4))
         self._button(toolbar, "Export Excel", self.export_excel).pack(side="left")
-        self.maintenance_button = self._button(
-            toolbar, "Database Maintenance", self.maintenance
-        )
-        self.maintenance_button.pack(side="left", padx=(8, 4))
         self.duplicate_button = self._button(
             toolbar, "Cek Duplicate Data", self.duplicate_data
         )
-        self.duplicate_button.pack(side="left", padx=(4, 8))
+        self.duplicate_button.pack(side="left", padx=(8, 8))
         progress_area = ttk.Frame(toolbar, style="AttendanceOTSurface.TFrame")
         progress_area.pack(side="right")
         self.refresh_progress = ttk.Progressbar(
@@ -456,8 +446,10 @@ class AttendanceOTPage(BasePage):
             frame,
             DETAIL_COLUMNS,
             DETAIL_LABELS,
-            header_colors=DETAIL_HEADER_COLORS,
             theme=self.visual_theme,
+            tree_style="AttendanceOTDetail.Treeview",
+            frame_style="AttendanceOTDetail.TFrame",
+            zebra_stripes=True,
         )
         self.tables["Detail Data"].grid(row=1, column=0, sticky="nsew")
         self.pagers["Detail Data"] = self._pager(frame, "Detail Data")
