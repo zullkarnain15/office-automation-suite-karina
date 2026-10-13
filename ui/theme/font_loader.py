@@ -7,11 +7,13 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from tkinter import TclError
 from tkinter import font as tkfont
 
 from ui.theme.typography import RetroTypography, typography
 
 FR_PRIVATE = 0x10
+_LOADED_PRIVATE_FONT_PATHS: set[Path] = set()
 
 
 @dataclass(frozen=True)
@@ -25,10 +27,10 @@ class FontLoadResult:
     mono_family: str
 
 
-def _font_available(family: str) -> bool:
+def font_available(family: str, root=None) -> bool:
     try:
-        return family in set(tkfont.families())
-    except RuntimeError:
+        return family in set(tkfont.families(root))
+    except (RuntimeError, TclError, TypeError):
         return False
 
 
@@ -37,6 +39,47 @@ def _add_private_windows_font(path: Path) -> bool:
     add_font.argtypes = [ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_void_p]
     add_font.restype = ctypes.c_int
     return add_font(str(path), FR_PRIVATE, None) > 0
+
+
+def load_private_font_files(
+    paths: tuple[Path, ...],
+    *,
+    logger: logging.Logger | None = None,
+) -> tuple[tuple[Path, ...], tuple[Path, ...], tuple[Path, ...]]:
+    """Load font files for this process and return loaded/missing/failed paths.
+
+    Windows uses ``FR_PRIVATE`` so no font is installed system-wide and no
+    administrator access or Registry write is required. Successful paths are
+    remembered to make repeated page construction and tests idempotent.
+    """
+
+    log = logger or logging.getLogger(__name__)
+    loaded: list[Path] = []
+    missing: list[Path] = []
+    failed: list[Path] = []
+    for raw_path in paths:
+        path = Path(raw_path).resolve()
+        if not path.is_file():
+            missing.append(path)
+            continue
+        if path in _LOADED_PRIVATE_FONT_PATHS:
+            loaded.append(path)
+            continue
+        if sys.platform == "win32":
+            try:
+                if _add_private_windows_font(path):
+                    _LOADED_PRIVATE_FONT_PATHS.add(path)
+                    loaded.append(path)
+                else:
+                    failed.append(path)
+            except (AttributeError, OSError) as exc:
+                log.warning("Theme font failed to load: %s (%s)", path, exc)
+                failed.append(path)
+        else:
+            # Non-Windows platforms cannot use the Windows private-font API.
+            # Family resolution below still chooses an installed fallback.
+            failed.append(path)
+    return tuple(loaded), tuple(missing), tuple(failed)
 
 
 def load_theme_fonts(
@@ -48,40 +91,22 @@ def load_theme_fonts(
 
     log = logger or logging.getLogger(__name__)
     attempted = spec.expected_files
-    loaded: list[Path] = []
-    missing: list[Path] = []
-    failed: list[Path] = []
+    loaded, missing, failed = load_private_font_files(attempted, logger=log)
 
-    for path in attempted:
-        if not path.is_file():
-            missing.append(path)
-            continue
-        if sys.platform == "win32":
-            try:
-                if _add_private_windows_font(path):
-                    loaded.append(path)
-                else:
-                    failed.append(path)
-            except (AttributeError, OSError) as exc:
-                log.warning("Theme font failed to load: %s (%s)", path, exc)
-                failed.append(path)
-        else:
-            loaded.append(path)
-
-    ui_family = spec.ui_family if _font_available(spec.ui_family) else spec.ui_fallback
+    ui_family = spec.ui_family if font_available(spec.ui_family) else spec.ui_fallback
     display_family = (
         spec.display_family
-        if _font_available(spec.display_family)
+        if font_available(spec.display_family)
         else spec.display_fallback
     )
     mono_family = (
-        spec.mono_family if _font_available(spec.mono_family) else spec.mono_fallback
+        spec.mono_family if font_available(spec.mono_family) else spec.mono_fallback
     )
     return FontLoadResult(
         attempted=attempted,
-        loaded=tuple(loaded),
-        missing=tuple(missing),
-        failed=tuple(failed),
+        loaded=loaded,
+        missing=missing,
+        failed=failed,
         ui_family=ui_family,
         display_family=display_family,
         mono_family=mono_family,

@@ -17,7 +17,6 @@ from ui.constants import (
     ATTENDANCE_OT_CHALK_WHITE,
     ATTENDANCE_OT_CHALK_YELLOW,
     ATTENDANCE_OT_SELECTION,
-    ATTENDANCE_OT_SURFACE,
 )
 from ui.context import AppContext
 from ui.pages.attendance_ot_page import AttendanceOTPage
@@ -61,6 +60,40 @@ def test_attendance_ot_page_has_six_tabs_and_data_update_actions(
         "Update Attendance & OT",
         "Update All",
     }
+    style = ttk.Style(page)
+    expected_button_styles = {
+        "EMPLOYEE": (
+            "AttendanceOTDataUpdateEmployee.TButton",
+            page.visual_theme.palette.tab_mint,
+        ),
+        "SCHEDULE": (
+            "AttendanceOTDataUpdateSchedule.TButton",
+            page.visual_theme.palette.tab_yellow,
+        ),
+        "ATTENDANCE_OT": (
+            "AttendanceOTDataUpdateAttendance.TButton",
+            page.visual_theme.palette.tab_blue,
+        ),
+    }
+    for source_type, button in page.data_update_buttons.items():
+        style_name, color = expected_button_styles[source_type]
+        assert button.cget("style") == style_name
+        assert int(button.cget("width")) == 24
+        assert style.lookup(style_name, "background") == color
+    assert page.data_update_all_button.cget("style") == (
+        "AttendanceOTDataUpdateAll.TButton"
+    )
+    assert int(page.data_update_all_button.cget("width")) == 24
+    assert style.lookup(
+        "AttendanceOTDataUpdateAll.TButton", "background"
+    ) == page.visual_theme.palette.tab_orange
+    assert all(
+        label.cget("style") == "AttendanceOTDataUpdatePending.TLabel"
+        for label in page.data_update_labels.values()
+    )
+    assert style.lookup(
+        "AttendanceOTDataUpdatePending.TLabel", "foreground"
+    ) == page.visual_theme.palette.chalk_muted
     prompt_buttons = {
         child.cget("text")
         for container in page.prompt_frame.winfo_children()
@@ -106,7 +139,7 @@ def test_attendance_ot_progress_bar_shows_color_and_percentage(
     )
     assert style.lookup(
         "AttendanceOTSuccess.Horizontal.TProgressbar", "background"
-    ) == ATTENDANCE_OT_CHALK_YELLOW
+    ) == page.visual_theme.palette.filter_mint
 
 
 def test_data_update_pending_indicator_and_database_only_refresh(
@@ -164,6 +197,13 @@ def test_data_update_pending_indicator_and_database_only_refresh(
     assert "Changed: 1" in rendered
     assert "Rows I/U/S: 40/5/5" in rendered
     assert "1.25s" in rendered
+    assert page.data_update_labels["EMPLOYEE"].cget("style") == (
+        "AttendanceOTDataUpdateComplete.TLabel"
+    )
+    style = ttk.Style(page)
+    assert style.lookup(
+        "AttendanceOTDataUpdateComplete.TLabel", "foreground"
+    ) == page.visual_theme.palette.filter_mint
     calls = []
     page._invalidate_filter_options = lambda: calls.append("invalidate")
     page.load_view = lambda **kwargs: calls.append(kwargs)
@@ -177,7 +217,7 @@ def test_data_update_pending_indicator_and_database_only_refresh(
     assert page.progress_var.get() == "Refresh completed from attendance_ot.db."
 
 
-def test_attendance_ot_content_uses_professional_windows_font(tk_root, tmp_path) -> None:
+def test_attendance_ot_content_uses_shared_application_font(tk_root, tmp_path) -> None:
     services = SimpleNamespace(attendance_ot_service=_Analytics())
     context = AppContext(
         project_root=tmp_path,
@@ -187,7 +227,9 @@ def test_attendance_ot_content_uses_professional_windows_font(tk_root, tmp_path)
         app_services=services,
     )
     page = AttendanceOTPage(tk_root, context)
-    assert "Segoe UI" in str(page.tk.call("ttk::style", "configure", "AttendanceOTBody.TLabel", "-font"))
+    assert page.visual_theme.typography.ui_family in str(
+        page.tk.call("ttk::style", "configure", "AttendanceOTBody.TLabel", "-font")
+    )
 
 
 def test_dashboard_kpi_cards_use_their_attendance_icons(tk_root, tmp_path) -> None:
@@ -325,11 +367,7 @@ def test_detail_data_highlights_actual_and_attendance_headers(
         "actual_time_out": ATTENDANCE_OT_CHALK_BLUE,
         "late_status": ATTENDANCE_OT_CHALK_PINK,
     }
-    assert set(table.heading_images) == {
-        "actual_time_in",
-        "actual_time_out",
-        "late_status",
-    }
+    assert table.heading_images == {}
 
 
 def test_attendance_ot_filter_uses_date_pickers_and_iso_boundary(
@@ -349,6 +387,28 @@ def test_attendance_ot_filter_uses_date_pickers_and_iso_boundary(
     page.filter_vars["employee_status"].set("Unmapped")
 
     assert page.multis["divisions"].title == "Division"
+    style = ttk.Style(page)
+    expected_filter_styles = {
+        "branches": (
+            "AttendanceOTFilterBranch.TButton",
+            page.visual_theme.palette.filter_mint,
+        ),
+        "pay_groups": (
+            "AttendanceOTFilterPayGroup.TButton",
+            page.visual_theme.palette.filter_pink,
+        ),
+        "departments": (
+            "AttendanceOTFilterDepartment.TButton",
+            page.visual_theme.palette.filter_blue,
+        ),
+        "divisions": (
+            "AttendanceOTFilterDivision.TButton",
+            page.visual_theme.palette.filter_purple,
+        ),
+    }
+    for key, (style_name, color) in expected_filter_styles.items():
+        assert page.multis[key].button.cget("style") == style_name
+        assert style.lookup(style_name, "background") == color
 
     page.apply_filters()
 
@@ -476,15 +536,21 @@ def test_dashboard_renders_trend_and_two_top_five_bar_lists(tk_root, tmp_path) -
         ATTENDANCE_OT_BACKGROUND
     )
     assert style.lookup("AttendanceOT.TNotebook.Tab", "background", ("active",)) == (
-        ATTENDANCE_OT_SELECTION
+        ATTENDANCE_OT_CHALK_BLUE
     )
     assert page.apply_button.cget("style") == "AttendanceOTApply.TButton"
     assert page.reset_button.cget("style") == "AttendanceOTReset.TButton"
     assert style.lookup("AttendanceOTApply.TButton", "background") == (
-        ATTENDANCE_OT_SURFACE
+        page.visual_theme.palette.tab_mint
     )
     assert style.lookup("AttendanceOTReset.TButton", "background") == (
-        ATTENDANCE_OT_SURFACE
+        ATTENDANCE_OT_CHALK_PINK
+    )
+    assert style.lookup("AttendanceOTApply.TButton", "foreground") == (
+        ATTENDANCE_OT_CHALK_WHITE
+    )
+    assert style.lookup("AttendanceOTReset.TButton", "foreground") == (
+        ATTENDANCE_OT_CHALK_WHITE
     )
     assert int(page.attendance_trend_panel.grid_info()["row"]) == 2
     assert int(page.trend_panel.grid_info()["row"]) == 3
@@ -622,13 +688,22 @@ def test_dashboard_kpis_use_balanced_reusable_retro_cards(tk_root, tmp_path) -> 
         "15" in str(card.value_label.cget("font"))
         for card in page.kpi_cards.values()
     )
-    dashboard_labels = (
-        *(card.title_label for card in page.kpi_cards.values()),
-        *(card.value_label for card in page.kpi_cards.values()),
+    heading_labels = (
         page.attendance_trend_panel.title_label,
         page.trend_panel.title_label,
         page.top_department_panel.title_label,
         page.top_branch_panel.title_label,
     )
-    assert all("Segoe UI" in str(label.cget("font")) for label in dashboard_labels)
-    assert all("bold" in str(label.cget("font")) for label in dashboard_labels)
+    kpi_labels = tuple(card.title_label for card in page.kpi_cards.values())
+    value_labels = tuple(card.value_label for card in page.kpi_cards.values())
+    assert all(
+        page.visual_theme.typography.ui_family in str(label.cget("font"))
+        for label in heading_labels
+    )
+    assert all(
+        page.visual_theme.typography.ui_family in str(label.cget("font"))
+        for label in (*kpi_labels, *value_labels)
+    )
+    assert all("bold" in str(label.cget("font")) for label in heading_labels)
+    assert all("bold" in str(label.cget("font")) for label in kpi_labels)
+    assert all("bold" in str(label.cget("font")) for label in value_labels)

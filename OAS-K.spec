@@ -6,8 +6,16 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 project_root = Path.cwd()
 updater_exe = project_root / 'dist' / 'updater' / 'OAS-K-Updater.exe'
 
+asset_root = project_root / 'assets'
 datas = [
-    ('assets', 'assets'),
+    (
+        str(path),
+        str(Path('assets') / path.relative_to(asset_root).parent),
+    )
+    for path in asset_root.rglob('*')
+    if path.is_file() and path.suffix.casefold() != '.zip'
+]
+datas += [
     (
         'config/attendance/OAS-K_Attendance_Configuration.xlsx',
         'config/attendance',

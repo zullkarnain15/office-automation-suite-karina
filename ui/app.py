@@ -90,6 +90,7 @@ class OASKUnifiedApp:
         )
         self.context.navigate = self.navigate
         self.context.set_status = self._set_status_message
+        self.context.refresh_storage_status = self._refresh_storage_status
         self.context.request_close = self.close
         self.sidebar.command = self.navigate
         self.root.protocol("WM_DELETE_WINDOW", self.close)
@@ -126,7 +127,12 @@ class OASKUnifiedApp:
         try:
             self.startup_database_result = self._prepare_startup_database()
             self.navigate(DEFAULT_PAGE_ID)
+            self._refresh_storage_status()
             self._dismiss_welcome_splash()
+            # The coordinator owns no widgets. Starting it after the welcome
+            # screen keeps initial UI rendering responsive and lets monitoring
+            # continue while the user navigates away from its page.
+            self.root.after(0, self._start_finger_monitoring)
         except StartupDatabaseMigrationError as exc:
             self.context.logger.exception(
                 "Startup database preparation failed."
@@ -527,6 +533,30 @@ class OASKUnifiedApp:
             )
         )
 
+    def _refresh_storage_status(self) -> None:
+        try:
+            status = self.context.app_services.storage_service.resolve_status()
+        except Exception as exc:
+            self.context.logger.warning("Unable to refresh storage status: %s", exc)
+            self.status_bar.set_storage_status("Database: Gagal diperiksa")
+            return
+        self.status_bar.set_storage_status(self._storage_status_text(status))
+
+    @staticmethod
+    def _storage_status_text(status) -> str:
+        if status.database_valid:
+            schema = (
+                f" (Schema v{status.schema_version})"
+                if status.schema_version is not None
+                else ""
+            )
+            return f"Database: Valid{schema}"
+        if status.database_exists:
+            return "Database: Tidak valid"
+        if status.database_path is not None:
+            return "Database: Tidak ditemukan"
+        return "Database: Tidak tersedia"
+
     def _capture_window_state(self, event: tk.Event) -> None:
         if event.widget is not self.root:
             return
@@ -558,10 +588,22 @@ class OASKUnifiedApp:
         self._stop_welcome_mascot_bounce()
         self.karina_mascot_controller.stop()
         if self.context.app_services is not None:
+            self.context.app_services.finger_monitoring_service.stop()
             self.context.app_services.task_runner.shutdown()
         self.icon_manager.clear()
         self.root.destroy()
         return True
+
+    def _start_finger_monitoring(self) -> None:
+        if self._closing or self.context.app_services is None:
+            return
+        service = self.context.app_services.finger_monitoring_service
+        self.context.app_services.task_runner.submit(
+            service.start,
+            on_done=lambda result: self.context.logger.info(
+                "Finger Monitoring coordinator start: %s", result.success
+            ),
+        )
 
     def run(self) -> None:
         self.root.mainloop()

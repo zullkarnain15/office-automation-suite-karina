@@ -100,6 +100,14 @@ def build_default_page_registry() -> PageRegistry:
             "AttendanceOTPage",
         ),
         (
+            "finger_monitoring",
+            "Finger Monitoring",
+            "Monitoring perangkat finger berdasarkan cabang dan IP",
+            "fp_monitoring.ico",
+            "finger_monitoring_page",
+            "FingerMonitoringPage",
+        ),
+        (
             "history",
             "History",
             "Riwayat pekerjaan dan hasil proses aplikasi",

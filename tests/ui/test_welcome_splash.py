@@ -90,6 +90,7 @@ def test_startup_shows_welcome_splash_with_image_and_copy(
     assert app._welcome_mascot_bounce_job is None
     assert app.navigation.active_page_id == "dashboard"
     assert app.startup_database_result.status == "NO_DATABASE"
+    assert app.status_bar.storage_label.cget("text") == "Database: Tidak ditemukan"
     deadline = time.monotonic() + 2
     dashboard = app.navigation._cache["dashboard"]
     while dashboard._busy and time.monotonic() < deadline:

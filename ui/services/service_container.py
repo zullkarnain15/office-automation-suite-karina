@@ -35,6 +35,7 @@ class AppServices:
     attendance_ot_export_service: Any = None
     attendance_ot_maintenance_service: Any = None
     attendance_ot_database_transfer_service: Any = None
+    finger_monitoring_service: Any = None
 
 
 def build_default_app_services(
@@ -81,6 +82,7 @@ def build_default_app_services(
     from ui.services.system_health_service import SystemHealthService
     from ui.services.task_runner import TaskRunner
     from ui.services.karina_mascot_preferences import KarinaMascotPreferencesService
+    from ui.services.finger_monitoring_service import FingerMonitoringService
     from shared.attendance_ot import (
         AttendanceOTAnalyticsQueryService,
         AttendanceOTDatabaseTransferService,
@@ -152,4 +154,5 @@ def build_default_app_services(
         attendance_ot_database_transfer_service=AttendanceOTDatabaseTransferService(
             attendance_ot_storage_service
         ),
+        finger_monitoring_service=FingerMonitoringService(storage_service),
     )

@@ -25,8 +25,8 @@ from ui.widgets.sidebar import Sidebar
 from ui.window_state import WindowState
 
 
-def test_page_registry_has_exactly_nine_pages() -> None:
-    assert len(build_default_page_registry()) == 9
+def test_page_registry_has_exactly_ten_pages() -> None:
+    assert len(build_default_page_registry()) == 10
 
 
 def test_page_order_is_locked() -> None:

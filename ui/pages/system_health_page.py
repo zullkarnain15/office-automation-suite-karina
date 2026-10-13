@@ -118,6 +118,9 @@ class SystemHealthPage(BasePage):
                 for item in result.value:
                     if item.code in self.cards:
                         self.cards[item.code].set_result(item)
+                callback = self.context.refresh_storage_status
+                if callback is not None:
+                    callback()
             else:
                 self.services.dialog_service.error(
                     "System Health", result.error or "Error"

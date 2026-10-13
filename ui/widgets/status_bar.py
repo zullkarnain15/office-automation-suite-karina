@@ -38,7 +38,11 @@ class StatusBar(ttk.Frame):
         self.message_label.configure(
             text=f"{metadata.message} | {metadata.selected_page}"
         )
-        self.storage_label.configure(text=metadata.storage_status)
+        if metadata.storage_status is not None:
+            self.set_storage_status(metadata.storage_status)
 
     def set_message(self, message: str) -> None:
         self.message_label.configure(text=message)
+
+    def set_storage_status(self, status: str) -> None:
+        self.storage_label.configure(text=status)

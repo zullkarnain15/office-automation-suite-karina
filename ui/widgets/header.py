@@ -171,6 +171,7 @@ class Header(ttk.Frame):
             "hris": "green_slime.png",
             "utilities": "red_apple.png",
             "att & ot": "info.png",
+            "finger monitoring": "fp_monitoring.png",
             "history": "history_wizard.png",
             "settings": "setting_stick.png",
             "system health": "sys_healt.png",

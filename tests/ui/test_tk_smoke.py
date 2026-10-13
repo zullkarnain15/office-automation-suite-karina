@@ -46,6 +46,7 @@ def test_tk_shell_full_smoke(tk_root: tk.Tk) -> None:
             "Backup & Recovery",
             "Application Update",
             "HRIS Recorder Profiles",
+            "Finger Monitoring",
     )
     tk_root.geometry("1100x680")
     tk_root.update_idletasks()
@@ -110,6 +111,7 @@ def test_opening_settings_with_fake_registry_has_zero_side_effects(
         "Backup & Recovery",
         "Application Update",
         "HRIS Recorder Profiles",
+        "Finger Monitoring",
     )
     assert calls == []
     assert backend.write_count == 0

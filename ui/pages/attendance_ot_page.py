@@ -21,14 +21,10 @@ from shared.attendance_ot.reporting import (
 )
 from shared.attendance_ot.models import SourceType
 from ui.constants import (
-    ATTENDANCE_OT_BACKGROUND,
     ATTENDANCE_OT_CARD,
     ATTENDANCE_OT_CHALK_BLUE,
     ATTENDANCE_OT_CHALK_PINK,
-    ATTENDANCE_OT_CHALK_WHITE,
     ATTENDANCE_OT_CHALK_YELLOW,
-    ATTENDANCE_OT_SELECTION,
-    ATTENDANCE_OT_SURFACE,
 )
 from ui.pages.base_page import BasePage
 from ui.pages.attendance_ot_widgets import (
@@ -40,6 +36,10 @@ from ui.pages.attendance_ot_widgets import (
     SimpleTrendPanel,
     TopFiveBarList,
     bind_wheel,
+)
+from ui.theme.attendance_ot import (
+    apply_attendance_ot_styles,
+    resolve_attendance_ot_theme,
 )
 from ui.widgets import DateEntry
 from ui.widgets.pagination_bar import PaginationBar
@@ -97,6 +97,11 @@ class AttendanceOTPage(BasePage):
         self.services = self.context.app_services
         self.storage_service = self.services.attendance_ot_service
         self.queries = getattr(self.services, "attendance_ot_analytics_service", None)
+        self.visual_theme = resolve_attendance_ot_theme(
+            self,
+            self.context.assets_path,
+            logger=self.context.logger,
+        )
         self._configure_professional_styles()
         self.configure(style="AttendanceOTPage.TFrame")
         self.rowconfigure(1, weight=0)
@@ -126,7 +131,7 @@ class AttendanceOTPage(BasePage):
             values=("Current Filter", "All Data"),
             state="readonly",
             width=15,
-            font=("Segoe UI", 9),
+            font=self.visual_theme.body_font,
             style="AttendanceOT.TCombobox",
         ).pack(side="left", padx=(12, 4))
         self._button(toolbar, "Export Excel", self.export_excel).pack(side="left")
@@ -234,7 +239,7 @@ class AttendanceOTPage(BasePage):
                         else "normal"
                     ),
                     width=17,
-                    font=("Segoe UI", 9),
+                    font=self.visual_theme.body_font,
                     style="AttendanceOT.TCombobox",
                 )
                 if key == "period":
@@ -257,14 +262,14 @@ class AttendanceOTPage(BasePage):
                     panel,
                     textvariable=self.filter_vars[key],
                     width=18,
-                    font=("Segoe UI", 9),
+                    font=self.visual_theme.body_font,
                     style="AttendanceOT.TEntry",
                 )
             widget.grid(row=1, column=index, sticky="ew", padx=4)
             entry = widget.entry if isinstance(widget, DateEntry) else widget
             entry.bind("<Return>", lambda e: self.apply_filters())
         self.multis = {
-            key: MultiSelect(panel, label)
+            key: MultiSelect(panel, label, theme=self.visual_theme)
             for key, label in (
                 ("branches", "Branch"),
                 ("pay_groups", "Pay Group"),
@@ -291,14 +296,15 @@ class AttendanceOTPage(BasePage):
         ).grid(row=3, column=0, columnspan=6, sticky="ew", padx=4)
 
     def _build_dashboard(self):
-        body = ScrollBody(self.tabs["Dashboard"])
+        body = ScrollBody(self.tabs["Dashboard"], theme=self.visual_theme)
         body.grid(row=1, column=0, sticky="nsew")
         self.dashboard_scroll = body
         body.content.columnconfigure(0, weight=1)
         self.dashboard_header = tk.Frame(
             body.content,
-            background=ATTENDANCE_OT_CHALK_WHITE,
-            borderwidth=0,
+            background=self.visual_theme.palette.chalk_white,
+            highlightbackground=self.visual_theme.palette.ink,
+            highlightthickness=1,
             padx=2,
             pady=2,
         )
@@ -324,8 +330,8 @@ class AttendanceOTPage(BasePage):
             header_body,
             text="Attendance & Overtime Overview",
             background=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            font=("Segoe UI", 18, "bold"),
+            foreground=self.visual_theme.palette.ink,
+            font=self.visual_theme.display_font,
             anchor="center",
         )
         self.dashboard_title.pack(fill="x")
@@ -348,6 +354,7 @@ class AttendanceOTPage(BasePage):
                 variable=variable,
                 accent=accent,
                 icon=icon,
+                theme=self.visual_theme,
             )
             card.grid(
                 row=index // 3,
@@ -364,6 +371,7 @@ class AttendanceOTPage(BasePage):
             MONTHS,
             title="Attendance Record Trend",
             accent=ATTENDANCE_OT_CHALK_BLUE,
+            theme=self.visual_theme,
         )
         self.attendance_trend_panel.grid(
             row=2,
@@ -378,6 +386,7 @@ class AttendanceOTPage(BasePage):
             MONTHS,
             title="Late Record Trend",
             accent=ATTENDANCE_OT_CHALK_PINK,
+            theme=self.visual_theme,
         )
         self.trend_panel.grid(
             row=3,
@@ -397,6 +406,7 @@ class AttendanceOTPage(BasePage):
             rankings,
             title="Top 5 Late HO Departments",
             accent=ATTENDANCE_OT_CHALK_YELLOW,
+            theme=self.visual_theme,
         )
         self.top_department_panel.grid(
             row=0, column=0, sticky="nsew", padx=(4, 2), pady=4
@@ -405,6 +415,7 @@ class AttendanceOTPage(BasePage):
             rankings,
             title="Top 5 Late Branches",
             accent=ATTENDANCE_OT_CHALK_BLUE,
+            theme=self.visual_theme,
         )
         self.top_branch_panel.grid(
             row=0, column=1, sticky="nsew", padx=(2, 4), pady=4
@@ -446,6 +457,7 @@ class AttendanceOTPage(BasePage):
             DETAIL_COLUMNS,
             DETAIL_LABELS,
             header_colors=DETAIL_HEADER_COLORS,
+            theme=self.visual_theme,
         )
         self.tables["Detail Data"].grid(row=1, column=0, sticky="nsew")
         self.pagers["Detail Data"] = self._pager(frame, "Detail Data")
@@ -467,7 +479,7 @@ class AttendanceOTPage(BasePage):
                 values=values,
                 state="readonly" if values else "normal",
                 width=10,
-                font=("Segoe UI", 9),
+                font=self.visual_theme.body_font,
                 style="AttendanceOT.TCombobox",
             ).pack(side="left")
         self._button(controls, "Apply year / class", self.apply_filters).pack(
@@ -482,6 +494,7 @@ class AttendanceOTPage(BasePage):
             frame,
             (*MONTHS, "Total"),
             on_employee_open=self.open_matrix_employee,
+            theme=self.visual_theme,
         )
         self.tables["Data Terlambat"].grid(row=1, column=0, sticky="nsew")
         self.pagers["Data Terlambat"] = self._pager(frame, "Data Terlambat")
@@ -495,7 +508,7 @@ class AttendanceOTPage(BasePage):
         ttk.Entry(
             controls,
             textvariable=self.master_search,
-            font=("Segoe UI", 9),
+            font=self.visual_theme.body_font,
             style="AttendanceOT.TEntry",
         ).pack(
             side="left"
@@ -511,6 +524,7 @@ class AttendanceOTPage(BasePage):
                 self.master_notebook,
                 columns,
                 tuple(c.replace("_", " ").title() for c in columns),
+                theme=self.visual_theme,
             )
             self.master_notebook.add(table, text=kind)
             self.master_tables[kind] = table
@@ -523,6 +537,7 @@ class AttendanceOTPage(BasePage):
             frame,
             ("file", "source_type", "rows", "status", "last_import"),
             ("File", "Source Type", "Rows", "Status", "Last Import"),
+            theme=self.visual_theme,
         )
         self.tables["Source Files"].grid(row=1, column=0, sticky="nsew")
         self.source_tree = self.tables["Source Files"].tree
@@ -555,198 +570,66 @@ class AttendanceOTPage(BasePage):
         panel.grid(row=1, column=0, sticky="ew")
         panel.columnconfigure(1, weight=1)
         self.data_update_vars = {}
+        self.data_update_labels = {}
+        self.data_update_buttons = {}
         specs = (
-            (SourceType.EMPLOYEE, "Update Employee"),
-            (SourceType.SCHEDULE, "Update Schedule"),
-            (SourceType.ATTENDANCE_OT, "Update Attendance & OT"),
+            (
+                SourceType.EMPLOYEE,
+                "Update Employee",
+                "AttendanceOTDataUpdateEmployee.TButton",
+            ),
+            (
+                SourceType.SCHEDULE,
+                "Update Schedule",
+                "AttendanceOTDataUpdateSchedule.TButton",
+            ),
+            (
+                SourceType.ATTENDANCE_OT,
+                "Update Attendance & OT",
+                "AttendanceOTDataUpdateAttendance.TButton",
+            ),
         )
-        for row, (source_type, label) in enumerate(specs):
-            self._button(
+        for row, (source_type, label, button_style) in enumerate(specs):
+            button = self._button(
                 panel,
                 label,
                 lambda value=source_type: self.update_data_source(value),
-            ).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=5)
+            )
+            button.configure(style=button_style, width=24)
+            button.grid(row=row, column=0, sticky="ew", padx=(0, 12), pady=5)
+            self.data_update_buttons[source_type.value] = button
             variable = tk.StringVar(
                 value="Last Update: — | Found: 0 | Processed: 0 | Never"
             )
             self.data_update_vars[source_type.value] = variable
-            ttk.Label(
+            status_label = ttk.Label(
                 panel,
                 textvariable=variable,
-                style="AttendanceOTStatus.TLabel",
+                style="AttendanceOTDataUpdatePending.TLabel",
                 wraplength=850,
-            ).grid(row=row, column=1, sticky="w", pady=5)
-        self._button(panel, "Update All", self.update_all_data).grid(
-            row=len(specs), column=0, sticky="w", padx=(0, 12), pady=(12, 5)
+            )
+            status_label.grid(row=row, column=1, sticky="w", pady=5)
+            self.data_update_labels[source_type.value] = status_label
+        self.data_update_all_button = self._button(
+            panel, "Update All", self.update_all_data
+        )
+        self.data_update_all_button.configure(
+            style="AttendanceOTDataUpdateAll.TButton",
+            width=24,
+        )
+        self.data_update_all_button.grid(
+            row=len(specs), column=0, sticky="ew", padx=(0, 12), pady=(12, 5)
         )
         self.data_update_notice = tk.StringVar()
         ttk.Label(
             frame,
             textvariable=self.data_update_notice,
-            style="AttendanceOTStatus.TLabel",
-            font=("Segoe UI", 9, "bold"),
+            style="AttendanceOTDataUpdatePending.TLabel",
+            font=self.visual_theme.body_bold_font,
         ).grid(row=2, column=0, sticky="w", pady=(10, 0))
 
     def _configure_professional_styles(self):
-        style = ttk.Style(self)
-        style.configure(
-            "AttendanceOTPage.TFrame",
-            background=ATTENDANCE_OT_BACKGROUND,
-        )
-        style.configure(
-            "AttendanceOTSurface.TFrame",
-            background=ATTENDANCE_OT_SURFACE,
-        )
-        style.configure(
-            "AttendanceOTCard.TFrame",
-            background=ATTENDANCE_OT_CARD,
-        )
-        style.configure("AttendanceOT.TNotebook", background=ATTENDANCE_OT_SURFACE)
-        style.configure(
-            "AttendanceOT.TNotebook.Tab",
-            background=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            font=("Segoe UI", 9, "bold"),
-            padding=(12, 7),
-        )
-        style.map(
-            "AttendanceOT.TNotebook.Tab",
-            background=[
-                ("selected", ATTENDANCE_OT_SURFACE),
-                ("active", ATTENDANCE_OT_SELECTION),
-            ],
-            foreground=[
-                ("selected", ATTENDANCE_OT_CHALK_YELLOW),
-                ("active", ATTENDANCE_OT_CHALK_WHITE),
-            ],
-        )
-        for name, size, weight, color in (
-            ("Title", 14, "bold", ATTENDANCE_OT_CHALK_YELLOW),
-            ("Body", 10, "normal", ATTENDANCE_OT_CHALK_WHITE),
-            ("Status", 9, "normal", ATTENDANCE_OT_CHALK_BLUE),
-        ):
-            style.configure(
-                f"AttendanceOT{name}.TLabel",
-                background=ATTENDANCE_OT_SURFACE,
-                foreground=color,
-                font=("Segoe UI", size, weight),
-            )
-        style.configure(
-            "AttendanceOTCardBody.TLabel",
-            background=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            font=("Segoe UI", 10),
-        )
-        style.configure(
-            "AttendanceOTPageStatus.TLabel",
-            background=ATTENDANCE_OT_BACKGROUND,
-            foreground=ATTENDANCE_OT_CHALK_BLUE,
-            font=("Segoe UI", 9),
-        )
-        style.configure(
-            "AttendanceOTProgress.TLabel",
-            background=ATTENDANCE_OT_SURFACE,
-            foreground=ATTENDANCE_OT_CHALK_YELLOW,
-            font=("Segoe UI", 9, "bold"),
-        )
-        for name, color in (
-            ("AttendanceOT", ATTENDANCE_OT_CHALK_BLUE),
-            ("AttendanceOTSuccess", ATTENDANCE_OT_CHALK_YELLOW),
-            ("AttendanceOTError", ATTENDANCE_OT_CHALK_PINK),
-        ):
-            style.configure(
-                f"{name}.Horizontal.TProgressbar",
-                background=color,
-                troughcolor=ATTENDANCE_OT_CARD,
-                bordercolor=ATTENDANCE_OT_CHALK_WHITE,
-                lightcolor=color,
-                darkcolor=color,
-                relief="solid",
-                borderwidth=1,
-            )
-        style.configure(
-            "AttendanceOT.TButton",
-            background=ATTENDANCE_OT_SURFACE,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            bordercolor=ATTENDANCE_OT_CHALK_BLUE,
-            borderwidth=1,
-            font=("Segoe UI", 9),
-        )
-        style.map(
-            "AttendanceOT.TButton",
-            background=[("pressed", ATTENDANCE_OT_CARD), ("active", ATTENDANCE_OT_SURFACE)],
-            foreground=[("active", ATTENDANCE_OT_CHALK_YELLOW)],
-        )
-        style.configure(
-            "AttendanceOTApply.TButton",
-            background=ATTENDANCE_OT_SURFACE,
-            foreground=ATTENDANCE_OT_CHALK_YELLOW,
-            bordercolor=ATTENDANCE_OT_CHALK_YELLOW,
-            borderwidth=1,
-            font=("Segoe UI", 9, "bold"),
-            padding=(12, 7),
-        )
-        style.map(
-            "AttendanceOTApply.TButton",
-            background=[("pressed", ATTENDANCE_OT_CARD), ("active", ATTENDANCE_OT_SURFACE)],
-            foreground=[("active", ATTENDANCE_OT_CHALK_WHITE)],
-        )
-        style.configure(
-            "AttendanceOTReset.TButton",
-            background=ATTENDANCE_OT_SURFACE,
-            foreground=ATTENDANCE_OT_CHALK_PINK,
-            bordercolor=ATTENDANCE_OT_CHALK_PINK,
-            borderwidth=1,
-            font=("Segoe UI", 9, "bold"),
-            padding=(12, 7),
-        )
-        style.map(
-            "AttendanceOTReset.TButton",
-            background=[("pressed", ATTENDANCE_OT_CARD), ("active", ATTENDANCE_OT_SURFACE)],
-            foreground=[("active", ATTENDANCE_OT_CHALK_WHITE)],
-        )
-        style.configure(
-            "AttendanceOT.TEntry",
-            fieldbackground=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            bordercolor=ATTENDANCE_OT_CHALK_BLUE,
-            lightcolor=ATTENDANCE_OT_CHALK_BLUE,
-            darkcolor=ATTENDANCE_OT_CHALK_BLUE,
-            insertcolor=ATTENDANCE_OT_CHALK_WHITE,
-        )
-        style.configure(
-            "AttendanceOT.TCombobox",
-            fieldbackground=ATTENDANCE_OT_CARD,
-            background=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            bordercolor=ATTENDANCE_OT_CHALK_BLUE,
-            arrowcolor=ATTENDANCE_OT_CHALK_YELLOW,
-        )
-        style.map(
-            "AttendanceOT.TCombobox",
-            fieldbackground=[("readonly", ATTENDANCE_OT_CARD)],
-            background=[("active", ATTENDANCE_OT_SURFACE)],
-            foreground=[("disabled", ATTENDANCE_OT_CHALK_BLUE)],
-        )
-        style.configure(
-            "AttendanceOT.Treeview",
-            background=ATTENDANCE_OT_CARD,
-            fieldbackground=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            font=("Segoe UI", 9),
-            rowheight=25,
-        )
-        style.map(
-            "AttendanceOT.Treeview",
-            background=[("selected", ATTENDANCE_OT_SELECTION)],
-            foreground=[("selected", ATTENDANCE_OT_CHALK_YELLOW)],
-        )
-        style.configure(
-            "AttendanceOT.Treeview.Heading",
-            background=ATTENDANCE_OT_SURFACE,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            font=("Segoe UI", 9, "bold"),
-        )
+        apply_attendance_ot_styles(self, self.visual_theme)
 
     def on_show(self):
         if not self._storage_checked:
@@ -1004,6 +887,15 @@ class AttendanceOTPage(BasePage):
                     f"{result.duration_seconds:.2f}s | {result.status.title()}"
                     f"{detail}"
                 )
+            label = self.data_update_labels.get(result.source_type)
+            if label is not None:
+                if result.status == "SUCCESS":
+                    style_name = "AttendanceOTDataUpdateComplete.TLabel"
+                elif result.status == "ERROR":
+                    style_name = "AttendanceOTDataUpdateError.TLabel"
+                else:
+                    style_name = "AttendanceOTDataUpdatePending.TLabel"
+                label.configure(style=style_name)
 
     def update_data_source(self, source_type):
         service = getattr(self.services, "attendance_ot_import_service", None)
@@ -1098,14 +990,15 @@ class AttendanceOTPage(BasePage):
             window.title("ATTENDANCE & OT — Database Maintenance")
             window.geometry("780x440")
             window.transient(self.winfo_toplevel())
+            window.configure(background=self.visual_theme.palette.surface)
             window.columnconfigure(0, weight=1)
             window.rowconfigure(0, weight=1)
             text = tk.Text(
                 window,
                 wrap="word",
-                font=("Segoe UI", 10),
+                font=(self.visual_theme.typography.ui_family, 10),
                 background=ATTENDANCE_OT_CARD,
-                foreground=ATTENDANCE_OT_CHALK_WHITE,
+                foreground=self.visual_theme.palette.ink,
                 padx=12,
                 pady=12,
             )
@@ -1123,7 +1016,7 @@ class AttendanceOTPage(BasePage):
                 + "\n\nPurge removes attendance in the selected period. Employee/schedule history is retained. Changed source files can reimport purged rows. Reset clears all analytics data and registry. Source folders/config stay saved. A verified backup is retained beside attendance_ot.db.",
             )
             text.configure(state="disabled")
-            actions = ttk.Frame(window)
+            actions = ttk.Frame(window, style="AttendanceOTSurface.TFrame")
             actions.grid(row=1, column=0, pady=10)
             for label, command in (
                 ("Purge period/year", lambda: self.preview_cleanup("PURGE")),
@@ -1148,6 +1041,7 @@ class AttendanceOTPage(BasePage):
             window.title("ATTENDANCE & OT — Duplicate Data")
             window.geometry("980x520")
             window.transient(self.winfo_toplevel())
+            window.configure(background=self.visual_theme.palette.surface)
             window.columnconfigure(0, weight=1)
             window.rowconfigure(1, weight=1)
 
@@ -1184,11 +1078,16 @@ class AttendanceOTPage(BasePage):
                 "Sheet",
                 "Row",
             )
-            table = DataTable(window, columns, labels)
+            table = DataTable(
+                window,
+                columns,
+                labels,
+                theme=self.visual_theme,
+            )
             table.grid(row=1, column=0, sticky="nsew", padx=12)
             table.rows(preview.samples, columns)
 
-            actions = ttk.Frame(window)
+            actions = ttk.Frame(window, style="AttendanceOTSurface.TFrame")
             actions.grid(row=2, column=0, pady=12)
             ttk.Button(
                 actions,

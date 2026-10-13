@@ -195,6 +195,12 @@ class StorageSection(SettingsSection):
                 *(f"Error: {item}" for item in status.errors),
             ]
         )
+        self._refresh_footer_storage_status()
+
+    def _refresh_footer_storage_status(self) -> None:
+        callback = self.page.context.refresh_storage_status
+        if callback is not None:
+            callback()
 
     @staticmethod
     def _format_size(size_bytes: int | None) -> str:
@@ -327,9 +333,13 @@ class StorageSection(SettingsSection):
         database = self._require_active_database("Validate Database")
         if database is None:
             return
+        def done(result) -> None:
+            DatabaseValidationDialog(self, result)
+            self._refresh_footer_storage_status()
+
         self.page.run_task(
             lambda: self.services.storage_service.validate_database(database),
-            on_success=lambda result: DatabaseValidationDialog(self, result),
+            on_success=done,
             message="Memvalidasi database...",
         )
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ui.theme.palette import palette
+from ui.theme.attendance_ot import DEFAULT_ATTENDANCE_OT_THEME
 from ui.theme.typography import typography
 
 APP_TITLE = "Office Automation Suite – Karina by. ZSH"
@@ -35,14 +36,15 @@ SKY_BLUE_BORDER = palette.sky_blue_border
 OPTION_CHIP_SELECTED_BACKGROUND = "#B7D4F2"
 OPTION_CHIP_SELECTED_FOREGROUND = "#1F4E79"
 OPTION_CHIP_SELECTED_BORDER = "#1F4E79"
-ATTENDANCE_OT_BACKGROUND = "#1D3527"
-ATTENDANCE_OT_SURFACE = "#2A4B3C"
-ATTENDANCE_OT_CARD = "#16291E"
-ATTENDANCE_OT_SELECTION = "#2A4B3C"
-ATTENDANCE_OT_CHALK_WHITE = "#F3F4F6"
-ATTENDANCE_OT_CHALK_YELLOW = "#FDFD96"
-ATTENDANCE_OT_CHALK_BLUE = "#AEC6CF"
-ATTENDANCE_OT_CHALK_PINK = "#FFB7B2"
+_ATTENDANCE_OT_PALETTE = DEFAULT_ATTENDANCE_OT_THEME.palette
+ATTENDANCE_OT_BACKGROUND = _ATTENDANCE_OT_PALETTE.background
+ATTENDANCE_OT_SURFACE = _ATTENDANCE_OT_PALETTE.surface
+ATTENDANCE_OT_CARD = _ATTENDANCE_OT_PALETTE.card
+ATTENDANCE_OT_SELECTION = _ATTENDANCE_OT_PALETTE.selection
+ATTENDANCE_OT_CHALK_WHITE = _ATTENDANCE_OT_PALETTE.chalk_white
+ATTENDANCE_OT_CHALK_YELLOW = _ATTENDANCE_OT_PALETTE.chalk_yellow
+ATTENDANCE_OT_CHALK_BLUE = _ATTENDANCE_OT_PALETTE.chalk_blue
+ATTENDANCE_OT_CHALK_PINK = _ATTENDANCE_OT_PALETTE.chalk_pink
 FOREST_GREEN = palette.forest_green
 OLD_GOLD = palette.old_gold
 IVORY_WHITE = palette.ivory_white
@@ -102,6 +104,7 @@ PAGE_ORDER = (
     "hris",
     "utilities",
     "attendance_ot",
+    "finger_monitoring",
     "history",
     "settings",
     "system_health",

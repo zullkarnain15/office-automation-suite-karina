@@ -1,0 +1,35 @@
+OAS-K 1.0.17
+8 October 2026
+
+Release production untuk OAS-K core database schema 4 dan database analytics
+Attendance & OT schema 9.
+
+Attendance & OT Academic Chalkboard:
+- Menambahkan tema terpusat yang hanya berlaku pada modul Attendance & OT.
+- Menambahkan font private Cabin Sketch dan Fredericka the Great dengan
+  fallback aman tanpa instalasi permanen atau akses administrator.
+- Memperjelas judul, KPI, grafik, tabel, status, tab sage seragam, dan chalk
+  border.
+- Menggunakan permukaan warna solid tanpa background PNG agar konten tetap
+  terbaca dan rendering resize tetap ringan.
+- Memperjelas tombol Apply, Reset, filter multi-select, dan Data Update dengan
+  warna pastel terang serta kontras teks yang lebih baik.
+- Status Data Update berwarna kuning sebelum update, putih setelah berhasil,
+  dan pink ketika terjadi error.
+
+Application shell:
+- Status database pada footer kini disinkronkan setelah startup, System Health,
+  validasi, refresh, inisialisasi, dan repair storage.
+- Status database tidak lagi kembali ke "Belum diperiksa" saat berpindah
+  halaman atau saat pesan aplikasi berubah menjadi Ready.
+
+Kompatibilitas database:
+- Update package menerima OAS-K 1.0.15 dan 1.0.16 sebagai versi sumber.
+- Core OAS-K production schema 4 tetap schema 4; tidak ada migrasi core.
+- Database Attendance & OT production schema 9 tetap schema 9; tidak ada
+  migrasi analytics.
+- Database dan data production existing dipertahankan dan diverifikasi melalui
+  backup pre-update serta post-update health check.
+
+Paket update hanya berisi aplikasi dan metadata update. Data Root, database,
+konfigurasi aktif, log, output, backup, dan recorder profiles tidak disertakan.

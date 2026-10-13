@@ -15,6 +15,7 @@ from ui.pages.settings.module_configuration_section import (
 from ui.pages.settings.recorder_profiles_section import RecorderProfilesSection
 from ui.pages.settings.recovery_section import RecoverySection
 from ui.pages.settings.storage_section import StorageSection
+from ui.pages.settings.finger_monitoring_section import FingerMonitoringSection
 from ui.widgets import ProgressPanel
 
 
@@ -45,6 +46,7 @@ class SettingsPage(BasePage):
             ("Backup & Recovery", RecoverySection),
             ("Application Update", ApplicationUpdateSection),
             ("HRIS Recorder Profiles", RecorderProfilesSection),
+            ("Finger Monitoring", FingerMonitoringSection),
         )
         self.sections = {}
         for title, section_class in sections:

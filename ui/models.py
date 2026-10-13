@@ -36,7 +36,7 @@ class HeaderMetadata:
 class StatusMetadata:
     message: str
     selected_page: str
-    storage_status: str = "Database: Belum diperiksa"
+    storage_status: str | None = None
 
 
 class PageLoadError(RuntimeError):

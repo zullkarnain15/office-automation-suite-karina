@@ -3,16 +3,9 @@
 import tkinter as tk
 from tkinter import ttk
 
-from PIL import Image, ImageDraw, ImageFont, ImageTk
-
-from ui.constants import (
-    ATTENDANCE_OT_CARD,
-    ATTENDANCE_OT_CHALK_BLUE,
-    ATTENDANCE_OT_CHALK_PINK,
-    ATTENDANCE_OT_CHALK_WHITE,
-    ATTENDANCE_OT_CHALK_YELLOW,
-    ATTENDANCE_OT_SELECTION,
-    ATTENDANCE_OT_SURFACE,
+from ui.theme.attendance_ot import (
+    DEFAULT_ATTENDANCE_OT_THEME,
+    AttendanceOTTheme,
 )
 from ui.widgets.table_copy import (
     TreeviewCopyHelper,
@@ -21,8 +14,63 @@ from ui.widgets.table_copy import (
 )
 
 
-LATE_CELL_STANDARD = ATTENDANCE_OT_CHALK_BLUE
-LATE_CELL_HIGH = ATTENDANCE_OT_CHALK_PINK
+_PALETTE = DEFAULT_ATTENDANCE_OT_THEME.palette
+ATTENDANCE_OT_CARD = _PALETTE.card
+ATTENDANCE_OT_CHALK_BLUE = _PALETTE.chalk_blue
+ATTENDANCE_OT_CHALK_PINK = _PALETTE.chalk_pink
+ATTENDANCE_OT_CHALK_WHITE = _PALETTE.chalk_white
+ATTENDANCE_OT_CHALK_YELLOW = _PALETTE.chalk_yellow
+ATTENDANCE_OT_SELECTION = _PALETTE.selection
+ATTENDANCE_OT_SURFACE = _PALETTE.surface
+ATTENDANCE_OT_TEXT = _PALETTE.ink
+LATE_CELL_STANDARD = _PALETTE.chalk_blue
+LATE_CELL_HIGH = _PALETTE.chalk_pink
+
+
+def _theme(value: AttendanceOTTheme | None) -> AttendanceOTTheme:
+    return value or DEFAULT_ATTENDANCE_OT_THEME
+
+
+def install_panel_border(host: tk.Misc, theme: AttendanceOTTheme | None = None):
+    """Place a subtle standard border behind a panel's interactive body."""
+
+    palette = _theme(theme).palette
+    canvas = tk.Canvas(
+        host,
+        background=palette.card,
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=0,
+    )
+    canvas.place(x=0, y=0, relwidth=1, relheight=1)
+    line_width = max(
+        1,
+        round(float(host.tk.call("tk", "scaling")) / (96.0 / 72.0)),
+    )
+
+    def draw(_event=None):
+        if not canvas.winfo_exists():
+            return
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        canvas.delete("panel-border")
+        if width < 8 or height < 8:
+            return
+        canvas.create_rectangle(
+            2,
+            2,
+            width - 3,
+            height - 3,
+            outline=palette.ink,
+            width=line_width,
+            tags=("panel-border",),
+            state="disabled",
+        )
+        canvas.tag_lower("panel-border")
+
+    host.bind("<Configure>", draw, add="+")
+    host.after_idle(draw)
+    return canvas
 
 
 def bind_wheel(widget, target):
@@ -42,14 +90,16 @@ def bind_wheel(widget, target):
 class KPICard(tk.Frame):
     """Compact KPI card with an optional, consistently aligned icon tile."""
 
-    def __init__(self, parent, *, title, variable, accent, icon=None):
+    def __init__(self, parent, *, title, variable, accent, icon=None, theme=None):
+        self.theme = _theme(theme)
         super().__init__(
             parent,
-            background=ATTENDANCE_OT_CHALK_WHITE,
+            background=self.theme.palette.chalk_white,
             borderwidth=0,
             padx=2,
             pady=2,
         )
+        self.border_canvas = install_panel_border(self, self.theme)
         self.accent = accent
         self.body = tk.Frame(
             self,
@@ -84,8 +134,8 @@ class KPICard(tk.Frame):
             self.text_area,
             text=title,
             background=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            font=("Segoe UI", 10, "bold"),
+            foreground=ATTENDANCE_OT_TEXT,
+            font=(self.theme.typography.ui_family, 10, "bold"),
         )
         self.title_label.pack(anchor="w")
         self.value_label = tk.Label(
@@ -93,7 +143,7 @@ class KPICard(tk.Frame):
             textvariable=variable,
             background=ATTENDANCE_OT_CARD,
             foreground=accent,
-            font=("Segoe UI", 15, "bold"),
+            font=(self.theme.typography.ui_family, 15, "bold"),
         )
         self.value_label.pack(anchor="w", pady=(7, 0))
 
@@ -108,14 +158,17 @@ class SimpleTrendPanel(tk.Frame):
         *,
         title="Late Record Trend",
         accent=ATTENDANCE_OT_CHALK_PINK,
+        theme=None,
     ):
+        self.theme = _theme(theme)
         super().__init__(
             parent,
-            background=ATTENDANCE_OT_CHALK_WHITE,
+            background=self.theme.palette.chalk_white,
             borderwidth=0,
             padx=2,
             pady=2,
         )
+        self.border_canvas = install_panel_border(self, self.theme)
         self.months = tuple(months)
         self.accent = accent
         self.body = tk.Frame(
@@ -129,8 +182,8 @@ class SimpleTrendPanel(tk.Frame):
             self.body,
             text=title,
             background=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            font=("Segoe UI", 10, "bold"),
+            foreground=ATTENDANCE_OT_TEXT,
+            font=self.theme.heading_font,
         )
         self.title_label.pack(anchor="w", pady=(0, 10))
         chart = tk.Frame(self.body, background=ATTENDANCE_OT_CARD)
@@ -149,8 +202,8 @@ class SimpleTrendPanel(tk.Frame):
                 slot,
                 textvariable=value,
                 background=ATTENDANCE_OT_CARD,
-                foreground=ATTENDANCE_OT_CHALK_WHITE,
-                font=("Segoe UI", 9, "bold"),
+                foreground=ATTENDANCE_OT_TEXT,
+                font=self.theme.body_bold_font,
             ).grid(row=0, column=0)
             bar_area = tk.Frame(
                 slot,
@@ -173,8 +226,8 @@ class SimpleTrendPanel(tk.Frame):
                 slot,
                 text=month,
                 background=ATTENDANCE_OT_CARD,
-                foreground=ATTENDANCE_OT_CHALK_WHITE,
-                font=("Segoe UI", 9, "bold"),
+                foreground=ATTENDANCE_OT_TEXT,
+                font=self.theme.body_bold_font,
             ).grid(row=2, column=0, pady=(4, 0))
 
     def set_values(self, values):
@@ -190,14 +243,16 @@ class SimpleTrendPanel(tk.Frame):
 class TopFiveBarList(tk.Frame):
     """Reusable ranked list with proportional bars made from native Frames."""
 
-    def __init__(self, parent, *, title, accent):
+    def __init__(self, parent, *, title, accent, theme=None):
+        self.theme = _theme(theme)
         super().__init__(
             parent,
-            background=ATTENDANCE_OT_CHALK_WHITE,
+            background=self.theme.palette.chalk_white,
             borderwidth=0,
             padx=2,
             pady=2,
         )
+        self.border_canvas = install_panel_border(self, self.theme)
         self.accent = accent
         self.body = tk.Frame(
             self,
@@ -210,8 +265,8 @@ class TopFiveBarList(tk.Frame):
             self.body,
             text=title,
             background=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
-            font=("Segoe UI", 10, "bold"),
+            foreground=ATTENDANCE_OT_TEXT,
+            font=self.theme.heading_font,
         )
         self.title_label.pack(anchor="w", pady=(0, 10))
         listing = tk.Frame(self.body, background=ATTENDANCE_OT_CARD)
@@ -228,8 +283,8 @@ class TopFiveBarList(tk.Frame):
                 width=3,
                 anchor="e",
                 background=ATTENDANCE_OT_CARD,
-                foreground=ATTENDANCE_OT_CHALK_WHITE,
-                font=("Segoe UI", 10, "bold"),
+                foreground=ATTENDANCE_OT_TEXT,
+                font=(self.theme.typography.ui_family, 10, "bold"),
             ).grid(row=index, column=0, sticky="e", padx=(0, 6), pady=3)
             content = tk.Frame(listing, background=ATTENDANCE_OT_CARD)
             content.grid(row=index, column=1, sticky="ew", pady=3)
@@ -239,10 +294,12 @@ class TopFiveBarList(tk.Frame):
                 textvariable=name,
                 anchor="w",
                 background=ATTENDANCE_OT_CARD,
-                foreground=ATTENDANCE_OT_CHALK_WHITE,
-                font=("Segoe UI", 10, "bold"),
+                foreground=ATTENDANCE_OT_TEXT,
+                font=(self.theme.typography.ui_family, 10, "bold"),
             ).grid(row=0, column=0, sticky="ew")
-            track = tk.Frame(content, background="#D7D1C0", height=7)
+            track = tk.Frame(
+                content, background=self.theme.palette.chalk_muted, height=7
+            )
             track.grid(row=1, column=0, sticky="ew", pady=(2, 0))
             track.grid_propagate(False)
             fill = tk.Frame(track, background=accent, borderwidth=0)
@@ -254,7 +311,7 @@ class TopFiveBarList(tk.Frame):
                 anchor="e",
                 background=ATTENDANCE_OT_CARD,
                 foreground=accent,
-                font=("Segoe UI", 10, "bold"),
+                font=(self.theme.typography.ui_family, 10, "bold"),
             ).grid(row=index, column=2, sticky="e", padx=(8, 0), pady=3)
             self.rows.append({"name": name, "count": count, "fill": fill})
 
@@ -276,13 +333,24 @@ class TopFiveBarList(tk.Frame):
 
 
 class MultiSelect(ttk.Frame):
-    def __init__(self, parent, title):
+    _BUTTON_STYLES = {
+        "Branch": "AttendanceOTFilterBranch.TButton",
+        "Pay Group": "AttendanceOTFilterPayGroup.TButton",
+        "Department": "AttendanceOTFilterDepartment.TButton",
+        "Division": "AttendanceOTFilterDivision.TButton",
+    }
+
+    def __init__(self, parent, title, *, theme=None):
+        self.theme = _theme(theme)
         super().__init__(parent, style="AttendanceOTSurface.TFrame")
         self.title = title
         self.values = ()
         self.selected = ()
         self.button = ttk.Button(
-            self, text=f"{title}: All", command=self.open, style="AttendanceOT.TButton"
+            self,
+            text=f"{title}: All",
+            command=self.open,
+            style=self._BUTTON_STYLES.get(title, "AttendanceOT.TButton"),
         )
         self.button.pack(fill="x", expand=True)
 
@@ -302,6 +370,7 @@ class MultiSelect(ttk.Frame):
         window.title(self.title + " (multiple selection)")
         window.geometry("420x430")
         window.transient(self.winfo_toplevel())
+        window.configure(background=self.theme.palette.surface)
         window.columnconfigure(0, weight=1)
         window.rowconfigure(1, weight=1)
         ttk.Label(
@@ -313,11 +382,11 @@ class MultiSelect(ttk.Frame):
             window,
             selectmode="multiple",
             exportselection=False,
-            font=("Segoe UI", 10),
+            font=(self.theme.typography.ui_family, 10),
             background=ATTENDANCE_OT_CARD,
-            foreground=ATTENDANCE_OT_CHALK_WHITE,
+            foreground=ATTENDANCE_OT_TEXT,
             selectbackground=ATTENDANCE_OT_SURFACE,
-            selectforeground=ATTENDANCE_OT_CHALK_YELLOW,
+            selectforeground=ATTENDANCE_OT_TEXT,
         )
         listing.grid(row=1, column=0, sticky="nsew", padx=(10, 0))
         bar = ttk.Scrollbar(window, orient="vertical", command=listing.yview)
@@ -329,7 +398,7 @@ class MultiSelect(ttk.Frame):
             listing.insert("end", value)
             if value in self.selected:
                 listing.selection_set(index)
-        actions = ttk.Frame(window)
+        actions = ttk.Frame(window, style="AttendanceOTSurface.TFrame")
         actions.grid(row=2, column=0, pady=10)
 
         def accept():
@@ -360,7 +429,9 @@ class DataTable(ttk.Frame):
         *,
         hierarchy=False,
         header_colors=None,
+        theme=None,
     ):
+        self.theme = _theme(theme)
         super().__init__(parent, style="AttendanceOTSurface.TFrame")
         columns = tuple(columns)
         labels = tuple(labels or columns)
@@ -379,13 +450,7 @@ class DataTable(ttk.Frame):
         )
         for column, label in zip(columns, labels):
             self.tree.column(column, width=145, minwidth=70, stretch=False)
-            color = self.header_colors.get(column)
-            if color:
-                image = self._heading_image(str(label), color)
-                self.heading_images[column] = image
-                self.tree.heading(column, text="", image=image, anchor="center")
-            else:
-                self.tree.heading(column, text=label)
+            self.tree.heading(column, text=label, anchor="center")
         if hierarchy:
             self.tree.heading("#0", text="Department / Branch / Employee")
             self.tree.column("#0", width=320, minwidth=200, stretch=False)
@@ -410,19 +475,6 @@ class DataTable(ttk.Frame):
             },
         )
 
-    def _heading_image(self, label, background):
-        image = Image.new("RGB", (134, 22), background)
-        draw = ImageDraw.Draw(image)
-        try:
-            font = ImageFont.truetype("segoeuib.ttf", 12)
-        except OSError:
-            font = ImageFont.load_default()
-        bounds = draw.textbbox((0, 0), label, font=font)
-        x = (image.width - (bounds[2] - bounds[0])) / 2
-        y = (image.height - (bounds[3] - bounds[1])) / 2 - bounds[1]
-        draw.text((x, y), label, fill=ATTENDANCE_OT_CHALK_WHITE, font=font)
-        return ImageTk.PhotoImage(image, master=self.tree)
-
     def rows(self, items, columns):
         self.tree.delete(*self.tree.get_children())
         for index, item in enumerate(items):
@@ -444,7 +496,8 @@ class LateMatrixTable(ttk.Frame):
     header_height = 34
     row_height = 32
 
-    def __init__(self, parent, columns, *, on_employee_open=None):
+    def __init__(self, parent, columns, *, on_employee_open=None, theme=None):
+        self.theme = _theme(theme)
         super().__init__(parent, style="AttendanceOTSurface.TFrame")
         self.columns = tuple(columns)
         self.on_employee_open = on_employee_open
@@ -594,15 +647,15 @@ class LateMatrixTable(ttk.Frame):
             self.hierarchy_width,
             self.header_height,
             fill=ATTENDANCE_OT_SURFACE,
-            outline=ATTENDANCE_OT_CHALK_WHITE,
+            outline=ATTENDANCE_OT_TEXT,
         )
         self.canvas.create_text(
             12,
             self.header_height / 2,
             text="Department / Branch / Employee",
             anchor="w",
-            fill=ATTENDANCE_OT_CHALK_WHITE,
-            font=("Segoe UI", 9, "bold"),
+            fill=ATTENDANCE_OT_TEXT,
+            font=self.theme.table_heading_font,
         )
         for index, column in enumerate(self.columns):
             x = self.hierarchy_width + index * self.column_width
@@ -612,14 +665,14 @@ class LateMatrixTable(ttk.Frame):
                 x + self.column_width,
                 self.header_height,
                 fill=ATTENDANCE_OT_SURFACE,
-                outline=ATTENDANCE_OT_CHALK_WHITE,
+                outline=ATTENDANCE_OT_TEXT,
             )
             self.canvas.create_text(
                 x + self.column_width / 2,
                 self.header_height / 2,
                 text=column,
-                fill=ATTENDANCE_OT_CHALK_WHITE,
-                font=("Segoe UI", 9, "bold"),
+                fill=ATTENDANCE_OT_TEXT,
+                font=self.theme.table_heading_font,
             )
 
     def _draw_row(
@@ -641,7 +694,7 @@ class LateMatrixTable(ttk.Frame):
         outline = (
             ATTENDANCE_OT_CHALK_BLUE
             if selected
-            else ATTENDANCE_OT_CHALK_WHITE
+            else ATTENDANCE_OT_TEXT
         )
         self._rectangle(
             0,
@@ -655,16 +708,16 @@ class LateMatrixTable(ttk.Frame):
             prefix = "▼" if expanded else "▶"
             label = f"{prefix}  {label}"
             x = 12
-            font = ("Segoe UI", 9, "bold")
+            font = self.theme.body_bold_font
         else:
             x = 30
-            font = ("Segoe UI", 9)
+            font = self.theme.body_font
         self.canvas.create_text(
             x,
             y + self.row_height / 2,
             text=label,
             anchor="w",
-            fill=ATTENDANCE_OT_CHALK_WHITE,
+            fill=ATTENDANCE_OT_CHALK_WHITE if selected else ATTENDANCE_OT_TEXT,
             font=font,
         )
         row_key = (kind, key)
@@ -686,7 +739,7 @@ class LateMatrixTable(ttk.Frame):
                     y + self.row_height / 2,
                     text=str(count),
                     fill=ATTENDANCE_OT_CARD,
-                    font=("Segoe UI", 9, "bold"),
+                    font=self.theme.body_bold_font,
                 )
                 self.cell_text_items[(*row_key, self.columns[index])] = text
         self._row_hits.append(
@@ -812,7 +865,8 @@ class LateMatrixTable(ttk.Frame):
 
 
 class ScrollBody(ttk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, *, theme=None):
+        self.theme = _theme(theme)
         super().__init__(parent, style="AttendanceOTSurface.TFrame")
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
@@ -826,11 +880,14 @@ class ScrollBody(ttk.Frame):
         bar.grid(row=0, column=1, sticky="ns")
         self.canvas.configure(yscrollcommand=bar.set)
         self.content = ttk.Frame(
-            self.canvas, style="AttendanceOTSurface.TFrame", padding=12
+            self.canvas,
+            style="AttendanceOTSurface.TFrame",
+            padding=12,
         )
         item = self.canvas.create_window(0, 0, anchor="nw", window=self.content)
         self.canvas.bind(
-            "<Configure>", lambda e: self.canvas.itemconfigure(item, width=e.width)
+            "<Configure>",
+            lambda e: self.canvas.itemconfigure(item, width=e.width),
         )
         self.content.bind(
             "<Configure>",

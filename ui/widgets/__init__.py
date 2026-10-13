@@ -19,6 +19,7 @@ from ui.widgets.section_header import SectionHeader
 from ui.widgets.sidebar import Sidebar
 from ui.widgets.status_bar import StatusBar
 from ui.widgets.step_indicator import StepIndicator
+from ui.widgets.table_copy import TreeviewCopyHelper
 
 __all__ = [
     "ContentCard",
@@ -42,6 +43,7 @@ __all__ = [
     "Sidebar",
     "StatusBar",
     "StepIndicator",
+    "TreeviewCopyHelper",
     "display_to_iso",
     "iso_to_display",
 ]
