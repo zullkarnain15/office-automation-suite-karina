@@ -48,6 +48,11 @@ class FingerMonitoringStorageService:
             raise RuntimeError("Data Root aktif belum tersedia.")
         return Path(root)
 
+    def selected_data_root(self) -> Path:
+        """Check the current pointer cheaply; full validation occurs on initialization."""
+        path_reader = getattr(self.storage_service, "data_root_path", None)
+        return Path(path_reader()) if path_reader is not None else self._data_root()
+
     def resolve_status(self) -> FingerMonitoringStorageStatus:
         try:
             root = self._data_root()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import RLock
 
 from openpyxl import Workbook
 
@@ -27,24 +28,30 @@ class FingerMonitoringService:
         self._coordinator = None
         self._email_service = None
         self._activity_gate = FingerMonitoringActivityGate()
+        self._initialization_lock = RLock()
 
     def initialize(self):
-        status = self.storage.initialize()
-        path = Path(status.database_path)
-        if self._database_path != path:
-            self.stop()
-            self._repository = FingerMonitoringRepository(path)
-            self._database_path = path
-        if self._email_service is None:
-            self._email_service = DailyEmailReportService(
-                self._repository, activity_gate=self._activity_gate
-            )
-        return status
+        with self._initialization_lock:
+            status = self.storage.initialize()
+            path = Path(status.database_path)
+            if self._database_path != path:
+                self.stop()
+                self._repository = FingerMonitoringRepository(path)
+                self._database_path = path
+            if self._email_service is None:
+                self._email_service = DailyEmailReportService(
+                    self._repository, activity_gate=self._activity_gate
+                )
+            return status
 
     @property
     def repository(self):
-        self.initialize()
-        return self._repository
+        with self._initialization_lock:
+            root = self.storage.selected_data_root()
+            path = self.storage.database_path(root)
+            if self._repository is None or path != self._database_path:
+                self.initialize()
+            return self._repository
 
     @property
     def device_master(self):
@@ -130,12 +137,29 @@ class FingerMonitoringService:
 
     def dashboard(self):
         rows = self.device_status()
+        return self._dashboard_from_rows(rows)
+
+    def _dashboard_from_rows(self, rows):
+        threshold = int(self.settings()["offline_alert_observed_dates"])
         return {
             "total": len(rows),
             "online": sum(row["status"] == "ONLINE" for row in rows),
             "offline": sum(row["status"] == "OFFLINE" for row in rows),
-            "alert": sum(int(row["offline_days"]) >= int(self.settings()["offline_alert_observed_dates"]) for row in rows),
+            "alert": sum(int(row["offline_days"]) >= threshold for row in rows),
         }
+
+    def status_snapshot(self, *, search="", device_model=None, status=None):
+        """Read all active statuses once for the KPIs and filtered table."""
+        rows = self.device_status()
+        dashboard = self._dashboard_from_rows(rows)
+        token = search.strip().casefold()
+        visible = tuple(
+            row for row in rows
+            if (not token or token in row["branch_name"].casefold() or token in row["ip_address"].casefold())
+            and (not device_model or row["device_model"] == device_model)
+            and (status in (None, "", "ALL") or row["status"] == status)
+        )
+        return dashboard, visible
 
     def history(
         self,

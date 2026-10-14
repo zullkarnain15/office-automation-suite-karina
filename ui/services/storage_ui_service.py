@@ -36,6 +36,11 @@ class StorageUIService:
         self.validator = DatabaseValidator()
         self.startup_migrator = StartupDatabaseMigrator()
 
+    def data_root_path(self) -> Path:
+        """Read the selected path without running database validation."""
+        pointer = self.registry.read_storage_pointer()
+        return Path(pointer.data_root) if pointer is not None else self.default_data_root
+
     def prepare_startup_database(self, *, progress=None):
         resolution = DataRootManager(
             self.registry,

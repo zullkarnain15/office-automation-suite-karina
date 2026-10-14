@@ -36,6 +36,8 @@ class FingerMonitoringPage(BasePage):
         self._history_sort_descending = True
         self._cycle_total = 0
         self._cycle_checked = 0
+        self._refresh_inflight = set()
+        self._refresh_latest = {}
         super().__init__(parent, context)
 
     def build_content(self):
@@ -165,8 +167,20 @@ class FingerMonitoringPage(BasePage):
     def refresh_all(self):
         self.refresh_status(); self.refresh_master(); self.refresh_history()
 
-    def _background(self, work, done):
+    def _background(self, work, done, *, refresh_key=None):
+        if refresh_key is not None:
+            if refresh_key in self._refresh_inflight:
+                self._refresh_latest[refresh_key] = (work, done)
+                return
+            self._refresh_inflight.add(refresh_key)
+
         def complete(result):
+            if refresh_key is not None:
+                latest = self._refresh_latest.pop(refresh_key, None)
+                self._refresh_inflight.discard(refresh_key)
+                if latest is not None:
+                    self._background(*latest, refresh_key=refresh_key)
+                    return
             if result.success: done(result.value)
             else: self.services.dialog_service.error("Finger Monitoring", result.error or "Operation failed")
         self.services.task_runner.submit(work, on_done=complete)
@@ -178,7 +192,7 @@ class FingerMonitoringPage(BasePage):
             for key, name in (("Total", "total"), ("Online", "online"), ("Offline", "offline"), ("Alert ≥3 Days", "alert")): self.kpi_vars[key].set(str(dashboard[name]))
             self._status_rows = tuple(rows)
             self._render_status_rows()
-        self._background(lambda: (self.service.dashboard(), self.service.device_status(search=search, device_model=None if model == "ALL" else model, status=state)), done)
+        self._background(lambda: self.service.status_snapshot(search=search, device_model=None if model == "ALL" else model, status=state), done, refresh_key="status")
 
     @staticmethod
     def _status_display(status):
@@ -235,6 +249,7 @@ class FingerMonitoringPage(BasePage):
                 active=active,
             ),
             self._set_master_rows,
+            refresh_key="master",
         )
 
     def refresh_history(self):
@@ -254,6 +269,7 @@ class FingerMonitoringPage(BasePage):
                 descending=self._history_sort_descending,
             ),
             self._render_history,
+            refresh_key="history",
         )
 
     def _render_history(self, value):
