@@ -137,6 +137,8 @@ class HRISUploadReportWriter:
             "Status",
             "Message",
             "Moved To",
+            "Verification",
+            "Process Instance",
         ]
 
         header_row = 12
@@ -233,6 +235,8 @@ class HRISUploadReportWriter:
         - Status
         - Message
         - Moved To
+        - Verification
+        - Process Instance
         """
         report_path = Path(report_file)
 
@@ -264,8 +268,6 @@ class HRISUploadReportWriter:
             "Status",
             "Message",
             "Moved To",
-            "Verification",
-            "Process Instance",
         )
 
         for column_name in required_columns:
@@ -273,6 +275,29 @@ class HRISUploadReportWriter:
                 raise ValueError(
                     f"Required report column not found: {column_name}"
                 )
+
+        for column_name in ("Verification", "Process Instance"):
+            if column_name not in columns:
+                column_index = worksheet.max_column + 1
+                header_cell = worksheet.cell(
+                    row=header_row,
+                    column=column_index,
+                    value=column_name,
+                )
+                header_cell.font = Font(bold=True, color="FFFFFF")
+                header_cell.fill = PatternFill(
+                    fill_type="solid",
+                    fgColor="1F4E78",
+                )
+                header_cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True,
+                )
+                worksheet.column_dimensions[
+                    get_column_letter(column_index)
+                ].width = 18 if column_name == "Verification" else 20
+                columns[column_name] = column_index
 
         data_start_row = header_row + 1
         max_row = worksheet.max_row

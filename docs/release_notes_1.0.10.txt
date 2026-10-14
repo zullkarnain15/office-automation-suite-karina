@@ -1,0 +1,27 @@
+OAS-K 1.0.10
+16 September 2026
+
+Update aplikasi dari OAS-K 1.0.9 dengan database schema 4.
+Schema tetap 4; tidak memerlukan migrasi atau penggantian database.
+
+Perubahan Outlook Revisi:
+- Permintaan recall IPM.Outlook.Recall dan laporan IPM.Recall.Report difilter
+  sebelum objek Outlook dibaca, termasuk saat mencari salinan BCC balasan.
+  Recall tidak dihitung sebagai kandidat dan tidak dihapus atau dipindahkan.
+- Halaman dapat digulir untuk menjangkau validasi, hasil, dan Process Log.
+- Kandidat inbox disimpan sebagai metadata tanpa menahan ratusan objek Outlook.
+- Email dibuka satu per satu untuk download attachment dan pemrosesan.
+- Cache workflow memakai StoreID dan EntryID, bukan identitas objek Python.
+- Process.log dibuat sebelum akses mailbox, mencatat operasi, identitas email,
+  attachment, dan detail exception/traceback saat gagal.
+- History dan Buka Log menampilkan log meskipun engine berhenti lebih awal.
+
+Paket hanya berisi aplikasi dan metadata update. Gunakan fitur Update aplikasi
+untuk validasi paket dan backup database sebelum penggantian EXE.
+Data Root, database, konfigurasi aktif, output, dan recorder profiles tidak
+disertakan dalam paket. Jangan mengganti database production secara manual.
+
+Tes otomatis mencakup batch hingga 500 kandidat, inbox campuran recall,
+inbox hanya recall, serta kegagalan baca/attachment.
+Error COM spesifik production tetap perlu diverifikasi melalui log baru.
+Tidak ada retry pengiriman otomatis atau fitur resume baru dalam rilis ini.

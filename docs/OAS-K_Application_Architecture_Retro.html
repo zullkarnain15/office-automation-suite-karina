@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OAS-K — Arsitektur Aplikasi</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --sky:#62b9f6; --cloud:#fffdf6; --ink:#172542; --brick:#c6402f; --brick-dark:#8f271f; --pipe:#27a64a; --pipe-dark:#087133; --coin:#ffd447; --coin-dark:#d29a13; --ground:#a9572e; --ground-dark:#6e351f; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:#d8f0ff; color:var(--ink); font-family:'Space Grotesk', Arial, sans-serif; }
+    main { max-width:1360px; margin:0 auto; padding:28px 28px 36px; }
+    .eyebrow { margin:0 0 10px; font:10px 'Press Start 2P', monospace; color:var(--brick-dark); letter-spacing:.04em; }
+    h1 { margin:0; font:700 30px 'Space Grotesk', Arial, sans-serif; letter-spacing:-.04em; }
+    .subtitle { margin:8px 0 22px; max-width:820px; font-size:15px; color:#355479; }
+    .diagram-container { width:100%; overflow-x:auto; border:4px solid var(--ink); background:var(--sky); }
+    svg { width:100%; min-width:1280px; display:block; }
+    .note { margin:16px 0 0; font-size:13px; color:#355479; }
+    @media print { main { padding:0; } .diagram-container { overflow-x:visible; } svg { min-width:0; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">OAS-K • RETRO PLATFORMER MAP</p>
+    <h1>Arsitektur Aplikasi OAS-K</h1>
+    <p class="subtitle">Peta tingkat tinggi untuk shell desktop, modul otomasi, layanan bersama, dan sistem kantor yang terhubung.</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 720" role="img" aria-labelledby="oask-retro-title oask-retro-desc">
+        <title id="oask-retro-title">Arsitektur aplikasi OAS-K bergaya retro platformer</title>
+        <desc id="oask-retro-desc">Pengguna menjalankan antarmuka desktop OAS-K. Shell menavigasi modul Attendance, Outlook Revisi, HRIS, dan Utilities yang memakai layanan konfigurasi serta basis data bersama untuk membaca sumber kantor dan membuat keluaran kerja.</desc>
+        <defs>
+          <pattern id="brick" width="32" height="16" patternUnits="userSpaceOnUse">
+            <rect width="32" height="16" fill="#c6402f"/><path d="M0 0H32M0 16H32M16 0V8M0 8H32M8 8V16M24 8V16" stroke="#8f271f" stroke-width="2"/>
+          </pattern>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#172542"/></marker>
+        </defs>
+
+        <!-- atmosphere -->
+        <g fill="#fffdf6" opacity=".96"><path d="M84 94c0-12 10-22 22-22 7 0 13 3 17 8 4-12 15-20 29-20 17 0 31 14 31 31H84z"/><path d="M940 106c0-11 9-20 20-20 6 0 12 3 16 8 4-11 14-18 27-18 16 0 29 13 29 30H940z"/></g>
+        <text x="64" y="48" font-family="'Press Start 2P', monospace" font-size="11" fill="#172542">START</text>
+        <text x="1110" y="48" font-family="'Press Start 2P', monospace" font-size="11" fill="#172542">GOAL</text>
+
+        <!-- connectors, before nodes -->
+        <g fill="none" stroke="#172542" stroke-width="3" marker-end="url(#arrow)">
+          <path d="M184 340H224"/>
+          <path d="M392 320H468V120H520"/>
+          <path d="M392 336H452V254H520"/>
+          <path d="M392 352H436V388H520"/>
+          <path d="M392 368H420V522H520"/>
+          <path d="M744 120H784V286H848"/>
+          <path d="M744 254H800V302H848"/>
+          <path d="M744 388H816V318H848"/>
+          <path d="M744 522H832V334H848"/>
+          <path d="M1040 310H1084"/>
+        </g>
+        <g font-family="'Roboto Mono', monospace" font-size="10" fill="#172542">
+          <rect x="452" y="185" width="58" height="18" fill="#fffdf6"/><text x="481" y="198" text-anchor="middle">OPEN</text>
+          <rect x="776" y="270" width="58" height="18" fill="#fffdf6"/><text x="805" y="283" text-anchor="middle">READ / WRITE</text>
+          <rect x="1051" y="292" width="48" height="18" fill="#fffdf6"/><text x="1075" y="305" text-anchor="middle">OUTPUT</text>
+        </g>
+
+        <!-- user -->
+        <g><rect x="48" y="292" width="136" height="96" fill="#fffdf6" stroke="#172542" stroke-width="4"/><rect x="48" y="292" width="136" height="22" fill="#ffd447" stroke="#172542" stroke-width="4"/><text x="116" y="307" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="8">PLAYER</text><circle cx="116" cy="340" r="16" fill="#e9b58c" stroke="#172542" stroke-width="3"/><path d="M98 334c6-18 31-22 38 0" fill="#c6402f" stroke="#172542" stroke-width="3"/><text x="116" y="376" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="700">Operator</text></g>
+
+        <!-- shell -->
+        <g><rect x="224" y="276" width="168" height="140" fill="#fffdf6" stroke="#172542" stroke-width="4"/><rect x="224" y="276" width="168" height="28" fill="#c6402f" stroke="#172542" stroke-width="4"/><text x="308" y="294" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="8" fill="#fffdf6">OAS-K</text><rect x="244" y="324" width="128" height="16" fill="#62b9f6" stroke="#172542" stroke-width="2"/><rect x="244" y="352" width="76" height="12" fill="#27a64a"/><rect x="244" y="376" width="112" height="12" fill="#ffd447"/><text x="308" y="406" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="700">Desktop Shell</text></g>
+
+        <!-- modules -->
+        <g font-family="'Space Grotesk', sans-serif">
+          <g><rect x="520" y="76" width="224" height="88" fill="#fffdf6" stroke="#172542" stroke-width="4"/><rect x="520" y="76" width="32" height="88" fill="url(#brick)" stroke="#172542" stroke-width="4"/><text x="568" y="107" font-size="17" font-weight="700">Attendance</text><text x="568" y="130" font-family="'Roboto Mono', monospace" font-size="10">MDB → TXT + Excel</text></g>
+          <g><rect x="520" y="210" width="224" height="88" fill="#fffdf6" stroke="#172542" stroke-width="4"/><rect x="520" y="210" width="32" height="88" fill="url(#brick)" stroke="#172542" stroke-width="4"/><text x="568" y="241" font-size="17" font-weight="700">Outlook Revisi</text><text x="568" y="264" font-family="'Roboto Mono', monospace" font-size="10">email + attachment flow</text></g>
+          <g><rect x="520" y="344" width="224" height="88" fill="#fffdf6" stroke="#172542" stroke-width="4"/><rect x="520" y="344" width="32" height="88" fill="url(#brick)" stroke="#172542" stroke-width="4"/><text x="568" y="375" font-size="17" font-weight="700">HRIS</text><text x="568" y="398" font-family="'Roboto Mono', monospace" font-size="10">browser upload automation</text></g>
+          <g><rect x="520" y="478" width="224" height="88" fill="#fffdf6" stroke="#172542" stroke-width="4"/><rect x="520" y="478" width="32" height="88" fill="url(#brick)" stroke="#172542" stroke-width="4"/><text x="568" y="509" font-size="17" font-weight="700">Utilities</text><text x="568" y="532" font-family="'Roboto Mono', monospace" font-size="10">repair, reconcile, merge</text></g>
+        </g>
+
+        <!-- shared services -->
+        <g><rect x="848" y="244" width="192" height="156" rx="4" fill="#e5f8dc" stroke="#087133" stroke-width="4"/><path d="M848 270H1040" stroke="#087133" stroke-width="4"/><text x="944" y="262" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="8" fill="#087133">GREEN PIPE</text><text x="944" y="302" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="16" font-weight="700">Shared Services</text><text x="944" y="326" text-anchor="middle" font-family="'Roboto Mono', monospace" font-size="10">config • SQLite • logs</text><path d="M874 350h140v18H874z" fill="#27a64a" stroke="#087133" stroke-width="3"/><path d="M882 356h124" stroke="#fffdf6" stroke-width="3"/></g>
+
+        <!-- office world -->
+        <g><rect x="1084" y="256" width="148" height="168" fill="#fffdf6" stroke="#172542" stroke-width="4"/><rect x="1084" y="256" width="148" height="28" fill="#ffd447" stroke="#172542" stroke-width="4"/><text x="1158" y="274" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="8">OFFICE WORLD</text><text x="1158" y="316" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="700">Excel / MDB</text><text x="1158" y="342" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="700">Outlook / HRIS</text><text x="1158" y="368" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="700">Reports &amp; Files</text><circle cx="1158" cy="396" r="10" fill="#ffd447" stroke="#d29a13" stroke-width="3"/></g>
+
+        <!-- ground and legend -->
+        <rect x="0" y="638" width="1280" height="82" fill="url(#brick)" stroke="#6e351f" stroke-width="4"/>
+        <g font-family="'Roboto Mono', monospace" font-size="11" fill="#fffdf6"><text x="48" y="680">■</text><text x="66" y="680">desktop UI</text><text x="214" y="680">■</text><text x="232" y="680">module</text><text x="352" y="680" fill="#9df0ae">■</text><text x="370" y="680">shared services</text><text x="570" y="680" fill="#ffd447">■</text><text x="588" y="680">external office systems</text><text x="948" y="680">OAS-K v1.0.17 • high-level overview</text></g>
+      </svg>
+    </div>
+    <p class="note">Detail: balanced · Diagram merangkum halaman UI, layanan pendukung, dan empat modul utama; komponen internal tingkat rendah digabungkan ke dalam tiap modul.</p>
+  </main>
+</body>
+</html>

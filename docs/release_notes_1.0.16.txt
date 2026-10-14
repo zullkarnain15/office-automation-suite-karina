@@ -1,0 +1,55 @@
+OAS-K 1.0.16
+7 October 2026
+
+Release production untuk OAS-K core database schema 4 dan database analytics
+Attendance & OT schema 9.
+
+Attendance & OT performance:
+- Initial import XLSX menggunakan native Calamine reader dengan fallback
+  OpenPyXL untuk kompatibilitas.
+- Batch database import diperbesar dan index raw attendance dibangun secara
+  bulk untuk mempercepat initial load jutaan baris.
+- Progress import diperbarui setiap 25.000 baris agar proses besar dapat
+  dipantau dari UI.
+- Rebuild analytics menggunakan cache employee/schedule, lookup efektif yang
+  lebih cepat, fast-path tanggal/waktu, dan bulk rebuild reporting indexes.
+- Update Attendance berikutnya hanya rebuild source dan agregat bulan yang
+  berubah.
+- Update Employee hanya rebuild NIK dan rentang tanggal snapshot yang berubah;
+  riwayat attendance karyawan lain tidak lagi diproses ulang.
+- Kolom Jabatan pada Detail Data membaca `JobCd Desc` langsung dari source
+  Attendance & OT; data lama yang belum terisi direimport otomatis satu kali.
+- Search NIK lengkap memakai index employee/date sehingga Detail Data dan
+  ringkasan filter tidak lagi melakukan full-table scan.
+- Update All mengimpor seluruh source lebih dahulu dan menjalankan rebuild
+  analytics paling banyak satu kali.
+
+Attendance & OT database portability:
+- Settings > Storage & Database menyediakan pengelolaan database Attendance &
+  OT untuk validasi file kandidat, export backup portable terverifikasi, dan
+  import database dari PC PIC lain.
+- Import database memakai staging, backup database aktif, health check, dan
+  rollback otomatis jika aktivasi atau validasi gagal.
+- Konfigurasi source pada core database tetap dipertahankan saat database
+  analytics diganti.
+
+User interface:
+- Halaman Storage & Database mendukung scrollbar vertikal dan mouse wheel,
+  dengan tombol aksi yang dikelompokkan dan diratakan.
+- Dashboard ATT & OT memakai tema papan tulis hijau gelap dengan warna kapur
+  putih, kuning, biru, dan pink pada KPI, grafik, filter, tabel, dan status.
+- Loading bar ATT & OT menampilkan persentase untuk proses yang memiliki tahap
+  terukur, dengan warna biru saat berjalan, kuning saat selesai, dan pink saat
+  operasi berakhir dengan error.
+- Copy cell/baris/header tersedia pada tabel ATT & OT melalui menu konteks dan
+  keyboard.
+
+Kompatibilitas database:
+- Core OAS-K production schema 4 tetap schema 4; tidak ada migrasi core.
+- Database Attendance & OT production schema 9 tetap schema 9; tidak ada
+  migrasi analytics.
+- Database dan data production existing dipertahankan. Initial database baru
+  tetap dibuat menggunakan schema analytics terbaru.
+
+Paket update hanya berisi aplikasi dan metadata update. Data Root, database,
+konfigurasi aktif, log, output, backup, dan recorder profiles tidak disertakan.

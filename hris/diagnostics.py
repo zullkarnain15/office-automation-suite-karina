@@ -59,7 +59,10 @@ class HRISDiagnosticPackWriter:
         """
         Write diagnostic files and return the diagnostic folder path.
         """
-        diagnostic_folder = artifacts.job_report_folder / "Diagnostic"
+        diagnostic_folder = (
+            artifacts.job_report_folder
+            / f"Diagnostic_{artifacts.job_id}"
+        )
         diagnostic_folder.mkdir(
             parents=True,
             exist_ok=True,
@@ -261,9 +264,9 @@ class HRISDiagnosticPackWriter:
         diagnostic_folder: Path,
     ) -> None:
         """
-        Create ZIP archive next to Diagnostic folder.
+        Create a job-specific ZIP archive next to the diagnostic folder.
         """
-        zip_base = diagnostic_folder.parent / "Diagnostic"
+        zip_base = diagnostic_folder.parent / diagnostic_folder.name
 
         shutil.make_archive(
             base_name=str(zip_base),
@@ -317,9 +320,19 @@ class HRISDiagnosticPackWriter:
             if any(keyword in key_lower for keyword in SENSITIVE_KEYWORDS):
                 safe_mapping[key_text] = "<REDACTED>"
             else:
-                safe_mapping[key_text] = str(value)
+                safe_mapping[key_text] = self._redact_value(value)
 
         return safe_mapping
+
+    def _redact_value(self, value: Any) -> Any:
+        """Preserve safe JSON structure while recursively redacting mappings."""
+        if isinstance(value, dict):
+            return self._redact_mapping(value)
+        if isinstance(value, (list, tuple)):
+            return [self._redact_value(item) for item in value]
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        return str(value)
 
     def _safe_txt_files(
         self,

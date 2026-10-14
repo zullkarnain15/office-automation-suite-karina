@@ -1,0 +1,27 @@
+OAS-K 1.0.12
+29 September 2026
+
+Update aplikasi production dari OAS-K 1.0.11 dengan database utama schema 4.
+Schema database utama tetap 4; tidak memerlukan migrasi atau penggantian database.
+Database analytics Attendance & OT tetap menggunakan schema 5.
+
+Attendance & OT:
+- Nama pada Top 5 Late Employee HO dan Top 5 Late Employee Branch sekarang
+  ditampilkan lebih besar dan bold, konsisten dengan Top 5 Late Branch dan HO.
+- Detail Data menampilkan Date In dan Date Out secara terpisah, termasuk shift
+  lintas tanggal, dan export sheet Detail_Data mengikuti kolom tabel yang tampil.
+- Fitur Cek Duplicate Data dapat menemukan dan menghapus duplikasi berdasarkan
+  NIK, Date In, Actual In, Date Out, dan Actual Out, dengan backup sebelum hapus.
+- Master Employee mempertahankan riwayat karyawan, menampilkan satu data terbaru
+  per NIK, serta menandai Active/Inactive berdasarkan file karyawan terbaru.
+- Master Schedule menampilkan assignment terbaru dan Detail Data memilih schedule
+  sesuai rentang EFFDT sampai END_EFFDT yang berlaku pada tanggal attendance.
+- Refresh meminta konfirmasi, memproses file baru/berubah tanpa mengimpor ulang
+  file yang tidak berubah, lalu menampilkan ringkasan hasil update.
+- Database Maintenance dapat memulihkan transaksi SQLite yang terputus dengan
+  salinan recovery dan backup terverifikasi sebelum perbaikan.
+
+Paket hanya berisi aplikasi dan metadata update. Gunakan fitur Application Update
+untuk validasi paket dan membuat backup database utama sebelum penggantian EXE.
+Data Root, database, konfigurasi aktif, log, output, backup, dan recorder profiles
+tidak disertakan. Jangan mengganti database production secara manual.
