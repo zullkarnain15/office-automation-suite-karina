@@ -13,7 +13,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from shared.finger_monitoring import FingerMonitoringRepository, FingerMonitoringStorageService
+from shared.finger_monitoring import (
+    FINGER_MONITORING_SCHEMA_VERSION,
+    FingerMonitoringRepository,
+    FingerMonitoringStorageService,
+)
 from shared.finger_monitoring.activity import FingerMonitoringActivityGate
 from shared.finger_monitoring.email_service import DailyEmailReportService, JAKARTA
 from shared.finger_monitoring.maintenance_service import FingerMonitoringMaintenanceService
@@ -180,4 +184,4 @@ def test_maintenance_gate_and_database_lock_fail_safely(tmp_path):
         with pytest.raises(sqlite3.Error): maintenance.compact()
     finally:
         locker.rollback(); locker.close()
-    assert repo.schema_manager.validate(repo.database_path) == 3
+    assert repo.schema_manager.validate(repo.database_path) == FINGER_MONITORING_SCHEMA_VERSION

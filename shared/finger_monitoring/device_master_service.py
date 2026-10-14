@@ -17,7 +17,16 @@ from shared.database.time_utils import current_timestamp
 
 TEMPLATE_FILENAME = "OASK_Finger_Device_Master_Template.xlsx"
 SHEET_NAME = "Device_Master"
-HEADERS = ("Branch_Name", "IP_Address", "Device_Model", "Active")
+HEADERS = (
+    "Unit",
+    "3LC",
+    "Branch_Name",
+    "IP_Address",
+    "Device_Model",
+    "Active",
+    "Note",
+)
+LEGACY_HEADERS = ("Branch_Name", "IP_Address", "Device_Model", "Active")
 ACTIVE_VALUES = {"YES": True, "Y": True, "TRUE": True, "1": True, "NO": False, "N": False, "FALSE": False, "0": False}
 
 
@@ -29,6 +38,9 @@ class DeviceImportItem:
     ip_address: str
     device_model: str
     active: bool
+    unit: str = ""
+    three_lc: str = ""
+    note: str = ""
     device_id: int | None = None
     reason: str = ""
 
@@ -63,11 +75,45 @@ class DeviceMasterService:
         self.repository = repository
         self.activity_gate = activity_gate
 
-    def add_device(self, branch_name: str, ip_address: str, *, device_model: str = "X1500") -> int:
-        return self.repository.create_device(branch_name, ip_address, device_model=device_model)
+    def add_device(
+        self,
+        branch_name: str,
+        ip_address: str,
+        *,
+        device_model: str = "X1500",
+        unit: str | None = None,
+        three_lc: str | None = None,
+        note: str | None = None,
+    ) -> int:
+        return self.repository.create_device(
+            branch_name,
+            ip_address,
+            device_model=device_model,
+            unit=unit,
+            three_lc=three_lc,
+            note=note,
+        )
 
-    def edit_device(self, device_id: int, branch_name: str, ip_address: str, *, device_model: str = "X1500") -> None:
-        self.repository.update_device(device_id, branch_name, ip_address, device_model=device_model)
+    def edit_device(
+        self,
+        device_id: int,
+        branch_name: str,
+        ip_address: str,
+        *,
+        device_model: str = "X1500",
+        unit: str | None = None,
+        three_lc: str | None = None,
+        note: str | None = None,
+    ) -> None:
+        self.repository.update_device(
+            device_id,
+            branch_name,
+            ip_address,
+            device_model=device_model,
+            unit=unit,
+            three_lc=three_lc,
+            note=note,
+        )
 
     def soft_delete(self, device_id: int) -> None:
         self.repository.soft_delete_device(device_id)
@@ -93,10 +139,11 @@ class DeviceMasterService:
         sheet = workbook.active
         sheet.title = SHEET_NAME
         DeviceMasterService._style_header(sheet, HEADERS)
-        sheet.append(("Example Branch", "192.168.1.10", "X1500", "YES"))
+        sheet.append(("CF", "MDU", "Example Branch", "192.168.1.10", "X1500", "YES", "OTO AMU + CEMAS + ARD"))
+        sheet.append(("MF", "BAN", "Example Branch", "192.168.1.11", "X1500", "YES", ""))
         sheet.freeze_panes = "A2"
         sheet.sheet_view.showGridLines = False
-        for index, width in enumerate((30, 20, 18, 12), 1):
+        for index, width in enumerate((14, 14, 30, 20, 18, 12, 38), 1):
             sheet.column_dimensions[get_column_letter(index)].width = width
         DeviceMasterService._atomic_save(workbook, path)
         return path
@@ -117,7 +164,7 @@ class DeviceMasterService:
                 raise ValueError("Sheet Device_Master tidak ditemukan.")
             sheet = workbook[SHEET_NAME]
             headers = tuple(self._text(cell) for cell in next(sheet.iter_rows(min_row=1, max_row=1, values_only=True), ()))
-            if headers != HEADERS:
+            if headers not in {HEADERS, LEGACY_HEADERS}:
                 raise ValueError("Header harus tepat: " + ", ".join(HEADERS))
             raw_rows = list(sheet.iter_rows(min_row=2, values_only=True))
         finally:
@@ -126,9 +173,11 @@ class DeviceMasterService:
         prepared: list[DeviceImportItem] = []
         ip_rows: dict[str, list[int]] = {}
         for index, row in enumerate(raw_rows, 2):
-            values = tuple(self._text(value) for value in row[:4])
+            values = tuple(self._text(value) for value in row[: len(headers)])
             if not any(values):
                 continue
+            if headers == LEGACY_HEADERS:
+                values = ("", "", *values, "")
             item = self._parse_import_row(index, values)
             prepared.append(item)
             if item.action != "REJECTED":
@@ -139,7 +188,8 @@ class DeviceMasterService:
                     item = prepared[item_index]
                     prepared[item_index] = DeviceImportItem(
                         item.row_number, "REJECTED", item.branch_name, item.ip_address,
-                        item.device_model, item.active, reason="Duplicate IP_Address di file import.",
+                    item.device_model, item.active, item.unit, item.three_lc, item.note,
+                    reason="Duplicate IP_Address di file import.",
                     )
 
         existing = self.repository.list_devices(include_deleted=True, active=None)
@@ -155,7 +205,7 @@ class DeviceMasterService:
             action = "UPDATE" if previous is not None else "INSERT"
             planned.append(DeviceImportItem(
                 item.row_number, action, item.branch_name, item.ip_address,
-                item.device_model, item.active,
+                item.device_model, item.active, item.unit, item.three_lc, item.note,
                 int(previous["device_id"]) if previous else None,
             ))
         return DeviceImportPreview(source, self.repository.device_revision(), tuple(planned))
@@ -183,13 +233,13 @@ class DeviceMasterService:
         now = current_timestamp()
         if item.action == "INSERT":
             connection.execute(
-                "INSERT INTO device_master(branch_name,ip_address,device_model,is_active,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?)",
-                (item.branch_name, item.ip_address, item.device_model, int(item.active), now, now, None if item.active else now),
+                "INSERT INTO device_master(unit,three_lc,branch_name,ip_address,device_model,is_active,note,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (item.unit, item.three_lc, item.branch_name, item.ip_address, item.device_model, int(item.active), item.note, now, now, None if item.active else now),
             )
         elif item.action == "UPDATE" and item.device_id is not None:
             changed = connection.execute(
-                "UPDATE device_master SET branch_name=?,ip_address=?,device_model=?,is_active=?,updated_at=?,deleted_at=? WHERE device_id=?",
-                (item.branch_name, item.ip_address, item.device_model, int(item.active), now, None if item.active else now, item.device_id),
+                "UPDATE device_master SET unit=?,three_lc=?,branch_name=?,ip_address=?,device_model=?,is_active=?,note=?,updated_at=?,deleted_at=? WHERE device_id=?",
+                (item.unit, item.three_lc, item.branch_name, item.ip_address, item.device_model, int(item.active), item.note, now, None if item.active else now, item.device_id),
             ).rowcount
             if changed != 1:
                 raise RuntimeError("Perangkat import tidak lagi tersedia.")
@@ -206,16 +256,16 @@ class DeviceMasterService:
         sheet.title = SHEET_NAME
         self._style_header(sheet, HEADERS)
         for row in rows:
-            sheet.append((row["branch_name"], row["ip_address"], row["device_model"], "YES" if row["is_active"] else "NO"))
+            sheet.append((row["unit"], row["three_lc"], row["branch_name"], row["ip_address"], row["device_model"], "YES" if row["is_active"] else "NO", row["note"]))
         sheet.freeze_panes = "A2"
         sheet.sheet_view.showGridLines = False
-        for index, width in enumerate((30, 20, 18, 12), 1):
+        for index, width in enumerate((14, 14, 30, 20, 18, 12, 38), 1):
             sheet.column_dimensions[get_column_letter(index)].width = width
         self._atomic_save(workbook, target)
         return target
 
     @staticmethod
-    def copy_rows(rows: Iterable[dict], *, fields: tuple[str, ...] = ("branch_name", "ip_address", "device_model", "is_active"), include_header: bool = False) -> str:
+    def copy_rows(rows: Iterable[dict], *, fields: tuple[str, ...] = ("unit", "three_lc", "branch_name", "ip_address", "device_model", "is_active", "note"), include_header: bool = False) -> str:
         lines = []
         if include_header:
             lines.append("\t".join(fields))
@@ -244,22 +294,22 @@ class DeviceMasterService:
 
     @staticmethod
     def _parse_import_row(row_number: int, values: tuple[str, ...]) -> DeviceImportItem:
-        branch, address, model, active = values
+        unit, three_lc, branch, address, model, active, note = values
         if not branch or not address:
-            return DeviceImportItem(row_number, "REJECTED", branch, address, model, True, reason="Branch_Name dan IP_Address wajib diisi.")
+            return DeviceImportItem(row_number, "REJECTED", branch, address, model, True, unit, three_lc, note, reason="Branch_Name dan IP_Address wajib diisi.")
         try:
             parsed = ipaddress.ip_address(address)
             if parsed.version != 4:
                 raise ValueError
         except ValueError:
-            return DeviceImportItem(row_number, "REJECTED", branch, address, model, True, reason="IP_Address harus IPv4 valid.")
+            return DeviceImportItem(row_number, "REJECTED", branch, address, model, True, unit, three_lc, note, reason="IP_Address harus IPv4 valid.")
         model = (model or "X1500").upper()
         if model not in {"X1500", "X1800"}:
-            return DeviceImportItem(row_number, "REJECTED", branch, str(parsed), model, True, reason="Device_Model harus X1500 atau X1800.")
+            return DeviceImportItem(row_number, "REJECTED", branch, str(parsed), model, True, unit, three_lc, note, reason="Device_Model harus X1500 atau X1800.")
         active_value = ACTIVE_VALUES.get((active or "YES").upper())
         if active_value is None:
-            return DeviceImportItem(row_number, "REJECTED", branch, str(parsed), model, True, reason="Active harus YES atau NO.")
-        return DeviceImportItem(row_number, "PENDING", branch, str(parsed), model, active_value)
+            return DeviceImportItem(row_number, "REJECTED", branch, str(parsed), model, True, unit, three_lc, note, reason="Active harus YES atau NO.")
+        return DeviceImportItem(row_number, "PENDING", branch, str(parsed), model, active_value, unit, three_lc, note)
 
     @staticmethod
     def _text(value) -> str:

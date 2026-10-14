@@ -33,17 +33,25 @@ def _service(tmp_path):
 def _workbook(path: Path, rows, headers=HEADERS):
     workbook = Workbook(); sheet = workbook.active; sheet.title = SHEET_NAME
     sheet.append(headers)
-    for row in rows: sheet.append(row)
+    for row in rows:
+        if headers == HEADERS and len(row) == 4:
+            branch, ip, model, active = row
+            row = ("", "", branch, ip, model, active, "")
+        sheet.append(row)
     workbook.save(path); workbook.close()
 
 
 def test_crud_soft_delete_reactivate_search_and_global_ip(tmp_path):
     repository, service = _service(tmp_path)
-    first = service.add_device("Jakarta", "10.10.0.1")
+    first = service.add_device(
+        "Jakarta", "10.10.0.1", unit="CF", three_lc="MDU", note="Primary"
+    )
     with pytest.raises(Exception):
         service.add_device("Bandung", "10.10.0.1")
     service.edit_device(first, "Jakarta Selatan", "10.10.0.2", device_model="X1800")
-    assert service.search(search="selatan")[0]["device_model"] == "X1800"
+    device = service.search(search="selatan")[0]
+    assert device["device_model"] == "X1800"
+    assert (device["unit"], device["three_lc"], device["note"]) == ("CF", "MDU", "Primary")
     service.soft_delete(first)
     assert service.search() == ()
     assert service.search(active=False)[0]["device_id"] == first
@@ -104,12 +112,15 @@ def test_import_revalidates_revision_and_rolls_back_on_apply_failure(tmp_path, m
 
 def test_template_export_filters_and_copy_tsv(tmp_path):
     _repository, service = _service(tmp_path)
-    first = service.add_device("Jakarta", "10.40.0.1", device_model="X1500")
-    second = service.add_device("Bandung", "10.40.0.2", device_model="X1800")
+    first = service.add_device("Jakarta", "10.40.0.1", device_model="X1500", unit="CF", three_lc="MDU", note="First")
+    second = service.add_device("Bandung", "10.40.0.2", device_model="X1800", unit="MF", three_lc="BAN", note="Second")
     template = service.generate_template(tmp_path)
     workbook = load_workbook(template, read_only=True)
     try:
-        assert workbook[SHEET_NAME].max_row == 2
+        assert tuple(workbook[SHEET_NAME].iter_rows(values_only=True))[1:] == (
+            ("CF", "MDU", "Example Branch", "192.168.1.10", "X1500", "YES", "OTO AMU + CEMAS + ARD"),
+            ("MF", "BAN", "Example Branch", "192.168.1.11", "X1500", "YES", None),
+        )
     finally:
         workbook.close()
     output = tmp_path / "filtered.xlsx"
@@ -119,12 +130,26 @@ def test_template_export_filters_and_copy_tsv(tmp_path):
         rows = list(workbook[SHEET_NAME].iter_rows(values_only=True))
     finally:
         workbook.close()
-    assert rows[0] == HEADERS and rows[1][0] == "Bandung" and len(rows) == 2
+    assert rows[0] == HEADERS and rows[1][:3] == ("MF", "BAN", "Bandung") and rows[1][6] == "Second" and len(rows) == 2
     all_rows = service.search(active=None)
-    assert service.copy_selected(all_rows, (first,)).split("\t")[0] == "Jakarta"
+    assert service.copy_selected(all_rows, (first,)).split("\t")[2] == "Jakarta"
     assert service.copy_ip_addresses(all_rows) == "10.40.0.2\n10.40.0.1"
     assert service.copy_branch_names(all_rows) == "Bandung\nJakarta"
     assert second in {row["device_id"] for row in all_rows}
+
+
+def test_import_persists_unit_3lc_and_note(tmp_path):
+    _repository, service = _service(tmp_path)
+    source = tmp_path / "device-master.xlsx"
+    _workbook(source, [("CF", "MDU", "Example Branch", "10.41.0.1", "X1500", "YES", "OTO AMU + CEMAS + ARD")])
+
+    preview = service.preview_import(source)
+    assert preview.can_commit and preview.insert_count == 1
+    service.commit_import(preview)
+    row = service.search()[0]
+    assert (row["unit"], row["three_lc"], row["note"]) == (
+        "CF", "MDU", "OTO AMU + CEMAS + ARD"
+    )
 
 
 def test_history_foreign_keys_survive_edit_and_soft_delete(tmp_path):
@@ -153,7 +178,7 @@ def test_v1_to_v2_migration_enforces_global_active_ip(tmp_path):
         connection.execute("CREATE UNIQUE INDEX uq_device_master_active_branch_ip ON device_master(branch_name, ip_address) WHERE is_active=1")
         connection.execute("UPDATE monitoring_metadata SET schema_version=1")
         connection.execute("PRAGMA user_version=1")
-    assert repository.initialize() == 3
+    assert repository.initialize() == 4
     first = repository.create_device("A", "10.60.0.1")
     assert first > 0
     with pytest.raises(Exception):

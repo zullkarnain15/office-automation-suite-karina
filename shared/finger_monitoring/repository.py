@@ -68,34 +68,76 @@ class FingerMonitoringRepository:
         by_id = {row["device_id"]: row for row in found}
         return tuple(by_id[item] for item in ids if item in by_id)
 
-    def create_device(self, branch_name: str, ip_address: str, *, device_model: str = "X1500") -> int:
+    def create_device(
+        self,
+        branch_name: str,
+        ip_address: str,
+        *,
+        device_model: str = "X1500",
+        unit: str = "",
+        three_lc: str = "",
+        note: str = "",
+    ) -> int:
         branch, address, model = self._device_values(branch_name, ip_address, device_model)
+        unit, three_lc, note = self._additional_values(unit, three_lc, note)
         now = current_timestamp()
         def write(connection):
             self._ensure_active_ip_available(connection, address)
-            return self._insert_device(connection, branch, address, model, now)
+            return self._insert_device(
+                connection, unit, three_lc, branch, address, model, note, now
+            )
         return self._write(write)
 
     @staticmethod
-    def _insert_device(connection, branch: str, address: str, model: str, now: str) -> int:
+    def _insert_device(
+        connection,
+        unit: str,
+        three_lc: str,
+        branch: str,
+        address: str,
+        model: str,
+        note: str,
+        now: str,
+    ) -> int:
         cursor = connection.execute(
-            "INSERT INTO device_master(branch_name,ip_address,device_model,created_at,updated_at) VALUES(?,?,?,?,?)",
-            (branch, address, model, now, now),
+            "INSERT INTO device_master(unit,three_lc,branch_name,ip_address,device_model,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+            (unit, three_lc, branch, address, model, note, now, now),
         )
         return int(cursor.lastrowid)
 
-    def update_device(self, device_id: int, branch_name: str, ip_address: str, *, device_model: str = "X1500") -> None:
+    def update_device(
+        self,
+        device_id: int,
+        branch_name: str,
+        ip_address: str,
+        *,
+        device_model: str = "X1500",
+        unit: str | None = None,
+        three_lc: str | None = None,
+        note: str | None = None,
+    ) -> None:
         branch, address, model = self._device_values(branch_name, ip_address, device_model)
+        unit = None if unit is None else str(unit).strip()
+        three_lc = None if three_lc is None else str(three_lc).strip()
+        note = None if note is None else str(note).strip()
         now = current_timestamp()
         def write(connection):
             self._ensure_active_ip_available(connection, address, except_device_id=int(device_id))
             changed = connection.execute(
-                "UPDATE device_master SET branch_name=?,ip_address=?,device_model=?,updated_at=? WHERE device_id=? AND is_active=1",
-                (branch, address, model, now, int(device_id)),
+                "UPDATE device_master SET unit=COALESCE(?,unit),three_lc=COALESCE(?,three_lc),branch_name=?,ip_address=?,device_model=?,note=COALESCE(?,note),updated_at=? WHERE device_id=? AND is_active=1",
+                (unit, three_lc, branch, address, model, note, now, int(device_id)),
             ).rowcount
             if changed != 1:
                 raise KeyError("Perangkat aktif tidak ditemukan.")
         self._write(write)
+
+    @staticmethod
+    def _additional_values(unit: str, three_lc: str, note: str) -> tuple[str, str, str]:
+        return (
+            str(unit or "").strip(),
+            str(three_lc or "").strip(),
+            str(note or "").strip(),
+        )
 
     def soft_delete_device(self, device_id: int) -> None:
         now = current_timestamp()

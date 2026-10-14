@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
@@ -27,6 +28,12 @@ class FingerMonitoringPage(BasePage):
         self._online_blink_is_dim = False
         self._busy = False
         self.history_offset = 0
+        self._tree_sort_state = {}
+        self._tree_heading_labels = {}
+        self._status_rows = ()
+        self._master_rows = ()
+        self._history_sort_by = "checked_at"
+        self._history_sort_descending = True
         self._cycle_total = 0
         self._cycle_checked = 0
         super().__init__(parent, context)
@@ -90,8 +97,8 @@ class FingerMonitoringPage(BasePage):
         ttk.Label(actions, textvariable=self.progress_percent_var, style="FingerMonitoringProgress.TLabel", width=5).pack(side="left")
         self.progress_var = tk.StringVar(value="Ready")
         ttk.Label(actions, textvariable=self.progress_var, style="FingerMonitoringMuted.TLabel").pack(side="right")
-        columns = ("branch", "ip", "model", "status", "online", "days")
-        self.status_tree = self._tree(tab, columns, (("branch", "Branch", 190), ("ip", "IP Address", 125), ("model", "Model", 85), ("status", "Status", 160), ("online", "Last Online", 160), ("days", "Offline Days", 95)), row=3)
+        columns = ("unit", "three_lc", "branch", "ip", "model", "status", "note", "online", "days")
+        self.status_tree = self._tree(tab, columns, (("unit", "Unit", 85), ("three_lc", "3LC", 85), ("branch", "Branch", 170), ("ip", "IP Address", 125), ("model", "Model", 85), ("status", "Status", 160), ("note", "Note", 220), ("online", "Last Online", 160), ("days", "Offline Days", 95)), row=3)
         self._configure_status_tags(self.status_tree)
         TreeviewCopyHelper(self.status_tree)
 
@@ -106,7 +113,7 @@ class FingerMonitoringPage(BasePage):
         for text, command in (("Add", self.add_device), ("Edit", self.edit_device), ("Soft Delete", self.delete_device), ("Reactivate", self.reactivate_device), ("Import Excel", self.import_excel), ("Template", self.template_excel), ("Export", self.export_excel)):
             self._button(actions, text, command, danger=text == "Soft Delete").pack(side="left", padx=(0, 4))
         ttk.Label(actions, text="Multi-select: Ctrl/Shift + click", style="FingerMonitoringMuted.TLabel").pack(side="right")
-        self.master_tree = self._tree(tab, ("branch", "ip", "model", "active"), (("branch", "Branch", 240), ("ip", "IP Address", 140), ("model", "Model", 100), ("active", "Active", 80)), row=2)
+        self.master_tree = self._tree(tab, ("unit", "three_lc", "branch", "ip", "model", "active", "note"), (("unit", "Unit", 85), ("three_lc", "3LC", 85), ("branch", "Branch", 180), ("ip", "IP Address", 130), ("model", "Model", 90), ("active", "Active", 80), ("note", "Note", 260)), row=2)
         TreeviewCopyHelper(self.master_tree)
 
     def _build_history(self):
@@ -119,7 +126,8 @@ class FingerMonitoringPage(BasePage):
             ttk.Label(filters, text=label, style="FingerMonitoringBody.TLabel").pack(side="left", padx=(0, 3)); widget.pack(side="left", padx=(0, 8))
         self._button(filters, "Refresh", self.refresh_history).pack(side="left")
         self._button(filters, "Export Excel", self.export_history).pack(side="left", padx=4)
-        self.history_tree = self._tree(tab, ("time", "branch", "ip", "model", "status", "latency", "detail"), (("time", "Checked", 155), ("branch", "Branch", 150), ("ip", "IP", 120), ("model", "Model", 75), ("status", "Status", 155), ("latency", "Latency", 75), ("detail", "Diagnostic", 260)), row=1)
+        self.history_tree = self._tree(tab, ("time", "unit", "three_lc", "branch", "ip", "model", "status", "latency", "detail"), (("time", "Checked", 155), ("unit", "Unit", 85), ("three_lc", "3LC", 85), ("branch", "Branch", 150), ("ip", "IP", 120), ("model", "Model", 75), ("status", "Status", 155), ("latency", "Latency", 75), ("detail", "Diagnostic", 260)), row=1)
+        self._set_sort_heading(self.history_tree, "time", True)
         self._configure_status_tags(self.history_tree)
         TreeviewCopyHelper(self.history_tree)
         self.pagination = PaginationBar(tab, self.history_previous, self.history_next); self.pagination.grid(row=2, column=0, sticky="e", pady=(7, 0))
@@ -127,7 +135,19 @@ class FingerMonitoringPage(BasePage):
     def _tree(self, parent, columns, specs, *, row):
         body = ttk.Frame(parent, style="FingerMonitoringCard.TFrame", padding=5); body.grid(row=row, column=0, sticky="nsew"); parent.rowconfigure(row, weight=1); body.columnconfigure(0, weight=1); body.rowconfigure(0, weight=1)
         tree = ttk.Treeview(body, columns=columns, show="headings", style="FingerMonitoring.Treeview", selectmode="extended")
-        for key, heading, width in specs: tree.heading(key, text=heading); tree.column(key, width=width, stretch=True)
+        self._tree_sort_state[tree] = (None, False)
+        self._tree_heading_labels[tree] = {
+            key: heading for key, heading, _ in specs
+        }
+        for key, heading, width in specs:
+            tree.heading(
+                key,
+                text=heading,
+                command=lambda column=key, target=tree: self._sort_by_column(
+                    target, column
+                ),
+            )
+            tree.column(key, width=width, stretch=True)
         tree.grid(row=0, column=0, sticky="nsew"); bar = ttk.Scrollbar(body, orient="vertical", command=tree.yview); bar.grid(row=0, column=1, sticky="ns"); tree.configure(yscrollcommand=bar.set)
         return tree
 
@@ -156,7 +176,8 @@ class FingerMonitoringPage(BasePage):
         def done(value):
             dashboard, rows = value
             for key, name in (("Total", "total"), ("Online", "online"), ("Offline", "offline"), ("Alert ≥3 Days", "alert")): self.kpi_vars[key].set(str(dashboard[name]))
-            self._fill(self.status_tree, rows, lambda r: (r["branch_name"], r["ip_address"], r["device_model"], self._status_display(r["status"]), r["last_online"] or "—", r["offline_days"]), ids=True)
+            self._status_rows = tuple(rows)
+            self._render_status_rows()
         self._background(lambda: (self.service.dashboard(), self.service.device_status(search=search, device_model=None if model == "ALL" else model, status=state)), done)
 
     @staticmethod
@@ -178,7 +199,7 @@ class FingerMonitoringPage(BasePage):
             ("ONLINE", palette.teal_pressed),
             ("OFFLINE", "#FF6F91"),
             ("NETWORK_UNREACHABLE", "#FFD166"),
-            ("UNKNOWN", "#FDFD96"),
+            ("UNKNOWN", "#9A6700"),
             ("ERROR", "#FF6F91"),
         ):
             if status != "ONLINE" or color_online:
@@ -207,18 +228,126 @@ class FingerMonitoringPage(BasePage):
     def refresh_master(self):
         search, model = self.master_search.get(), self.master_model.get()
         active = {"Active": True, "Inactive": False, "All": None}[self.master_active.get()]
-        self._background(lambda: self.service.device_master.search(search=search, device_model=None if model == "ALL" else model, active=active), lambda rows: self._fill(self.master_tree, rows, lambda r: (r["branch_name"], r["ip_address"], r["device_model"], "YES" if r["is_active"] else "NO"), ids=True))
+        self._background(
+            lambda: self.service.device_master.search(
+                search=search,
+                device_model=None if model == "ALL" else model,
+                active=active,
+            ),
+            self._set_master_rows,
+        )
 
     def refresh_history(self):
         date_from, date_to = self._history_dates()
         if date_from is None:
             return
         branch, status, offset = self.history_branch.get(), self.history_status.get(), self.history_offset
-        self._background(lambda: self.service.history(date_from=date_from, date_to=date_to, branch=branch, status=status, limit=self.history_page_size, offset=offset), self._render_history)
+        self._background(
+            lambda: self.service.history(
+                date_from=date_from,
+                date_to=date_to,
+                branch=branch,
+                status=status,
+                limit=self.history_page_size,
+                offset=offset,
+                sort_by=self._history_sort_by,
+                descending=self._history_sort_descending,
+            ),
+            self._render_history,
+        )
 
     def _render_history(self, value):
-        self._fill(self.history_tree, value["items"], lambda r: (r["checked_at"], r["branch_name"], r["ip_address"], r["device_model"], self._status_display(r["status"]), r["latency_ms"] if r["latency_ms"] is not None else "—", r["diagnostic"] or ""), ids=True)
+        self._fill(self.history_tree, value["items"], lambda r: (r["checked_at"], r["unit"], r["three_lc"], r["branch_name"], r["ip_address"], r["device_model"], self._status_display(r["status"]), r["latency_ms"] if r["latency_ms"] is not None else "—", r["diagnostic"] or ""), ids=True)
         self.pagination.update_state(offset=self.history_offset, limit=self.history_page_size, total=value["total"])
+
+    def _set_master_rows(self, rows):
+        self._master_rows = tuple(rows)
+        self._render_master_rows()
+
+    def _render_status_rows(self):
+        rows = self._sorted_rows(
+            self.status_tree,
+            self._status_rows,
+            {
+                "unit": "unit", "three_lc": "three_lc", "branch": "branch_name", "ip": "ip_address", "model": "device_model", "note": "note",
+                "status": "status", "online": "last_online", "days": "offline_days",
+            },
+        )
+        self._fill(
+            self.status_tree,
+            rows,
+            lambda r: (
+                r["unit"], r["three_lc"], r["branch_name"], r["ip_address"], r["device_model"],
+                self._status_display(r["status"]), r["note"], r["last_online"] or "—", r["offline_days"],
+            ),
+            ids=True,
+        )
+
+    def _render_master_rows(self):
+        rows = self._sorted_rows(
+            self.master_tree,
+            self._master_rows,
+            {"unit": "unit", "three_lc": "three_lc", "branch": "branch_name", "ip": "ip_address", "model": "device_model", "note": "note", "active": "is_active"},
+        )
+        self._fill(
+            self.master_tree,
+            rows,
+            lambda r: (
+                r["unit"], r["three_lc"], r["branch_name"], r["ip_address"], r["device_model"],
+                "YES" if r["is_active"] else "NO", r["note"],
+            ),
+            ids=True,
+        )
+
+    def _sort_by_column(self, tree, column):
+        history_columns = {
+            "time": "checked_at", "unit": "unit", "three_lc": "three_lc", "branch": "branch_name", "ip": "ip_address",
+            "model": "device_model", "status": "status", "latency": "latency_ms",
+            "detail": "diagnostic",
+        }
+        if tree is self.history_tree:
+            sort_by = history_columns[column]
+            if self._history_sort_by == sort_by:
+                self._history_sort_descending = not self._history_sort_descending
+            else:
+                self._history_sort_by = sort_by
+                self._history_sort_descending = False
+            self.history_offset = 0
+            self._set_sort_heading(tree, column, self._history_sort_descending)
+            self.refresh_history()
+            return
+
+        current, descending = self._tree_sort_state[tree]
+        descending = not descending if current == column else False
+        self._tree_sort_state[tree] = (column, descending)
+        self._set_sort_heading(tree, column, descending)
+        if tree is self.status_tree:
+            self._render_status_rows()
+        else:
+            self._render_master_rows()
+
+    def _set_sort_heading(self, tree, selected, descending):
+        for column, label in self._tree_heading_labels[tree].items():
+            suffix = " ↓" if column == selected and descending else " ↑" if column == selected else ""
+            tree.heading(column, text=label + suffix)
+
+    def _sorted_rows(self, tree, rows, columns):
+        column, descending = self._tree_sort_state[tree]
+        if not column:
+            return rows
+        key = columns[column]
+        populated = [row for row in rows if row.get(key) not in (None, "")]
+        missing = [row for row in rows if row.get(key) in (None, "")]
+
+        def sort_key(row):
+            value = row[key]
+            if key == "ip_address":
+                return ipaddress.ip_address(value)
+            if key in {"offline_days", "latency_ms", "is_active"}:
+                return int(value)
+            return str(value).casefold()
+
+        return tuple(sorted(populated, key=sort_key, reverse=descending) + missing)
 
     @staticmethod
     def _fill(tree, rows, values, *, ids=False):
@@ -245,16 +374,23 @@ class FingerMonitoringPage(BasePage):
         item = self.master_tree.item(str(selected), "values"); self._device_dialog(selected, item)
     def _device_dialog(self, device_id=None, values=()):
         window = tk.Toplevel(self); window.title("Add Device" if device_id is None else "Edit Device"); window.transient(self.winfo_toplevel())
-        branch, ip, model = (tk.StringVar(value=values[0] if values else ""), tk.StringVar(value=values[1] if values else ""), tk.StringVar(value=values[2] if values else "X1500"))
-        for row, (label, variable) in enumerate((("Branch Name *", branch), ("IP Address *", ip), ("Model", model))):
+        unit, three_lc, branch, ip, model, note = (
+            tk.StringVar(value=values[0] if values else ""),
+            tk.StringVar(value=values[1] if values else ""),
+            tk.StringVar(value=values[2] if values else ""),
+            tk.StringVar(value=values[3] if values else ""),
+            tk.StringVar(value=values[4] if values else "X1500"),
+            tk.StringVar(value=values[5] if values else ""),
+        )
+        for row, (label, variable) in enumerate((("Unit", unit), ("3LC", three_lc), ("Branch Name *", branch), ("IP Address *", ip), ("Model", model), ("Note", note))):
             ttk.Label(window, text=label).grid(row=row, column=0, padx=10, pady=6, sticky="w"); ttk.Entry(window, textvariable=variable).grid(row=row, column=1, padx=10, pady=6)
         def save():
             try:
-                if device_id is None: self.service.device_master.add_device(branch.get(), ip.get(), device_model=model.get())
-                else: self.service.device_master.edit_device(device_id, branch.get(), ip.get(), device_model=model.get())
+                if device_id is None: self.service.device_master.add_device(branch.get(), ip.get(), device_model=model.get(), unit=unit.get(), three_lc=three_lc.get(), note=note.get())
+                else: self.service.device_master.edit_device(device_id, branch.get(), ip.get(), device_model=model.get(), unit=unit.get(), three_lc=three_lc.get(), note=note.get())
             except Exception as exc: return self.services.dialog_service.error("Device Master", str(exc))
             window.destroy(); self.refresh_master(); self.refresh_status()
-        self._button(window, "Save", save).grid(row=3, column=1, padx=10, pady=10, sticky="e")
+        self._button(window, "Save", save).grid(row=6, column=1, padx=10, pady=10, sticky="e")
     def delete_device(self):
         selected = self._selected_master()
         if selected and self.services.dialog_service.confirm("Soft Delete", "Nonaktifkan perangkat ini?"):
@@ -290,7 +426,7 @@ class FingerMonitoringPage(BasePage):
             if date_from is None:
                 return
             branch, status = self.history_branch.get(), self.history_status.get()
-            self._background(lambda: self.service.export_history(path, date_from=date_from, date_to=date_to, branch=branch, status=status), lambda value: self.services.dialog_service.info("Export", f"Export selesai:\n{value}"))
+            self._background(lambda: self.service.export_history(path, date_from=date_from, date_to=date_to, branch=branch, status=status, sort_by=self._history_sort_by, descending=self._history_sort_descending), lambda value: self.services.dialog_service.info("Export", f"Export selesai:\n{value}"))
     def _history_dates(self):
         try:
             return self.history_from_entry.get_iso() or "", self.history_to_entry.get_iso() or ""

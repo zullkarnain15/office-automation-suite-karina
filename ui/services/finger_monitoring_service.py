@@ -118,7 +118,7 @@ class FingerMonitoringService:
         marks = ",".join("?" for _ in ids)
         with repo.factory.connect(repo.database_path, read_only=True) as connection:
             rows = connection.execute(
-                f"""SELECT d.device_id,d.branch_name,d.ip_address,d.device_model,
+                f"""SELECT d.device_id,d.unit,d.three_lc,d.branch_name,d.ip_address,d.device_model,d.note,
                     COALESCE((SELECT r.status FROM check_result r WHERE r.device_id=d.device_id ORDER BY r.checked_at DESC,r.result_id DESC LIMIT 1),'UNKNOWN') AS status,
                     (SELECT MAX(r.checked_at) FROM check_result r WHERE r.device_id=d.device_id AND r.status='ONLINE') AS last_online,
                     (SELECT COUNT(*) FROM device_daily_failure f WHERE f.device_id=d.device_id) AS offline_days
@@ -137,7 +137,18 @@ class FingerMonitoringService:
             "alert": sum(int(row["offline_days"]) >= int(self.settings()["offline_alert_observed_dates"]) for row in rows),
         }
 
-    def history(self, *, date_from="", date_to="", branch="", status="", limit=100, offset=0):
+    def history(
+        self,
+        *,
+        date_from="",
+        date_to="",
+        branch="",
+        status="",
+        limit=100,
+        offset=0,
+        sort_by="checked_at",
+        descending=True,
+    ):
         repo = self.repository
         clauses, args = ["1=1"], []
         if date_from: clauses.append("substr(r.checked_at,1,10)>=?"); args.append(date_from)
@@ -145,12 +156,27 @@ class FingerMonitoringService:
         if branch: clauses.append("d.branch_name LIKE ? COLLATE NOCASE"); args.append(f"%{branch}%")
         if status: clauses.append("r.status=?"); args.append(status)
         where = " AND ".join(clauses)
+        order_columns = {
+            "checked_at": "r.checked_at",
+            "unit": "d.unit COLLATE NOCASE",
+            "three_lc": "d.three_lc COLLATE NOCASE",
+            "branch_name": "d.branch_name COLLATE NOCASE",
+            "ip_address": "d.ip_address",
+            "device_model": "d.device_model",
+            "status": "r.status",
+            "latency_ms": "r.latency_ms",
+            "diagnostic": "r.diagnostic COLLATE NOCASE",
+        }
+        if sort_by not in order_columns:
+            raise ValueError("Kolom history untuk sort tidak valid.")
+        direction = "DESC" if descending else "ASC"
+        order_by = f"{order_columns[sort_by]} {direction}, r.result_id {direction}"
         with repo.factory.connect(repo.database_path, read_only=True) as connection:
             total = int(connection.execute(f"SELECT COUNT(*) FROM check_result r JOIN device_master d ON d.device_id=r.device_id WHERE {where}", args).fetchone()[0])
             items = tuple(dict(row) for row in connection.execute(
-                f"""SELECT r.result_id,r.checked_at,d.branch_name,d.ip_address,d.device_model,r.status,r.latency_ms,r.diagnostic
+                f"""SELECT r.result_id,r.checked_at,d.unit,d.three_lc,d.branch_name,d.ip_address,d.device_model,r.status,r.latency_ms,r.diagnostic
                     FROM check_result r JOIN device_master d ON d.device_id=r.device_id WHERE {where}
-                    ORDER BY r.checked_at DESC,r.result_id DESC LIMIT ? OFFSET ?""",
+                    ORDER BY {order_by} LIMIT ? OFFSET ?""",
                 (*args, int(limit), int(offset)),
             ))
         return {"total": total, "items": items}
@@ -162,15 +188,15 @@ class FingerMonitoringService:
         if target.suffix.lower() != ".xlsx":
             raise ValueError("Export harus berformat .xlsx.")
         workbook = Workbook(); sheet = workbook.active; sheet.title = "History"
-        headers = ("Checked_At", "Branch_Name", "IP_Address", "Device_Model", "Status", "Latency_ms", "Diagnostic")
+        headers = ("Checked_At", "Unit", "3LC", "Branch_Name", "IP_Address", "Device_Model", "Status", "Latency_ms", "Diagnostic")
         sheet.append(headers)
         offset = 0
         while True:
             page = self.history(limit=1000, offset=offset, **filters)
             for row in page["items"]:
-                sheet.append(tuple(row[key] for key in ("checked_at", "branch_name", "ip_address", "device_model", "status", "latency_ms", "diagnostic")))
+                sheet.append(tuple(row[key] for key in ("checked_at", "unit", "three_lc", "branch_name", "ip_address", "device_model", "status", "latency_ms", "diagnostic")))
             offset += len(page["items"])
             if offset >= page["total"]: break
-        for column, width in enumerate((20, 28, 18, 14, 24, 12, 55), 1): sheet.column_dimensions[chr(64 + column)].width = width
+        for column, width in enumerate((20, 14, 14, 28, 18, 14, 24, 12, 55), 1): sheet.column_dimensions[chr(64 + column)].width = width
         DeviceMasterService._atomic_save(workbook, target)
         return target

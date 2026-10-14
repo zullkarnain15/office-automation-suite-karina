@@ -35,6 +35,24 @@ def test_service_reads_paginated_status_history_and_settings(tmp_path):
     assert service.save_settings(auto_check_interval_hours=3)["auto_check_interval_hours"] == 3
 
 
+def test_history_supports_whitelisted_sorting(tmp_path):
+    service = FingerMonitoringService(_Storage(tmp_path))
+    service.initialize()
+    zulu = service.device_master.add_device("Zulu", "10.70.0.2")
+    alpha = service.device_master.add_device("Alpha", "10.70.0.1")
+    cycle = service.repository.create_cycle("CHECK_ALL", 2)
+    service.repository.persist_check_outcome(
+        cycle, zulu, "ONLINE", observed_date="2026-10-12"
+    )
+    service.repository.persist_check_outcome(
+        cycle, alpha, "OFFLINE", observed_date="2026-10-12"
+    )
+    service.repository.complete_cycle(cycle)
+
+    rows = service.history(sort_by="branch_name", descending=False)["items"]
+    assert [row["branch_name"] for row in rows] == ["Alpha", "Zulu"]
+
+
 def test_service_follows_changed_data_root_and_registry_has_page(tmp_path):
     storage = _Storage(tmp_path / "first")
     service = FingerMonitoringService(storage)

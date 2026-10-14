@@ -9,7 +9,7 @@ from pathlib import Path
 from shared.database.connection_factory import SQLiteConnectionFactory
 from shared.database.time_utils import current_timestamp
 
-FINGER_MONITORING_SCHEMA_VERSION = 3
+FINGER_MONITORING_SCHEMA_VERSION = 4
 
 REQUIRED_TABLES = frozenset(
     {
@@ -28,11 +28,14 @@ SCHEMA_STATEMENTS = (
     )""",
     """CREATE TABLE device_master (
         device_id INTEGER PRIMARY KEY,
+        unit TEXT NOT NULL DEFAULT '',
+        three_lc TEXT NOT NULL DEFAULT '',
         branch_name TEXT NOT NULL COLLATE NOCASE CHECK (trim(branch_name) <> ''),
         ip_address TEXT NOT NULL COLLATE NOCASE CHECK (trim(ip_address) <> ''),
         device_model TEXT NOT NULL DEFAULT 'X1500'
             CHECK (device_model IN ('X1500', 'X1800')),
         is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        note TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
     )""",
     "CREATE UNIQUE INDEX uq_device_master_active_ip ON device_master(ip_address) WHERE is_active = 1",
@@ -188,6 +191,25 @@ class FingerMonitoringSchemaManager:
                 connection.execute("PRAGMA user_version = 3")
                 connection.commit()
                 current = 3
+            if current == 3:
+                connection.execute("BEGIN IMMEDIATE")
+                columns = {
+                    str(row[1])
+                    for row in connection.execute("PRAGMA table_info(device_master)")
+                }
+                for name in ("unit", "three_lc", "note"):
+                    if name not in columns:
+                        connection.execute(
+                            f"ALTER TABLE device_master ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"
+                        )
+                timestamp = current_timestamp()
+                connection.execute(
+                    "UPDATE monitoring_metadata SET schema_version=?,last_migrated_at=? WHERE metadata_id=1",
+                    (4, timestamp),
+                )
+                connection.execute("PRAGMA user_version = 4")
+                connection.commit()
+                current = 4
             if current != FINGER_MONITORING_SCHEMA_VERSION:
                 raise sqlite3.DatabaseError("No Finger Monitoring migration path is registered.")
         self.validate(path)
