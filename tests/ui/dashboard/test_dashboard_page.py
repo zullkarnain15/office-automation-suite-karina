@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from types import SimpleNamespace
+from tkinter import ttk
 
 from ui.context import AppContext
 from ui.pages.dashboard_page import DashboardPage
@@ -13,6 +14,7 @@ from ui.services.dashboard_service import (
     ModuleSummary,
 )
 from ui.services.system_health_service import HealthStatus, HealthSummary
+from ui.theme.attendance_ot import DEFAULT_ATTENDANCE_OT_THEME
 
 
 class _ImmediateRunner:
@@ -74,6 +76,19 @@ def test_dashboard_uses_session_system_health_after_explicit_check(
     tk_root.update_idletasks()
 
     assert page.summary_cards["System Health"].value_label.cget("text") == "Warning"
+
+
+def test_dashboard_value_style_has_no_blue_highlight(tk_root, tmp_path) -> None:
+    page, _service = _page(
+        tk_root,
+        tmp_path,
+        health_summary=HealthSummary((), HealthStatus.NOT_CHECKED, None),
+    )
+
+    style = ttk.Style(page)
+    colors = DEFAULT_ATTENDANCE_OT_THEME.palette
+    assert style.lookup("DashboardValue.TLabel", "background") == colors.card
+    assert style.lookup("DashboardValue.TLabel", "foreground") == colors.ink
 
 
 def test_dashboard_refreshes_each_time_it_is_shown(tk_root, tmp_path) -> None:

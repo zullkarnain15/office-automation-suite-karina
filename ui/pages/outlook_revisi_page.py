@@ -21,6 +21,7 @@ from ui.widgets import (
     CompactProgress,
     OptionChip,
     ResultSummary,
+    RetroModuleBanner,
     SegmentedChoice,
 )
 
@@ -67,8 +68,12 @@ class OutlookRevisiPage(BasePage):
             value="Mailbox: Belum divalidasi â€¢ Target: karina.hr.1@oto.co.id / Inbox"
         )
 
+        self.rowconfigure(1, weight=0)
+        self.rowconfigure(2, weight=1)
+        self.banner = RetroModuleBanner(self, title=self.title)
+        self.banner.grid(row=1, column=0, sticky="ew")
         viewport = ttk.Frame(self, style="OASK.TFrame")
-        viewport.grid(row=1, column=0, sticky="nsew")
+        viewport.grid(row=2, column=0, sticky="nsew")
         viewport.columnconfigure(0, weight=1)
         viewport.rowconfigure(0, weight=1)
         self._scroll_canvas = tk.Canvas(

@@ -21,6 +21,7 @@ from ui.constants import (
 from ui.context import AppContext
 from ui.dpi import enable_dpi_awareness
 from ui.icon_manager import IconManager
+from ui.theme.attendance_ot import DEFAULT_ATTENDANCE_OT_THEME
 from ui.models import PageDefinition, PageLoadError, StatusMetadata
 from ui.navigation import NavigationController
 from ui.page_registry import PageRegistry, build_default_page_registry
@@ -187,6 +188,15 @@ class OASKUnifiedApp:
 
         splash = ttk.Frame(self.root, style="WelcomeSplash.TFrame")
         splash.place(x=0, y=0, relwidth=1, relheight=1)
+        self._welcome_scene = tk.Canvas(
+            splash,
+            background=DEFAULT_ATTENDANCE_OT_THEME.palette.background,
+            highlightthickness=0,
+            borderwidth=0,
+            takefocus=0,
+        )
+        self._welcome_scene.place(x=0, y=0, relwidth=1, relheight=1)
+        self._welcome_scene.bind("<Configure>", self._draw_welcome_scene)
         splash.columnconfigure(0, weight=1)
         splash.columnconfigure(2, weight=1)
         splash.rowconfigure(0, weight=1)
@@ -263,6 +273,31 @@ class OASKUnifiedApp:
         self._start_welcome_shimmer()
         self._start_welcome_mascot_bounce()
         self.root.update_idletasks()
+
+    def _draw_welcome_scene(self, _event=None) -> None:
+        """Draw a light, original pixel scene behind the welcome content."""
+
+        scene = self._welcome_scene
+        colors = DEFAULT_ATTENDANCE_OT_THEME.palette
+        width, height = max(scene.winfo_width(), 800), max(scene.winfo_height(), 520)
+        scene.delete("all")
+        scene.create_rectangle(0, 0, width, height, fill=colors.background, outline="")
+        for x, y, scale in ((70, 80, 2), (width // 2 - 100, 48, 2), (width - 260, 145, 1)):
+            scene.create_rectangle(x, y + 7 * scale, x + 55 * scale, y + 18 * scale, fill=colors.card, outline="")
+            scene.create_rectangle(x + 12 * scale, y, x + 38 * scale, y + 24 * scale, fill=colors.card, outline="")
+            scene.create_rectangle(x + 39 * scale, y + 5 * scale, x + 67 * scale, y + 19 * scale, fill=colors.card, outline="")
+        for mushroom_x, mushroom_y in ((70, height - 118), (width - 145, height - 130)):
+            scene.create_rectangle(mushroom_x + 18, mushroom_y + 42, mushroom_x + 42, mushroom_y + 74, fill=colors.card, outline=colors.ink)
+            scene.create_rectangle(mushroom_x + 3, mushroom_y + 25, mushroom_x + 57, mushroom_y + 49, fill=colors.tab_sage, outline=colors.ink)
+            scene.create_rectangle(mushroom_x + 14, mushroom_y + 14, mushroom_x + 46, mushroom_y + 25, fill=colors.tab_sage, outline=colors.ink)
+            scene.create_rectangle(mushroom_x + 14, mushroom_y + 30, mushroom_x + 23, mushroom_y + 39, fill=colors.card, outline="")
+            scene.create_rectangle(mushroom_x + 39, mushroom_y + 30, mushroom_x + 48, mushroom_y + 39, fill=colors.card, outline="")
+        ground_y = height - 54
+        scene.create_rectangle(0, ground_y, width, height, fill=colors.tab_sage, outline=colors.ink)
+        for x in range(-32, width + 32, 64):
+            scene.create_line(x, ground_y, x, height, fill=colors.ink, width=1)
+            scene.create_line(x + 32, ground_y + 27, x + 32, height, fill=colors.ink, width=1)
+        scene.create_line(0, ground_y + 27, width, ground_y + 27, fill=colors.ink, width=1)
 
     def _dismiss_welcome_splash(self) -> None:
         self._stop_welcome_shimmer()

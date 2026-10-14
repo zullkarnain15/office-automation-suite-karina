@@ -19,6 +19,8 @@ from ui.dialogs.module_configuration_detail import ModuleConfigurationDetailDial
 from ui.icon_manager import IconManager
 from ui.mascot_outcome import classify_mascot_outcome
 from ui.pages.base_page import BasePage
+from ui.theme.attendance import apply_attendance_styles
+from ui.theme.attendance_ot import DEFAULT_ATTENDANCE_OT_THEME
 from ui.widgets import (
     CompactProgress,
     DateEntry,
@@ -53,6 +55,11 @@ class AttendancePage(BasePage):
 
     def build_content(self) -> None:
         self.services = self.context.app_services
+        apply_attendance_styles(self)
+        self.configure(style="AttendancePage.TFrame")
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=0)
+        self.rowconfigure(2, weight=1)
         self.config_var = tk.StringVar()
         self.start_var = tk.StringVar()
         self.end_var = tk.StringVar()
@@ -71,8 +78,11 @@ class AttendancePage(BasePage):
             value="Konfigurasi: OAS-K Database • Belum diperiksa"
         )
 
-        self.surface = ttk.Frame(self, style="OASK.TFrame")
-        self.surface.grid(row=1, column=0, sticky="nsew")
+        self._scene = tk.Canvas(self, height=82, background=DEFAULT_ATTENDANCE_OT_THEME.palette.background, highlightthickness=0, borderwidth=0)
+        self._scene.grid(row=1, column=0, sticky="ew")
+        self._scene.bind("<Configure>", self._draw_retro_scene)
+        self.surface = ttk.Frame(self, style="AttendanceSurface.TFrame")
+        self.surface.grid(row=2, column=0, sticky="nsew")
         self.surface.columnconfigure(0, weight=1)
         self.surface.rowconfigure(4, weight=1)
 
@@ -85,32 +95,58 @@ class AttendancePage(BasePage):
         self._build_advanced()
 
     def _build_configuration_strip(self) -> None:
-        strip = ttk.Frame(self.surface, style="CompactPanel.TFrame", padding=(12, 8))
+        strip = ttk.Frame(self.surface, style="AttendancePanel.TFrame", padding=(12, 8))
         strip.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         strip.columnconfigure(0, weight=1)
         ttk.Label(
-            strip, textvariable=self.active_config_var, style="CompactTitle.TLabel"
+            strip, textvariable=self.active_config_var, style="AttendanceTitle.TLabel"
         ).grid(row=0, column=0, sticky="w")
         ttk.Label(
-            strip, textvariable=self.output_summary_var, style="CompactText.TLabel"
+            strip, textvariable=self.output_summary_var, style="AttendanceText.TLabel"
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
-        actions = ttk.Frame(strip, style="CompactBody.TFrame")
+        actions = ttk.Frame(strip, style="AttendanceBody.TFrame")
         actions.grid(row=0, column=1, rowspan=2, sticky="e", padx=(12, 0))
         ttk.Button(
             actions,
             text="Lihat Detail",
-            style="Attendance.TButton",
+            style="AttendanceSecondary.TButton",
             command=self.show_active_configuration,
         ).pack(side="left")
         ttk.Button(
             actions,
             text="Buka Settings",
-            style="Attendance.TButton",
+            style="AttendanceSecondary.TButton",
             command=self.return_settings,
         ).pack(side="left", padx=(6, 0))
 
+    def _draw_retro_scene(self, _event=None) -> None:
+        """Render an original pixel scene as Attendance-only decoration."""
+
+        scene = self._scene
+        colors = DEFAULT_ATTENDANCE_OT_THEME.palette
+        width, height = max(scene.winfo_width(), 640), max(scene.winfo_height(), 82)
+        scene.delete("all")
+        scene.create_rectangle(0, 0, width, height, fill=colors.background, outline="")
+        for x, y in ((40, 17), (width // 2 - 50, 10), (width - 265, 23)):
+            scene.create_rectangle(x, y + 7, x + 55, y + 18, fill=colors.card, outline="")
+            scene.create_rectangle(x + 12, y, x + 38, y + 24, fill=colors.card, outline="")
+            scene.create_rectangle(x + 39, y + 5, x + 67, y + 19, fill=colors.card, outline="")
+        scene.create_text(22, 38, anchor="w", text="ATTENDANCE", fill=colors.ink, font=("Segoe UI", 15, "bold"))
+        mushroom_x, mushroom_y = width - 112, 14
+        scene.create_rectangle(mushroom_x + 13, mushroom_y + 34, mushroom_x + 29, mushroom_y + 55, fill=colors.card, outline=colors.ink)
+        scene.create_rectangle(mushroom_x + 3, mushroom_y + 23, mushroom_x + 39, mushroom_y + 39, fill=colors.tab_sage, outline=colors.ink)
+        scene.create_rectangle(mushroom_x + 9, mushroom_y + 16, mushroom_x + 33, mushroom_y + 23, fill=colors.tab_sage, outline=colors.ink)
+        scene.create_rectangle(mushroom_x + 10, mushroom_y + 26, mushroom_x + 16, mushroom_y + 32, fill=colors.card, outline="")
+        scene.create_rectangle(mushroom_x + 28, mushroom_y + 27, mushroom_x + 34, mushroom_y + 33, fill=colors.card, outline="")
+        ground_y = height - 22
+        scene.create_rectangle(0, ground_y, width, height, fill=colors.tab_sage, outline=colors.ink)
+        for x in range(-24, width + 24, 48):
+            scene.create_line(x, ground_y, x, height, fill=colors.ink, width=1)
+            scene.create_line(x + 24, ground_y + 11, x + 24, height, fill=colors.ink, width=1)
+        scene.create_line(0, ground_y + 11, width, ground_y + 11, fill=colors.ink, width=1)
+
     def _build_operational_panel(self) -> None:
-        panel = ttk.Frame(self.surface, style="CompactPanel.TFrame", padding=(12, 10))
+        panel = ttk.Frame(self.surface, style="AttendancePanel.TFrame", padding=(12, 10))
         panel.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         self.operational_panel = panel
         self._operational_narrow = False
@@ -119,17 +155,17 @@ class AttendancePage(BasePage):
         panel.columnconfigure(1, weight=2)
         panel.columnconfigure(2, weight=2)
 
-        period = ttk.Frame(panel, style="CompactBody.TFrame")
+        period = ttk.Frame(panel, style="AttendanceBody.TFrame")
         self.period_section = period
         period.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
         period.columnconfigure((0, 1), weight=1)
-        ttk.Label(period, text="Periode", style="CompactTitle.TLabel").grid(
+        ttk.Label(period, text="Periode", style="AttendanceTitle.TLabel").grid(
             row=0, column=0, columnspan=2, sticky="w"
         )
-        ttk.Label(period, text="Tanggal Mulai", style="CompactText.TLabel").grid(
+        ttk.Label(period, text="Tanggal Mulai", style="AttendanceText.TLabel").grid(
             row=1, column=0, sticky="w", pady=(5, 2)
         )
-        ttk.Label(period, text="Tanggal Selesai", style="CompactText.TLabel").grid(
+        ttk.Label(period, text="Tanggal Selesai", style="AttendanceText.TLabel").grid(
             row=1, column=1, sticky="w", padx=(10, 0), pady=(5, 2)
         )
         self.start_entry = DateEntry(period, textvariable=self.start_var, width=11)
@@ -146,10 +182,10 @@ class AttendancePage(BasePage):
             row=3, column=0, columnspan=2, sticky="w", pady=(5, 0)
         )
 
-        workflow = ttk.Frame(panel, style="CompactBody.TFrame")
+        workflow = ttk.Frame(panel, style="AttendanceBody.TFrame")
         self.workflow_section = workflow
         workflow.grid(row=0, column=1, sticky="nsew", padx=(0, 14))
-        ttk.Label(workflow, text="Workflow", style="CompactTitle.TLabel").pack(
+        ttk.Label(workflow, text="Workflow", style="AttendanceTitle.TLabel").pack(
             anchor="w"
         )
         self.workflow_segment = SegmentedChoice(
@@ -160,10 +196,10 @@ class AttendancePage(BasePage):
         self.workflow_choices = self.workflow_segment
         self.workflow_segment.pack(anchor="w", fill="x", pady=(6, 0))
 
-        output = ttk.Frame(panel, style="CompactBody.TFrame")
+        output = ttk.Frame(panel, style="AttendanceBody.TFrame")
         self.output_section = output
         output.grid(row=0, column=2, sticky="nsew")
-        ttk.Label(output, text="Output", style="CompactTitle.TLabel").pack(anchor="w")
+        ttk.Label(output, text="Output", style="AttendanceTitle.TLabel").pack(anchor="w")
         OptionChip(output, text="HRIS TXT", variable=self.txt_var).pack(
             anchor="w", pady=(6, 2)
         )
@@ -214,12 +250,12 @@ class AttendancePage(BasePage):
             self.output_section.grid(row=0, column=2, sticky="nsew")
 
     def _build_action_row(self) -> None:
-        row = ttk.Frame(self.surface, style="CompactPanel.TFrame", padding=(12, 7))
+        row = ttk.Frame(self.surface, style="AttendancePanel.TFrame", padding=(12, 7))
         row.grid(row=2, column=0, sticky="ew", pady=(0, 8))
         row.columnconfigure(0, weight=1)
-        status = ttk.Frame(row, style="CompactBody.TFrame")
+        status = ttk.Frame(row, style="AttendanceBody.TFrame")
         status.grid(row=0, column=0, sticky="w")
-        ttk.Label(status, text="Validasi:", style="CompactText.TLabel").pack(
+        ttk.Label(status, text="Validasi:", style="AttendanceText.TLabel").pack(
             side="left"
         )
         self.validation_status = ttk.Label(
@@ -231,18 +267,18 @@ class AttendancePage(BasePage):
         self.validation_detail_button = ttk.Button(
             status,
             text="Lihat Detail",
-            style="Attendance.TButton",
+            style="AttendanceSecondary.TButton",
             command=self.show_validation_detail,
             state="disabled",
         )
         self.validation_detail_button.pack(side="left", padx=(8, 0))
 
-        actions = ttk.Frame(row, style="CompactBody.TFrame")
+        actions = ttk.Frame(row, style="AttendanceBody.TFrame")
         actions.grid(row=0, column=1, sticky="e")
         self.validate_button = ttk.Button(
             actions,
             text="Periksa Data",
-            style="Attendance.TButton",
+            style="AttendanceUtility.TButton",
             command=self.validate,
         )
         self.validate_button.pack(side="left", anchor="n")
@@ -281,7 +317,7 @@ class AttendancePage(BasePage):
         self.validation_summary.grid_remove()
 
     def _build_progress(self) -> None:
-        panel = ttk.Frame(self.surface, style="CompactPanel.TFrame", padding=(12, 6))
+        panel = ttk.Frame(self.surface, style="AttendancePanel.TFrame", padding=(12, 6))
         panel.grid(row=3, column=0, sticky="ew", pady=(0, 8))
         self.progress_panel = panel
         panel.columnconfigure(0, weight=1)
@@ -289,33 +325,33 @@ class AttendancePage(BasePage):
         self.progress.grid(row=0, column=0, sticky="ew")
 
     def _build_log(self) -> None:
-        panel = ttk.Frame(self.surface, style="CompactPanel.TFrame", padding=(10, 8))
+        panel = ttk.Frame(self.surface, style="AttendancePanel.TFrame", padding=(10, 8))
         panel.grid(row=4, column=0, sticky="nsew", pady=(0, 8))
         panel.columnconfigure(0, weight=1)
         panel.rowconfigure(1, weight=1)
-        header = ttk.Frame(panel, style="CompactBody.TFrame")
+        header = ttk.Frame(panel, style="AttendanceBody.TFrame")
         header.grid(row=0, column=0, columnspan=2, sticky="ew")
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text="Process Log", style="CompactTitle.TLabel").grid(
+        ttk.Label(header, text="Process Log", style="AttendanceTitle.TLabel").grid(
             row=0, column=0, sticky="w"
         )
-        actions = ttk.Frame(header, style="CompactBody.TFrame")
+        actions = ttk.Frame(header, style="AttendanceBody.TFrame")
         actions.grid(row=0, column=1, sticky="e")
         self.log_expand_button = ttk.Button(
             actions,
             text="Perbesar Log",
-            style="Compact.TButton",
+            style="AttendanceSecondary.TButton",
             command=self.toggle_log,
         )
         self.log_expand_button.pack(side="left")
         ttk.Button(
             actions,
             text="Buka Log",
-            style="Compact.TButton",
+            style="AttendanceSecondary.TButton",
             command=self.open_process_log,
         ).pack(side="left", padx=(6, 0))
         ttk.Button(
-            actions, text="Salin", style="Compact.TButton", command=self.copy_log
+            actions, text="Salin", style="AttendanceUtility.TButton", command=self.copy_log
         ).pack(side="left", padx=(6, 0))
         self.log_text = tk.Text(
             panel,
@@ -338,13 +374,13 @@ class AttendancePage(BasePage):
 
     def _build_result(self) -> None:
         self.result_panel = ttk.Frame(
-            self.surface, style="CompactPanel.TFrame", padding=(10, 8)
+            self.surface, style="AttendancePanel.TFrame", padding=(10, 8)
         )
         self.result_panel.grid(row=5, column=0, sticky="ew", pady=(0, 8))
         self.result_panel.columnconfigure(0, weight=1)
         self.result_summary = ResultSummary(self.result_panel, wraplength=720)
         self.result_summary.grid(row=0, column=0, sticky="ew")
-        actions = ttk.Frame(self.result_panel, style="CompactBody.TFrame")
+        actions = ttk.Frame(self.result_panel, style="AttendanceBody.TFrame")
         actions.grid(row=0, column=1, sticky="e", padx=(10, 0))
         for text, command in (
             ("Buka Output", self.open_output),
@@ -366,7 +402,7 @@ class AttendancePage(BasePage):
         self.result_panel.grid_remove()
 
     def _build_advanced(self) -> None:
-        section = ttk.Frame(self.surface, style="CompactPanel.TFrame", padding=(10, 6))
+        section = ttk.Frame(self.surface, style="AttendancePanel.TFrame", padding=(10, 6))
         section.grid(row=6, column=0, sticky="ew")
         self.advanced_section = section
         section.columnconfigure(0, weight=1)
@@ -376,7 +412,7 @@ class AttendancePage(BasePage):
             variable=self.advanced_var,
             command=self._toggle_advanced,
         ).grid(row=0, column=0, sticky="w")
-        self.advanced_frame = ttk.Frame(section, style="CompactBody.TFrame")
+        self.advanced_frame = ttk.Frame(section, style="AttendanceBody.TFrame")
         self.advanced_frame.grid(row=1, column=0, sticky="ew", pady=(6, 0))
         self.advanced_frame.columnconfigure(0, weight=1)
         ttk.Checkbutton(
@@ -385,7 +421,7 @@ class AttendancePage(BasePage):
             variable=self.manual_fallback_var,
             command=self._toggle_fallback,
         ).grid(row=0, column=0, sticky="w")
-        self.fallback_frame = ttk.Frame(self.advanced_frame, style="CompactBody.TFrame")
+        self.fallback_frame = ttk.Frame(self.advanced_frame, style="AttendanceBody.TFrame")
         self.fallback_frame.grid(row=1, column=0, sticky="ew", pady=(4, 6))
         self.fallback_frame.columnconfigure(0, weight=1)
         ttk.Entry(self.fallback_frame, textvariable=self.config_var).grid(
@@ -412,7 +448,7 @@ class AttendancePage(BasePage):
             command=self._toggle_output_override,
         ).grid(row=2, column=0, sticky="w")
         self.output_override_frame = ttk.Frame(
-            self.advanced_frame, style="CompactBody.TFrame"
+            self.advanced_frame, style="AttendanceBody.TFrame"
         )
         self.output_override_frame.grid(row=3, column=0, sticky="ew", pady=(4, 0))
         self.output_override_frame.columnconfigure(0, weight=1)

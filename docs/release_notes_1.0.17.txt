@@ -1,24 +1,22 @@
 OAS-K 1.0.17
-8 October 2026
+14 October 2026
 
 Release production untuk OAS-K core database schema 4 dan database analytics
 Attendance & OT schema 9.
 
-Tampilan Attendance & OT dan Fingerprint Monitoring:
-- Attendance & OT menggunakan tema default yang seragam dengan modul lain;
-  tidak lagi menggunakan tampilan Chalkboard.
-- Font pixel dipakai secara terbatas pada header tabel dan tombol; teks
-  dashboard, tab, dan isi tabel menggunakan font standar agar terbaca jelas.
-- Warna teks Dashboard dan Data Terlambat dikontraskan kembali agar tidak
-  putih di atas latar terang. Detail data memakai garis dan zebra striping
-  ringan agar baris lebih mudah dibaca.
-- Fingerprint Monitoring mengikuti tema default, dengan indikator online
-  hijau yang terlihat jelas, teks status perangkat netral, dan progress
-  percentage yang tidak terpotong.
-- Tab History pada Fingerprint Monitoring menyediakan tombol kalender untuk
-  tanggal From dan To.
-- Database Maintenance Attendance & OT dipindahkan ke Settings > Storage &
-  Database agar toolbar utama lebih ringkas.
+Penyegaran antarmuka:
+- Dashboard, Attendance, Attendance & OT, Fingerprint Monitoring, HRIS,
+  Outlook Revisi, dan Utilities memakai tema platformer yang seragam.
+- Navigasi memakai palet biru yang lebih tenang, menu aktif merah bata, serta
+  teks berkontras tinggi.
+- Tombol operasional diperkecil agar informasi utama tetap menjadi fokus.
+- HRIS dan Outlook Revisi mendukung scroll vertikal halaman; area log tetap
+  mempunyai perilaku scroll sendiri.
+
+Fingerprint Monitoring:
+- Device Master memuat informasi Unit, 3LC, dan Note.
+- Tabel mendukung pengurutan kolom dan scroll horizontal.
+- Warna status UNKNOWN diperjelas agar terbaca pada latar terang.
 
 Application shell:
 - Status database pada footer kini disinkronkan setelah startup, System Health,
@@ -27,7 +25,7 @@ Application shell:
   halaman atau saat pesan aplikasi berubah menjadi Ready.
 
 Kompatibilitas database:
-- Update package menerima OAS-K 1.0.15 dan 1.0.16 sebagai versi sumber.
+- Update package ditujukan untuk production OAS-K 1.0.16.
 - Core OAS-K production schema 4 tetap schema 4; tidak ada migrasi core.
 - Database Attendance & OT production schema 9 tetap schema 9; tidak ada
   migrasi analytics.

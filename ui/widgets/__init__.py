@@ -14,6 +14,7 @@ from ui.widgets.modern_card import ModernCard
 from ui.widgets.pagination_bar import PaginationBar
 from ui.widgets.progress_panel import ProgressPanel
 from ui.widgets.responsive_card_grid import ResponsiveCardGrid
+from ui.widgets.retro_module_banner import RetroModuleBanner
 from ui.widgets.result_summary import ResultSummary
 from ui.widgets.section_header import SectionHeader
 from ui.widgets.sidebar import Sidebar
@@ -37,6 +38,7 @@ __all__ = [
     "PaginationBar",
     "ProgressPanel",
     "ResponsiveCardGrid",
+    "RetroModuleBanner",
     "ResultSummary",
     "SectionHeader",
     "SegmentedChoice",

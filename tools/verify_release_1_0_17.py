@@ -20,7 +20,7 @@ def main() -> None:
     verifier = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(verifier)
     verifier.VERSION = "1.0.17"
-    verifier.PREVIOUS_VERSION = "1.0.15"
+    verifier.PREVIOUS_VERSION = "1.0.16"
     verifier.CORE_SCHEMA = 4
     verifier.PRODUCTION_ANALYTICS_SCHEMA = 9
     verifier.TARGET_ANALYTICS_SCHEMA = 9

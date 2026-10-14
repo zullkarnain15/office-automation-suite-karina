@@ -98,11 +98,22 @@ class AttendanceOTPage(BasePage):
         )
         self._configure_professional_styles()
         self.configure(style="AttendanceOTPage.TFrame")
-        self.rowconfigure(1, weight=0)
-        self.rowconfigure(3, weight=1)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(2, weight=0)
+        self.rowconfigure(4, weight=1)
+        self._scene = tk.Canvas(
+            self,
+            height=82,
+            background=self.visual_theme.palette.background,
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self._scene.grid(row=0, column=0, sticky="ew")
+        self._scene.bind("<Configure>", self._draw_retro_scene)
         self.progress_var = tk.StringVar(value="Ready. Refresh Data dijalankan manual.")
         self.prompt_frame = ttk.Frame(self, style="AttendanceOTCard.TFrame", padding=10)
-        self.prompt_frame.grid(row=0, column=0, sticky="ew")
+        self.prompt_frame.grid(row=1, column=0, sticky="ew")
         ttk.Label(
             self.prompt_frame,
             text="Storage analytics perlu dibuat / dimigrasikan. Create untuk melanjutkan.",
@@ -115,7 +126,7 @@ class AttendanceOTPage(BasePage):
         self.prompt_frame.grid_remove()
         self._build_filters()
         toolbar = ttk.Frame(self, style="AttendanceOTSurface.TFrame")
-        toolbar.grid(row=2, column=0, sticky="ew", pady=6)
+        toolbar.grid(row=3, column=0, sticky="ew", pady=6)
         self.refresh_button = self._button(toolbar, "Refresh Data", self.refresh_data)
         self.refresh_button.pack(side="left")
         self.export_mode = tk.StringVar(value="Current Filter")
@@ -154,7 +165,7 @@ class AttendanceOTPage(BasePage):
         )
         self.progress_percent_label.pack(side="left", padx=(6, 0))
         self.notebook = ttk.Notebook(self, style="AttendanceOT.TNotebook")
-        self.notebook.grid(row=3, column=0, sticky="nsew")
+        self.notebook.grid(row=4, column=0, sticky="nsew")
         self.tabs = {}
         for name in self.TAB_TITLES:
             frame = ttk.Frame(
@@ -173,7 +184,7 @@ class AttendanceOTPage(BasePage):
             textvariable=self.progress_var,
             style="AttendanceOTPageStatus.TLabel",
             wraplength=1000,
-        ).grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        ).grid(row=5, column=0, sticky="ew", pady=(6, 0))
 
     def _button(self, parent, text, command):
         button = ttk.Button(
@@ -182,9 +193,47 @@ class AttendanceOTPage(BasePage):
         self._actions.append(button)
         return button
 
+    def _draw_retro_scene(self, _event=None):
+        """Render a compact, original 8-bit scene above ATT & OT controls."""
+
+        scene = self._scene
+        colors = self.visual_theme.palette
+        width = max(scene.winfo_width(), 640)
+        height = max(scene.winfo_height(), 82)
+        scene.delete("all")
+        scene.create_rectangle(0, 0, width, height, fill=colors.background, outline="")
+
+        for x, y in ((42, 17), (width // 2 - 38, 10), (width - 270, 23)):
+            scene.create_rectangle(x, y + 7, x + 55, y + 18, fill=colors.card, outline="")
+            scene.create_rectangle(x + 12, y, x + 38, y + 24, fill=colors.card, outline="")
+            scene.create_rectangle(x + 39, y + 5, x + 67, y + 19, fill=colors.card, outline="")
+
+        scene.create_text(
+            22,
+            38,
+            anchor="w",
+            text="ATTENDANCE & OT",
+            fill=colors.ink,
+            font=("Segoe UI", 15, "bold"),
+        )
+
+        mushroom_x, mushroom_y = width - 112, 14
+        scene.create_rectangle(mushroom_x + 13, mushroom_y + 34, mushroom_x + 29, mushroom_y + 55, fill=colors.card, outline=colors.ink)
+        scene.create_rectangle(mushroom_x + 3, mushroom_y + 23, mushroom_x + 39, mushroom_y + 39, fill=colors.tab_sage, outline=colors.ink)
+        scene.create_rectangle(mushroom_x + 9, mushroom_y + 16, mushroom_x + 33, mushroom_y + 23, fill=colors.tab_sage, outline=colors.ink)
+        scene.create_rectangle(mushroom_x + 10, mushroom_y + 26, mushroom_x + 16, mushroom_y + 32, fill=colors.card, outline="")
+        scene.create_rectangle(mushroom_x + 28, mushroom_y + 27, mushroom_x + 34, mushroom_y + 33, fill=colors.card, outline="")
+
+        ground_y = height - 22
+        scene.create_rectangle(0, ground_y, width, height, fill=colors.tab_sage, outline=colors.ink)
+        for x in range(-24, width + 24, 48):
+            scene.create_line(x, ground_y, x, height, fill=colors.ink, width=1)
+            scene.create_line(x + 24, ground_y + 11, x + 24, height, fill=colors.ink, width=1)
+        scene.create_line(0, ground_y + 11, width, ground_y + 11, fill=colors.ink, width=1)
+
     def _build_filters(self):
         panel = ttk.Frame(self, style="AttendanceOTSurface.TFrame", padding=8)
-        panel.grid(row=1, column=0, sticky="ew")
+        panel.grid(row=2, column=0, sticky="ew")
         self.filter_vars = {
             key: tk.StringVar()
             for key in (

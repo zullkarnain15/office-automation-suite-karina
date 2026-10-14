@@ -16,16 +16,20 @@ class MetricCard(ttk.Frame):
         value: str = "-",
         detail: str = "",
         value_style: str = "CardValue.TLabel",
+        frame_style: str = "RPGShadow.TFrame",
+        panel_style: str = "ContentCard.TFrame",
+        title_style: str = "CardTitle.TLabel",
+        detail_style: str = "CardText.TLabel",
     ):
-        super().__init__(parent, style="RPGShadow.TFrame", padding=(0, 0, 3, 3))
+        super().__init__(parent, style=frame_style, padding=(0, 0, 3, 3))
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         self.panel = ttk.Frame(
-            self, style="ContentCard.TFrame", padding=(SPACE_LG, SPACE_LG)
+            self, style=panel_style, padding=(SPACE_LG, SPACE_LG)
         )
         self.panel.grid(row=0, column=0, sticky="nsew")
         self.panel.columnconfigure(0, weight=1)
-        ttk.Label(self.panel, text=title, style="CardTitle.TLabel").grid(
+        ttk.Label(self.panel, text=title, style=title_style).grid(
             row=0, column=0, sticky="ew"
         )
         self.value_label = ttk.Label(
@@ -37,7 +41,7 @@ class MetricCard(ttk.Frame):
         )
         self.value_label.grid(row=1, column=0, sticky="w", pady=(SPACE_SM, 2))
         self.detail_label = ttk.Label(
-            self.panel, text=detail, style="CardText.TLabel", wraplength=260
+            self.panel, text=detail, style=detail_style, wraplength=260
         )
         self.detail_label.grid(row=2, column=0, sticky="w")
         self.bind("<Configure>", self._resize_text)
@@ -61,6 +65,7 @@ class ModuleStatusCard(MetricCard):
         value: str = "-",
         detail: str = "",
         value_style: str = "CardValue.TLabel",
+        **style_options,
     ):
         super().__init__(
             parent,
@@ -68,6 +73,7 @@ class ModuleStatusCard(MetricCard):
             value=value,
             detail=detail,
             value_style=value_style,
+            **style_options,
         )
         self.detail_label.grid_remove()
         self.detail_frame = ttk.Frame(self.panel, style="CardBody.TFrame")

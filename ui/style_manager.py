@@ -29,6 +29,7 @@ from ui.constants import (
     SIDEBAR_ACTIVE,
     SIDEBAR_BACKGROUND,
     SIDEBAR_HOVER,
+    SIDEBAR_STATUS,
     SKY_BLUE,
     SMALL_FONT,
     SUCCESS,
@@ -229,25 +230,25 @@ class StyleManager:
         style.configure(
             "SidebarBrand.TLabel",
             background=SIDEBAR_BACKGROUND,
-            foreground=OLD_GOLD,
+            foreground=WHITE,
             font=(display_family, 11),
         )
         style.configure(
             "SidebarCaption.TLabel",
             background=SIDEBAR_BACKGROUND,
-            foreground=IVORY_WHITE,
+            foreground=WHITE,
             font=small_font,
         )
         style.configure(
             "Sidebar.TButton",
             background=SIDEBAR_BACKGROUND,
-            foreground=IVORY_WHITE,
+            foreground=WHITE,
             anchor="w",
             padding=(6, 7),
             borderwidth=1,
-            bordercolor="#3B394A",
+            bordercolor=SIDEBAR_BACKGROUND,
             focusthickness=1,
-            focuscolor=OLD_GOLD,
+            focuscolor=WHITE,
             font=(ui_family, 8),
         )
         style.map(
@@ -261,13 +262,13 @@ class StyleManager:
         style.configure(
             "SidebarActive.TButton",
             background=SIDEBAR_ACTIVE,
-            foreground=IVORY_WHITE,
+            foreground=WHITE,
             anchor="w",
             padding=(6, 7),
             borderwidth=2,
-            bordercolor=OLD_GOLD,
+            bordercolor=WHITE,
             focusthickness=1,
-            focuscolor=OLD_GOLD,
+            focuscolor=WHITE,
             font=(ui_family, 8, "bold"),
         )
         style.map(
@@ -287,15 +288,15 @@ class StyleManager:
         style.configure(
             "PageSubtitle.TLabel",
             background=MAIN_HEADER,
-            foreground=IVORY_WHITE,
+            foreground=WHITE,
             font=small_font,
         )
         style.configure(
             "Header.TLabel",
             background=MAIN_HEADER,
         )
-        welcome_background = "#081A33"
-        welcome_foreground = "#DCEBFF"
+        welcome_background = "#CFEFFF"
+        welcome_foreground = "#24150D"
         style.configure("WelcomeSplash.TFrame", background=welcome_background)
         style.configure(
             "WelcomeImage.TLabel",
@@ -303,8 +304,8 @@ class StyleManager:
         )
         style.configure(
             "WelcomeMascotBubble.TLabel",
-            background="#DCEBFF",
-            foreground="#081A33",
+            background="#FFFDF4",
+            foreground="#24150D",
             font=(display_family, 7, "bold"),
             padding=(6, 3),
             relief="solid",
@@ -313,7 +314,7 @@ class StyleManager:
         style.configure(
             "WelcomeEyebrow.TLabel",
             background=welcome_background,
-            foreground="#8FB8FF",
+            foreground="#9A6700",
             font=(display_family, 9),
         )
         style.configure(
@@ -323,10 +324,10 @@ class StyleManager:
             font=(display_family, 13, "bold"),
         )
         for name, foreground in (
-            ("WelcomeTitleShimmer1.TLabel", "#8FB8FF"),
-            ("WelcomeTitleShimmer2.TLabel", "#F4C95D"),
-            ("WelcomeTitleShimmer3.TLabel", "#7DD3FC"),
-            ("WelcomeTitleShimmer4.TLabel", "#F4C95D"),
+            ("WelcomeTitleShimmer1.TLabel", "#A33B20"),
+            ("WelcomeTitleShimmer2.TLabel", "#9A6700"),
+            ("WelcomeTitleShimmer3.TLabel", "#2255B5"),
+            ("WelcomeTitleShimmer4.TLabel", "#9A6700"),
             ("WelcomeTitleShimmer5.TLabel", welcome_foreground),
         ):
             style.configure(
@@ -338,13 +339,13 @@ class StyleManager:
         style.configure(
             "WelcomeByline.TLabel",
             background=welcome_background,
-            foreground="#9CC3FF",
+            foreground="#5D5149",
             font=(display_family, 9),
         )
         style.configure(
             "WelcomeStatus.TLabel",
             background=welcome_background,
-            foreground="#E5EEF9",
+            foreground="#24150D",
             font=default_font,
         )
         style.configure(
@@ -354,7 +355,7 @@ class StyleManager:
             padding=0,
             relief="flat",
             focusthickness=1,
-            focuscolor="#F4C95D",
+            focuscolor="#9A6700",
         )
         style.map(
             "WelcomeStart.TButton",
@@ -365,16 +366,16 @@ class StyleManager:
             ],
         )
         for name, border in (
-            ("WelcomeStartGlow1.TFrame", "#F4C95D"),
-            ("WelcomeStartGlow2.TFrame", "#3B82F6"),
-            ("WelcomeStartGlow3.TFrame", "#7DD3FC"),
-            ("WelcomeStartGlow4.TFrame", "#3B82F6"),
+            ("WelcomeStartGlow1.TFrame", "#A33B20"),
+            ("WelcomeStartGlow2.TFrame", "#2255B5"),
+            ("WelcomeStartGlow3.TFrame", "#9A6700"),
+            ("WelcomeStartGlow4.TFrame", "#2255B5"),
         ):
             style.configure(name, background=border)
         style.configure(
             "HeaderStatus.TLabel",
-            background=FOREST_GREEN,
-            foreground=IVORY_WHITE,
+            background=SIDEBAR_STATUS,
+            foreground=WHITE,
             font=button_font,
             bordercolor=OLD_GOLD,
             relief="solid",
@@ -526,7 +527,7 @@ class StyleManager:
         style.configure(
             "StatusBar.TLabel",
             background=MAIN_HEADER,
-            foreground=IVORY_WHITE,
+            foreground=WHITE,
             font=small_font,
         )
         style.configure(
@@ -675,10 +676,10 @@ class StyleManager:
         style.configure("CompactBody.TFrame", background=CARD_BACKGROUND)
         style.configure(
             "CompactTitle.TLabel",
-            background=MAIN_HEADER,
-            foreground=IVORY_WHITE,
+            background=CARD_BACKGROUND,
+            foreground=TEXT_PRIMARY,
             font=(ui_family, 10, "bold"),
-            padding=(8, 4),
+            padding=(0, 0),
         )
         style.configure(
             "CompactText.TLabel",
@@ -694,84 +695,84 @@ class StyleManager:
         )
         style.configure(
             "Compact.TButton",
-            background=TEAL,
-            foreground=IVORY_WHITE,
+            background=MAIN_HEADER,
+            foreground=WHITE,
             padding=(8, 5),
             borderwidth=2,
             bordercolor=BORDER,
             focusthickness=1,
-            focuscolor=OLD_GOLD,
+            focuscolor=WHITE,
             font=(ui_family, 8),
         )
         style.map(
             "Compact.TButton",
             background=[
-                ("pressed", TEAL_PRESSED),
-                ("active", TEAL_HOVER),
-                ("focus", TEAL_HOVER),
+                ("pressed", SIDEBAR_ACTIVE),
+                ("active", SIDEBAR_HOVER),
+                ("focus", SIDEBAR_HOVER),
                 ("disabled", "#D7D1C0"),
             ],
             foreground=[("disabled", "#77716A")],
         )
         style.configure(
             "CompactSoft.TButton",
-            background=TEAL,
-            foreground=IVORY_WHITE,
+            background=MAIN_HEADER,
+            foreground=WHITE,
             padding=(10, 5),
             borderwidth=2,
             bordercolor=BORDER,
             focusthickness=1,
-            focuscolor=OLD_GOLD,
+            focuscolor=WHITE,
             font=button_font,
         )
         style.map(
             "CompactSoft.TButton",
             background=[
-                ("pressed", TEAL_PRESSED),
-                ("active", TEAL_HOVER),
-                ("focus", TEAL_HOVER),
+                ("pressed", SIDEBAR_ACTIVE),
+                ("active", SIDEBAR_HOVER),
+                ("focus", SIDEBAR_HOVER),
                 ("disabled", "#E7DFC9"),
             ],
             foreground=[("disabled", "#77716A")],
         )
         style.configure(
             "Attendance.TButton",
-            background=TEAL,
-            foreground=IVORY_WHITE,
-            padding=(10, 5),
+            background=MAIN_HEADER,
+            foreground=WHITE,
+            padding=(7, 4),
             borderwidth=2,
             bordercolor=BORDER,
             focusthickness=1,
-            focuscolor=OLD_GOLD,
+            focuscolor=WHITE,
             font=button_font,
         )
         style.map(
             "Attendance.TButton",
             background=[
-                ("pressed", TEAL_PRESSED),
-                ("active", TEAL_HOVER),
-                ("focus", TEAL_HOVER),
+                ("pressed", SIDEBAR_ACTIVE),
+                ("active", SIDEBAR_HOVER),
+                ("focus", SIDEBAR_HOVER),
                 ("disabled", "#D7D1C0"),
             ],
             foreground=[("disabled", "#77716A")],
         )
         style.configure(
             "AttendancePrimary.TButton",
-            background=FOREST_GREEN,
-            foreground=IVORY_WHITE,
-            padding=(11, 6),
+            background=SIDEBAR_ACTIVE,
+            foreground=WHITE,
+            padding=(7, 4),
             borderwidth=2,
-            bordercolor=OLD_GOLD,
+            bordercolor=BORDER,
             focusthickness=1,
-            focuscolor=OLD_GOLD,
+            focuscolor=WHITE,
             font=button_font,
         )
         style.map(
             "AttendancePrimary.TButton",
             background=[
-                ("pressed", "#477D31"),
-                ("active", "#6DAF45"),
-                ("focus", "#6DAF45"),
+                ("pressed", ERROR),
+                ("active", "#B24B18"),
+                ("focus", "#B24B18"),
                 ("disabled", "#A5B79A"),
             ],
             foreground=[("disabled", "#ECE5D0")],
@@ -797,21 +798,21 @@ class StyleManager:
         )
         style.configure(
             "AttendanceDanger.TButton",
-            background=TEAL,
-            foreground=IVORY_WHITE,
-            padding=(10, 5),
+            background=ERROR,
+            foreground=WHITE,
+            padding=(7, 4),
             borderwidth=2,
-            bordercolor=MAIN_HEADER,
+            bordercolor=BORDER,
             focusthickness=1,
-            focuscolor=OLD_GOLD,
+            focuscolor=WHITE,
             font=button_font,
         )
         style.map(
             "AttendanceDanger.TButton",
             background=[
-                ("pressed", TEAL_PRESSED),
-                ("active", TEAL_HOVER),
-                ("focus", TEAL_HOVER),
+                ("pressed", SIDEBAR_ACTIVE),
+                ("active", "#B24B18"),
+                ("focus", "#B24B18"),
                 ("disabled", "#D7D1C0"),
             ],
             foreground=[("disabled", "#77716A")],

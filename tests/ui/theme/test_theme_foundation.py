@@ -22,7 +22,7 @@ def test_ui8_palette_constants_are_centralized() -> None:
     assert constants.SOFT_BACKGROUND == "#EAE7DA"
     assert constants.ERROR == constants.DANGER_RED
     assert constants.ERROR not in {constants.OLD_GOLD, constants.FOREST_GREEN}
-    assert constants.MAIN_BACKGROUND == palette.soft_background
+    assert constants.MAIN_BACKGROUND == constants.ATTENDANCE_OT_SURFACE
     assert constants.SIDEBAR_WIDTH == 170
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from ui.pages.base_page import BasePage
-from ui.theme.finger_monitoring import apply_finger_monitoring_styles
+from ui.theme.finger_monitoring import apply_finger_monitoring_styles, finger_palette
 from ui.theme.palette import palette
 from ui.widgets import DateEntry, PaginationBar, TreeviewCopyHelper
 
@@ -45,9 +45,18 @@ class FingerMonitoringPage(BasePage):
         self.service = self.services.finger_monitoring_service
         apply_finger_monitoring_styles(self)
         self.configure(style="FingerMonitoringPage.TFrame")
-        self.rowconfigure(0, weight=1); self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1); self.columnconfigure(0, weight=1)
+        self._scene = tk.Canvas(
+            self,
+            height=82,
+            background=finger_palette.sky,
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self._scene.grid(row=0, column=0, sticky="ew")
+        self._scene.bind("<Configure>", self._draw_retro_scene)
         self.notebook = ttk.Notebook(self, style="FingerMonitoring.TNotebook")
-        self.notebook.grid(row=0, column=0, sticky="nsew")
+        self.notebook.grid(row=1, column=0, sticky="nsew")
         self.status_tab = self._tab("DEVICE STATUS")
         self.master_tab = self._tab("DEVICE MASTER")
         self.history_tab = self._tab("HISTORY")
@@ -57,6 +66,43 @@ class FingerMonitoringPage(BasePage):
         frame = ttk.Frame(self.notebook, style="FingerMonitoringSurface.TFrame", padding=10)
         self.notebook.add(frame, text=name)
         return frame
+
+    def _draw_retro_scene(self, event=None):
+        """Render a small, original pixel scene as module decoration."""
+
+        scene = self._scene
+        width = max(scene.winfo_width(), 640)
+        height = max(scene.winfo_height(), 82)
+        colors = finger_palette
+        scene.delete("all")
+        scene.create_rectangle(0, 0, width, height, fill=colors.sky, outline="")
+
+        for x, y in ((40, 16), (width // 2 - 50, 10), (width - 265, 22)):
+            scene.create_rectangle(x, y + 7, x + 55, y + 18, fill=colors.cloud, outline="")
+            scene.create_rectangle(x + 12, y, x + 38, y + 24, fill=colors.cloud, outline="")
+            scene.create_rectangle(x + 39, y + 5, x + 67, y + 19, fill=colors.cloud, outline="")
+
+        scene.create_text(
+            22,
+            35,
+            anchor="w",
+            text="FINGER MONITORING",
+            fill=colors.ink,
+            font=("Segoe UI", 15, "bold"),
+        )
+        mushroom_x, mushroom_y = width - 112, 14
+        scene.create_rectangle(mushroom_x + 13, mushroom_y + 34, mushroom_x + 29, mushroom_y + 55, fill=colors.cloud, outline=colors.ink)
+        scene.create_rectangle(mushroom_x + 3, mushroom_y + 23, mushroom_x + 39, mushroom_y + 39, fill=colors.brick, outline=colors.ink)
+        scene.create_rectangle(mushroom_x + 9, mushroom_y + 16, mushroom_x + 33, mushroom_y + 23, fill=colors.brick, outline=colors.ink)
+        scene.create_rectangle(mushroom_x + 10, mushroom_y + 26, mushroom_x + 16, mushroom_y + 32, fill=colors.cloud, outline="")
+        scene.create_rectangle(mushroom_x + 28, mushroom_y + 27, mushroom_x + 34, mushroom_y + 33, fill=colors.cloud, outline="")
+
+        ground_y = height - 22
+        scene.create_rectangle(0, ground_y, width, height, fill=colors.brick, outline=colors.ink)
+        for x in range(-24, width + 24, 48):
+            scene.create_line(x, ground_y, x, height, fill=colors.ink, width=1)
+            scene.create_line(x + 24, ground_y + 11, x + 24, height, fill=colors.ink, width=1)
+        scene.create_line(0, ground_y + 11, width, ground_y + 11, fill=colors.ink, width=1)
 
     def _button(self, parent, text, command, *, danger=False):
         accents = {
@@ -85,7 +131,7 @@ class FingerMonitoringPage(BasePage):
             kpis.columnconfigure(index, weight=1)
         filters = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); filters.grid(row=1, column=0, sticky="ew", pady=8)
         self.status_search = tk.StringVar(); self.status_filter = tk.StringVar(value="ALL"); self.status_model = tk.StringVar(value="ALL")
-        for label, widget in (("Search", ttk.Entry(filters, textvariable=self.status_search, width=23)), ("Status", ttk.Combobox(filters, textvariable=self.status_filter, values=("ALL", "ONLINE", "OFFLINE", "NETWORK_UNREACHABLE", "UNKNOWN", "ERROR"), state="readonly", width=21)), ("Model", ttk.Combobox(filters, textvariable=self.status_model, values=("ALL", "X1500", "X1800"), state="readonly", width=10))):
+        for label, widget in (("Search", ttk.Entry(filters, textvariable=self.status_search, width=23, style="FingerMonitoring.TEntry")), ("Status", ttk.Combobox(filters, textvariable=self.status_filter, values=("ALL", "ONLINE", "OFFLINE", "NETWORK_UNREACHABLE", "UNKNOWN", "ERROR"), state="readonly", width=21, style="FingerMonitoring.TCombobox")), ("Model", ttk.Combobox(filters, textvariable=self.status_model, values=("ALL", "X1500", "X1800"), state="readonly", width=10, style="FingerMonitoring.TCombobox"))):
             ttk.Label(filters, text=label, style="FingerMonitoringBody.TLabel").pack(side="left", padx=(0, 4)); widget.pack(side="left", padx=(0, 10))
         self._button(filters, "Refresh", self.refresh_status).pack(side="left")
         actions = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); actions.grid(row=2, column=0, sticky="ew")
@@ -108,7 +154,7 @@ class FingerMonitoringPage(BasePage):
         tab = self.master_tab; tab.columnconfigure(0, weight=1); tab.rowconfigure(2, weight=1)
         filters = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); filters.grid(row=0, column=0, sticky="ew")
         self.master_search = tk.StringVar(); self.master_model = tk.StringVar(value="ALL"); self.master_active = tk.StringVar(value="Active")
-        for label, widget in (("Search", ttk.Entry(filters, textvariable=self.master_search, width=23)), ("Model", ttk.Combobox(filters, textvariable=self.master_model, values=("ALL", "X1500", "X1800"), state="readonly", width=10)), ("Status", ttk.Combobox(filters, textvariable=self.master_active, values=("Active", "Inactive", "All"), state="readonly", width=10))):
+        for label, widget in (("Search", ttk.Entry(filters, textvariable=self.master_search, width=23, style="FingerMonitoring.TEntry")), ("Model", ttk.Combobox(filters, textvariable=self.master_model, values=("ALL", "X1500", "X1800"), state="readonly", width=10, style="FingerMonitoring.TCombobox")), ("Status", ttk.Combobox(filters, textvariable=self.master_active, values=("Active", "Inactive", "All"), state="readonly", width=10, style="FingerMonitoring.TCombobox"))):
             ttk.Label(filters, text=label, style="FingerMonitoringBody.TLabel").pack(side="left", padx=(0, 4)); widget.pack(side="left", padx=(0, 10))
         self._button(filters, "Refresh", self.refresh_master).pack(side="left")
         actions = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); actions.grid(row=1, column=0, sticky="ew", pady=7)
@@ -124,7 +170,7 @@ class FingerMonitoringPage(BasePage):
         self.history_from = tk.StringVar(); self.history_to = tk.StringVar(); self.history_branch = tk.StringVar(); self.history_status = tk.StringVar()
         self.history_from_entry = DateEntry(filters, textvariable=self.history_from, width=10)
         self.history_to_entry = DateEntry(filters, textvariable=self.history_to, width=10)
-        for label, widget in (("From", self.history_from_entry), ("To", self.history_to_entry), ("Branch", ttk.Entry(filters, textvariable=self.history_branch, width=18)), ("Status", ttk.Combobox(filters, textvariable=self.history_status, values=("", "ONLINE", "OFFLINE", "NETWORK_UNREACHABLE", "UNKNOWN", "ERROR"), width=19))):
+        for label, widget in (("From", self.history_from_entry), ("To", self.history_to_entry), ("Branch", ttk.Entry(filters, textvariable=self.history_branch, width=18, style="FingerMonitoring.TEntry")), ("Status", ttk.Combobox(filters, textvariable=self.history_status, values=("", "ONLINE", "OFFLINE", "NETWORK_UNREACHABLE", "UNKNOWN", "ERROR"), width=19, style="FingerMonitoring.TCombobox"))):
             ttk.Label(filters, text=label, style="FingerMonitoringBody.TLabel").pack(side="left", padx=(0, 3)); widget.pack(side="left", padx=(0, 8))
         self._button(filters, "Refresh", self.refresh_history).pack(side="left")
         self._button(filters, "Export Excel", self.export_history).pack(side="left", padx=4)
@@ -150,7 +196,15 @@ class FingerMonitoringPage(BasePage):
                 ),
             )
             tree.column(key, width=width, stretch=True)
-        tree.grid(row=0, column=0, sticky="nsew"); bar = ttk.Scrollbar(body, orient="vertical", command=tree.yview); bar.grid(row=0, column=1, sticky="ns"); tree.configure(yscrollcommand=bar.set)
+        tree.grid(row=0, column=0, sticky="nsew")
+        vertical_bar = ttk.Scrollbar(body, orient="vertical", command=tree.yview)
+        vertical_bar.grid(row=0, column=1, sticky="ns")
+        horizontal_bar = ttk.Scrollbar(body, orient="horizontal", command=tree.xview)
+        horizontal_bar.grid(row=1, column=0, sticky="ew")
+        tree.configure(
+            yscrollcommand=vertical_bar.set,
+            xscrollcommand=horizontal_bar.set,
+        )
         return tree
 
     def on_show(self):
@@ -211,10 +265,10 @@ class FingerMonitoringPage(BasePage):
     def _configure_status_tags(tree, *, color_online=True):
         for status, color in (
             ("ONLINE", palette.teal_pressed),
-            ("OFFLINE", "#FF6F91"),
-            ("NETWORK_UNREACHABLE", "#FFD166"),
+            ("OFFLINE", "#B3261E"),
+            ("NETWORK_UNREACHABLE", "#9A6700"),
             ("UNKNOWN", "#9A6700"),
-            ("ERROR", "#FF6F91"),
+            ("ERROR", "#B3261E"),
         ):
             if status != "ONLINE" or color_online:
                 tree.tag_configure(status, foreground=color)
@@ -232,7 +286,7 @@ class FingerMonitoringPage(BasePage):
             if "ONLINE" not in self.status_tree.item(item_id, "tags"):
                 continue
             values = list(self.status_tree.item(item_id, "values"))
-            values[3] = f"{marker} ONLINE"
+            values[5] = f"{marker} ONLINE"
             self.status_tree.item(item_id, values=values)
         self._online_blink_job = self.after(
             self.online_blink_interval_ms,
@@ -399,7 +453,7 @@ class FingerMonitoringPage(BasePage):
             tk.StringVar(value=values[5] if values else ""),
         )
         for row, (label, variable) in enumerate((("Unit", unit), ("3LC", three_lc), ("Branch Name *", branch), ("IP Address *", ip), ("Model", model), ("Note", note))):
-            ttk.Label(window, text=label).grid(row=row, column=0, padx=10, pady=6, sticky="w"); ttk.Entry(window, textvariable=variable).grid(row=row, column=1, padx=10, pady=6)
+            ttk.Label(window, text=label).grid(row=row, column=0, padx=10, pady=6, sticky="w"); ttk.Entry(window, textvariable=variable, style="FingerMonitoring.TEntry").grid(row=row, column=1, padx=10, pady=6)
         def save():
             try:
                 if device_id is None: self.service.device_master.add_device(branch.get(), ip.get(), device_model=model.get(), unit=unit.get(), three_lc=three_lc.get(), note=note.get())

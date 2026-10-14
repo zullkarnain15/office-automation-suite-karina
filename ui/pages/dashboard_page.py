@@ -18,6 +18,8 @@ from ui.constants import (
     TEXT_SECONDARY,
 )
 from ui.pages.base_page import BasePage
+from ui.theme.dashboard import apply_dashboard_styles
+from ui.theme.attendance_ot import DEFAULT_ATTENDANCE_OT_THEME
 from ui.widgets import MetricCard, ModuleStatusCard, SectionHeader
 
 
@@ -52,17 +54,19 @@ class DashboardPage(BasePage):
 
     def build_content(self) -> None:
         self.services = self.context.app_services
-        container = ttk.Frame(self, style="OASK.TFrame")
+        apply_dashboard_styles(self)
+        self.configure(style="DashboardPage.TFrame")
+        container = ttk.Frame(self, style="DashboardSurface.TFrame")
         container.grid(row=1, column=0, sticky="nsew")
         container.columnconfigure((0, 1, 2, 3), weight=1, uniform="dashboard")
         container.rowconfigure(5, weight=1)
 
-        actions = ttk.Frame(container, style="OASK.TFrame")
+        actions = ttk.Frame(container, style="DashboardSurface.TFrame")
         actions.grid(row=0, column=3, sticky="e", pady=(0, SPACE_SM))
         self.chomper_canvas = tk.Canvas(
             container,
-            height=30,
-            background=MAIN_BACKGROUND,
+            height=82,
+            background=DEFAULT_ATTENDANCE_OT_THEME.palette.background,
             borderwidth=0,
             highlightthickness=0,
         )
@@ -71,7 +75,7 @@ class DashboardPage(BasePage):
         )
         self.chomper_canvas.bind("<Configure>", lambda _event: self._draw_chomper())
         self.refresh_button = ttk.Button(
-            actions, text="Refresh", style="Primary.TButton", command=self.refresh
+            actions, text="Refresh", style="Dashboard.TButton", command=self.refresh
         )
         self.refresh_button.grid(row=0, column=0)
 
@@ -80,7 +84,13 @@ class DashboardPage(BasePage):
             ("Database Status", "Data Root Status", "Last Backup", "System Health")
         ):
             card = MetricCard(
-                container, title=title, value_style="DashboardValue.TLabel"
+                container,
+                title=title,
+                value_style="DashboardValue.TLabel",
+                frame_style="DashboardShadow.TFrame",
+                panel_style="DashboardCard.TFrame",
+                title_style="DashboardTitle.TLabel",
+                detail_style="DashboardText.TLabel",
             )
             card.grid(
                 row=1,
@@ -91,7 +101,7 @@ class DashboardPage(BasePage):
             self.summary_cards[title] = card
 
         quick_start = ttk.Frame(
-            container, style="CompactPanel.TFrame", padding=(12, 8)
+            container, style="DashboardQuick.TFrame", padding=(12, 8)
         )
         quick_start.grid(
             row=2, column=0, columnspan=4, sticky="ew", pady=(SPACE_LG, 0)
@@ -100,22 +110,22 @@ class DashboardPage(BasePage):
         ttk.Label(
             quick_start,
             text="Mulai dari Settings > Storage & Database untuk membuat atau memilih Data Root dan database OAS-K.",
-            style="CompactTitle.TLabel",
+            style="DashboardTitle.TLabel",
         ).grid(row=0, column=0, sticky="w")
         ttk.Label(
             quick_start,
             text="Setelah database valid, lanjut Import / Export konfigurasi, lalu jalankan Attendance, Outlook Revisi, HRIS, atau Utilities.",
-            style="CompactText.TLabel",
+            style="DashboardText.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
         ttk.Button(
             quick_start,
             text="Buka Settings",
-            style="CompactPrimary.TButton",
+            style="Dashboard.TButton",
             command=lambda: self.context.navigate
             and self.context.navigate("settings"),
         ).grid(row=0, column=1, rowspan=2, sticky="e", padx=(12, 0))
 
-        SectionHeader(container, "Module activity").grid(
+        ttk.Label(container, text="Module activity", style="DashboardSection.TLabel").grid(
             row=3, column=0, columnspan=4, sticky="w", pady=(SPACE_LG, SPACE_SM)
         )
         self.module_cards = {}
@@ -123,7 +133,13 @@ class DashboardPage(BasePage):
             ("Attendance", "Outlook Revisi", "HRIS", "Utilities")
         ):
             card = ModuleStatusCard(
-                container, title=title, value_style="DashboardValue.TLabel"
+                container,
+                title=title,
+                value_style="DashboardValue.TLabel",
+                frame_style="DashboardShadow.TFrame",
+                panel_style="DashboardCard.TFrame",
+                title_style="DashboardTitle.TLabel",
+                detail_style="DashboardText.TLabel",
             )
             card.grid(
                 row=4,
@@ -134,21 +150,21 @@ class DashboardPage(BasePage):
             self.module_cards[title.upper().replace(" ", "_")] = card
 
         activity = ttk.Frame(
-            container, style="ContentCard.TFrame", padding=(SPACE_LG, SPACE_MD)
+            container, style="DashboardCard.TFrame", padding=(SPACE_LG, SPACE_MD)
         )
         activity.grid(row=5, column=0, columnspan=4, sticky="nsew", pady=(SPACE_LG, 0))
         activity.columnconfigure(0, weight=1)
         activity.rowconfigure(1, weight=1)
-        ttk.Label(activity, text="Recent Activity", style="CardTitle.TLabel").grid(
+        ttk.Label(activity, text="Recent Activity", style="DashboardTitle.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, SPACE_SM)
         )
         ttk.Button(
             activity,
             text="Open Selected Output",
-            command=self.open_selected_output,
+            command=self.open_selected_output, style="Dashboard.TButton",
         ).grid(row=0, column=0, sticky="e", pady=(0, SPACE_SM))
         columns = ("time", "module", "status", "output")
-        self.table = ttk.Treeview(activity, columns=columns, show="headings", height=4)
+        self.table = ttk.Treeview(activity, columns=columns, show="headings", height=4, style="Dashboard.Treeview")
         for column, heading, width in (
             ("time", "Waktu", 155),
             ("module", "Modul", 130),
@@ -366,57 +382,27 @@ class DashboardPage(BasePage):
             return
         canvas = self.chomper_canvas
         canvas.delete("chomper")
-        height = max(24, canvas.winfo_height())
-        y = height // 2
-        radius = 9
-        width = max(1, canvas.winfo_width())
-        pellet_x = 18
-        while pellet_x < width - 8:
-            if pellet_x > self._chomper_eaten_until:
-                canvas.create_oval(
-                    pellet_x - 2,
-                    y - 2,
-                    pellet_x + 2,
-                    y + 2,
-                    fill=OLD_GOLD,
-                    outline=OLD_GOLD,
-                    tags="chomper",
-                )
-            pellet_x += 24
-        x = self._chomper_x - radius
-        if x < -radius:
-            x = -radius
-        canvas.create_oval(
-            x - radius,
-            y - radius,
-            x + radius,
-            y + radius,
-            fill=OLD_GOLD,
-            outline=BORDER,
-            width=2,
-            tags="chomper",
-        )
-        mouth = 8 if self._chomper_mouth_open else 3
-        canvas.create_polygon(
-            x,
-            y,
-            x + radius + 2,
-            y - mouth,
-            x + radius + 2,
-            y + mouth,
-            fill=MAIN_BACKGROUND,
-            outline=MAIN_BACKGROUND,
-            tags="chomper",
-        )
-        canvas.create_oval(
-            x + 1,
-            y - 6,
-            x + 4,
-            y - 3,
-            fill=BORDER,
-            outline=BORDER,
-            tags="chomper",
-        )
+        colors = DEFAULT_ATTENDANCE_OT_THEME.palette
+        width = max(canvas.winfo_width(), 640)
+        height = max(canvas.winfo_height(), 82)
+        canvas.create_rectangle(0, 0, width, height, fill=colors.background, outline="", tags="chomper")
+        for x, y in ((34, 17), (width // 2 - 48, 10), (width - 255, 23)):
+            canvas.create_rectangle(x, y + 7, x + 55, y + 18, fill=colors.card, outline="", tags="chomper")
+            canvas.create_rectangle(x + 12, y, x + 38, y + 24, fill=colors.card, outline="", tags="chomper")
+            canvas.create_rectangle(x + 39, y + 5, x + 67, y + 19, fill=colors.card, outline="", tags="chomper")
+        canvas.create_text(20, 38, anchor="w", text="DASHBOARD", fill=colors.ink, font=("Segoe UI", 15, "bold"), tags="chomper")
+        mushroom_x, mushroom_y = width - 110, 14
+        canvas.create_rectangle(mushroom_x + 13, mushroom_y + 34, mushroom_x + 29, mushroom_y + 55, fill=colors.card, outline=colors.ink, tags="chomper")
+        canvas.create_rectangle(mushroom_x + 3, mushroom_y + 23, mushroom_x + 39, mushroom_y + 39, fill=colors.tab_sage, outline=colors.ink, tags="chomper")
+        canvas.create_rectangle(mushroom_x + 9, mushroom_y + 16, mushroom_x + 33, mushroom_y + 23, fill=colors.tab_sage, outline=colors.ink, tags="chomper")
+        canvas.create_rectangle(mushroom_x + 10, mushroom_y + 26, mushroom_x + 16, mushroom_y + 32, fill=colors.card, outline="", tags="chomper")
+        canvas.create_rectangle(mushroom_x + 28, mushroom_y + 27, mushroom_x + 34, mushroom_y + 33, fill=colors.card, outline="", tags="chomper")
+        ground_y = height - 22
+        canvas.create_rectangle(0, ground_y, width, height, fill=colors.tab_sage, outline=colors.ink, tags="chomper")
+        for x in range(-24, width + 24, 48):
+            canvas.create_line(x, ground_y, x, height, fill=colors.ink, width=1, tags="chomper")
+            canvas.create_line(x + 24, ground_y + 11, x + 24, height, fill=colors.ink, width=1, tags="chomper")
+        canvas.create_line(0, ground_y + 11, width, ground_y + 11, fill=colors.ink, width=1, tags="chomper")
 
     def _stop_chomper(self) -> None:
         if self._chomper_job is not None:

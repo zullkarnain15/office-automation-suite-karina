@@ -176,11 +176,11 @@ def test_ui8_visual_palette_is_centralized() -> None:
         "TEAL_PRESSED": "#24746A",
         "IVORY_WHITE": "#F7F1DD",
         "SOFT_BACKGROUND": "#EAE7DA",
-        "BACKGROUND": "#EAE7DA",
-        "CONTENT_BACKGROUND": "#EAE7DA",
-        "CARD_BACKGROUND": "#F7F1DD",
-        "TEXT_PRIMARY": "#222034",
-        "BORDER": "#222034",
+        "BACKGROUND": "#CFEFFF",
+        "CONTENT_BACKGROUND": "#EAF8FF",
+        "CARD_BACKGROUND": "#FFFDF4",
+        "TEXT_PRIMARY": "#24150D",
+        "BORDER": "#24150D",
         "LOG_BACKGROUND": "#222034",
         "LOG_TEXT": "#F7F1DD",
     }
@@ -297,7 +297,8 @@ def test_ui5b_pages_and_ui7b1_pilot_use_approved_visual_foundations() -> None:
         encoding="utf-8"
     )
 
-    assert "CompactPanel.TFrame" in attendance
+    assert "AttendancePanel.TFrame" in attendance
+    assert "apply_attendance_styles" in attendance
     assert "CompactProgress" in attendance
     assert "ResponsiveCardGrid" not in attendance
     assert "ResponsiveCardGrid" not in outlook and "ModernCard" not in outlook

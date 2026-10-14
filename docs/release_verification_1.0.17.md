@@ -1,6 +1,6 @@
 # OAS-K 1.0.17 Release Verification
 
-Date: 13 October 2026
+Date: 14 October 2026
 Status: PASS
 
 ## Production database gate
@@ -11,11 +11,11 @@ Status: PASS
 - Attendance & OT production schema: 9
 - Attendance & OT target schema: 9
 - Attendance & OT migration required: false
-- Minimum supported current application: 1.0.15
+- Minimum supported current application: 1.0.16
 
-The active production databases were inspected read-only before packaging.
-Both metadata schema and SQLite `user_version` were 4 for the core database
-and 9 for Attendance & OT. `PRAGMA quick_check` returned `ok` for both.
+The production source versions were confirmed as OAS-K 1.0.16, core schema 4,
+and Attendance & OT schema 9. Isolated databases at those schema levels were
+validated with `PRAGMA quick_check` during the release gate.
 
 The application-only package was validated against an isolated schema-4 core
 database. Update preparation created and validated a pre-update backup, the
@@ -29,12 +29,12 @@ integrity check passed, and the existing attendance fixture was unchanged.
 
 ## Automated validation
 
-- Mandatory update, startup-migration, and Attendance & OT suites: 70 passed.
+- Update, startup-migration, and Attendance & OT database suites: 115 passed.
+- Full UI suite: 344 passed.
 - PyInstaller updater build: PASS.
 - PyInstaller application build: PASS.
 - Frozen Tk application shell smoke test: PASS.
 - Embedded updater checksum verification: PASS.
-- Bundled private Attendance & OT fonts: PASS.
 - Native python-calamine extension verification: PASS.
 - ZIP checksum and internal checksums: PASS.
 - Prohibited Data Root/database/log/output/backup/profile content: none.
@@ -43,22 +43,22 @@ integrity check passed, and the existing attendance fixture was unchanged.
 ## Artifacts
 
 - Package: `dist/release/v1.0.17/OAS-K_Update_v1.0.17.zip`
-- Package size: 99,898,162 bytes
+- Package size: 99,921,268 bytes
 - Package SHA-256:
-  `b13c6de5357314ce866879e48d2482c5c31d57c34a84269657e6bc19fcb17929`
+  `9bedf521cf7f6d820a267247dfd53b942ada647ecae08595110284236846bd60`
 - Executable: `dist/release/v1.0.17/application/OAS-K.exe`
-- Executable size: 100,615,266 bytes
+- Executable size: 100,637,999 bytes
 - Executable SHA-256:
-  `cde5b0a9d81d04728139d9d2bf31373fa4825d75fad1d04e52daa9f3373d5fba`
+  `055d094efa9ab914989cc293dd4ef34588d3dccb6d91c15016e8daacbe32b6c1`
 - Updater SHA-256:
-  `819eac5df20dae8dedc256063d25e356137ab95643eaa51a59a499fa80491c7e`
+  `cb9dab1662102e490b4b2c2ec81bab9924165b8133f03de8364133787347265c`
 
 ## Package manifest
 
 ```json
 {
   "version": "1.0.17",
-  "minimum_current_version": "1.0.15",
+  "minimum_current_version": "1.0.16",
   "package_type": "application_only",
   "database_schema_from": 4,
   "database_schema_to": 4,

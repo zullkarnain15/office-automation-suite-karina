@@ -1,4 +1,4 @@
-"""Default OAS-K visual tokens scoped to the ATT & OT page."""
+"""Retro platformer visual tokens scoped to the ATT & OT page."""
 
 from __future__ import annotations
 
@@ -8,34 +8,33 @@ from dataclasses import dataclass
 from tkinter import ttk
 
 from ui.theme.font_loader import font_available, load_theme_fonts
-from ui.theme.palette import palette
 
 
 @dataclass(frozen=True)
 class AttendanceOTPalette:
-    """Compatibility names mapped to the application's shared default palette."""
+    """Accessible colors inspired by a classic 8-bit platform world."""
 
-    background: str = palette.soft_background
-    surface: str = palette.soft_background
-    card: str = palette.ivory_white
-    selection: str = palette.royal_blue
-    chalk_white: str = palette.ivory_white
-    chalk_muted: str = palette.text_secondary
-    chalk_yellow: str = palette.old_gold
-    chalk_blue: str = palette.sky_blue
-    chalk_pink: str = palette.danger_red
-    tab_sage: str = palette.royal_blue
-    tab_mint: str = palette.teal
-    tab_pink: str = palette.danger_red
-    tab_blue: str = palette.sky_blue
-    tab_yellow: str = palette.old_gold
-    tab_purple: str = palette.royal_blue
-    tab_orange: str = palette.old_gold
-    filter_mint: str = palette.teal
-    filter_pink: str = palette.danger_red
-    filter_blue: str = palette.sky_blue
-    filter_purple: str = palette.royal_blue
-    ink: str = palette.outline
+    background: str = "#CFEFFF"
+    surface: str = "#EAF8FF"
+    card: str = "#FFFDF4"
+    selection: str = "#2255B5"
+    chalk_white: str = "#FFFFFF"
+    chalk_muted: str = "#5D5149"
+    chalk_yellow: str = "#9A6700"
+    chalk_blue: str = "#2255B5"
+    chalk_pink: str = "#B3261E"
+    tab_sage: str = "#A33B20"
+    tab_mint: str = "#287B42"
+    tab_pink: str = "#B3261E"
+    tab_blue: str = "#2255B5"
+    tab_yellow: str = "#9A6700"
+    tab_purple: str = "#2255B5"
+    tab_orange: str = "#B24B18"
+    filter_mint: str = "#287B42"
+    filter_pink: str = "#B3261E"
+    filter_blue: str = "#2255B5"
+    filter_purple: str = "#A33B20"
+    ink: str = "#24150D"
 
     @property
     def tab_colors(self) -> tuple[str, ...]:
@@ -139,10 +138,10 @@ def apply_attendance_ot_styles(root: tk.Misc, theme: AttendanceOTTheme) -> ttk.S
         style.configure(style_name, background=colors.surface, foreground=color, font=(fonts.ui_family, 9, "bold"))
     for name, color in (("AttendanceOT", colors.chalk_blue), ("AttendanceOTSuccess", colors.filter_mint), ("AttendanceOTError", colors.filter_pink)):
         style.configure(f"{name}.Horizontal.TProgressbar", background=color, troughcolor=colors.card, bordercolor=colors.ink, lightcolor=color, darkcolor=color)
-    style.configure("AttendanceOT.TButton", background=colors.filter_mint, foreground=colors.chalk_white, bordercolor=colors.ink, font=(fonts.heading_family, 9, "bold"), padding=(9, 6))
-    style.map("AttendanceOT.TButton", background=[("pressed", colors.selection), ("active", palette.teal_hover)], foreground=[("active", colors.chalk_white)])
+    style.configure("AttendanceOT.TButton", background=colors.filter_mint, foreground=colors.chalk_white, bordercolor=colors.ink, font=(fonts.heading_family, 8, "bold"), padding=(7, 4))
+    style.map("AttendanceOT.TButton", background=[("pressed", colors.selection), ("active", colors.tab_mint)], foreground=[("active", colors.chalk_white)])
     for style_name, color in (("AttendanceOTFilterBranch.TButton", colors.filter_mint), ("AttendanceOTFilterPayGroup.TButton", colors.filter_pink), ("AttendanceOTFilterDepartment.TButton", colors.filter_blue), ("AttendanceOTFilterDivision.TButton", colors.filter_purple), ("AttendanceOTDataUpdateEmployee.TButton", colors.tab_mint), ("AttendanceOTDataUpdateSchedule.TButton", colors.tab_yellow), ("AttendanceOTDataUpdateAttendance.TButton", colors.tab_blue), ("AttendanceOTDataUpdateAll.TButton", colors.tab_orange), ("AttendanceOTApply.TButton", colors.filter_mint), ("AttendanceOTReset.TButton", colors.filter_pink)):
-        style.configure(style_name, background=color, foreground=colors.chalk_white, bordercolor=colors.ink, font=(fonts.heading_family, 9, "bold"), padding=(9, 6))
+        style.configure(style_name, background=color, foreground=colors.chalk_white, bordercolor=colors.ink, font=(fonts.heading_family, 8, "bold"), padding=(7, 4))
         style.map(style_name, background=[("pressed", colors.selection), ("active", color)], foreground=[("active", colors.chalk_white)])
     style.configure("AttendanceOT.TEntry", fieldbackground=colors.card, foreground=colors.ink, bordercolor=colors.ink, lightcolor=colors.ink, darkcolor=colors.ink, insertcolor=colors.ink, font=(fonts.ui_family, 9))
     style.configure("AttendanceOT.TCombobox", fieldbackground=colors.card, background=colors.card, foreground=colors.ink, bordercolor=colors.ink, arrowcolor=colors.ink, font=(fonts.ui_family, 9))

@@ -26,7 +26,7 @@ from ui.utilities_models import (
     ComparisonRunRequest,
     UtilitiesFeature,
 )
-from ui.widgets import CompactProgress, DateEntry, ResultSummary
+from ui.widgets import CompactProgress, DateEntry, ResultSummary, RetroModuleBanner
 from ui.widgets import OptionChip, SegmentedChoice
 
 
@@ -59,8 +59,12 @@ class UtilitiesPage(BasePage):
 
     def build_content(self) -> None:
         self.services = self.context.app_services
+        self.rowconfigure(1, weight=0)
+        self.rowconfigure(2, weight=1)
+        self.banner = RetroModuleBanner(self, title=self.title)
+        self.banner.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         self.host = ttk.Frame(self, style="OASK.TFrame")
-        self.host.grid(row=1, column=0, sticky="nsew")
+        self.host.grid(row=2, column=0, sticky="nsew")
         self.host.columnconfigure(0, weight=1)
         self.host.rowconfigure(0, weight=1)
         self._build_landing()

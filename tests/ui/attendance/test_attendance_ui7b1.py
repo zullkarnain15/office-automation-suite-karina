@@ -81,7 +81,8 @@ def test_normal_workflow_and_run_are_visible_at_minimum_size(tk_root, tmp_path) 
     assert page.log_text.cget("height") == 5
     assert not page.result_panel.winfo_manager()
     assert not page.advanced_frame.winfo_manager()
-    assert not any(widget.winfo_class() == "Canvas" for widget in page.winfo_children())
+    assert page._scene.winfo_class() == "Canvas"
+    assert page._scene.winfo_height() <= 82
     assert app.close()
 
 
