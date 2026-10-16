@@ -64,6 +64,25 @@ def apply_finger_monitoring_styles(root) -> ttk.Style:
         foreground=colors.ink,
         font=(fonts.ui_family, 10),
     )
+    for name, background in (
+        ("Total", colors.royal_blue),
+        ("Online", colors.pipe_green),
+        ("Offline", colors.orange),
+        ("Alert", colors.danger),
+    ):
+        style.configure(
+            f"FingerMonitoring{name}Card.TFrame",
+            background=background,
+            bordercolor=colors.ink,
+            relief="solid",
+            borderwidth=2,
+        )
+        style.configure(
+            f"FingerMonitoring{name}Card.TLabel",
+            background=background,
+            foreground=colors.white,
+            font=(fonts.ui_family, 10),
+        )
     style.configure(
         "FingerMonitoringProgress.TLabel",
         background=colors.sky_light,

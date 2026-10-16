@@ -134,10 +134,25 @@ class FingerMonitoringPage(BasePage):
         tab = self.status_tab; tab.columnconfigure(0, weight=1); tab.rowconfigure(3, weight=1)
         kpis = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); kpis.grid(row=0, column=0, sticky="ew")
         self.kpi_vars = {name: tk.StringVar(value="0") for name in ("Total", "Online", "Offline", "Alert ≥3 Days")}
+        self.kpi_cards = {}
+        card_styles = {
+            "Total": "Total",
+            "Online": "Online",
+            "Offline": "Offline",
+            "Alert ≥3 Days": "Alert",
+        }
         for index, (name, variable) in enumerate(self.kpi_vars.items()):
-            card = ttk.Frame(kpis, style="FingerMonitoringCard.TFrame", padding=9); card.grid(row=0, column=index, sticky="ew", padx=(0, 7))
-            ttk.Label(card, text=name, style="FingerMonitoringCard.TLabel").pack(anchor="w")
-            ttk.Label(card, textvariable=variable, style="FingerMonitoringCard.TLabel", font=("Segoe UI", 16, "bold")).pack(anchor="w")
+            style_name = f"FingerMonitoring{card_styles[name]}Card"
+            card = ttk.Frame(kpis, style=f"{style_name}.TFrame", padding=9)
+            card.grid(row=0, column=index, sticky="ew", padx=(0, 7))
+            ttk.Label(card, text=name, style=f"{style_name}.TLabel").pack(anchor="w")
+            ttk.Label(
+                card,
+                textvariable=variable,
+                style=f"{style_name}.TLabel",
+                font=("Segoe UI", 16, "bold"),
+            ).pack(anchor="w")
+            self.kpi_cards[name] = card
             kpis.columnconfigure(index, weight=1)
         filters = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); filters.grid(row=1, column=0, sticky="ew", pady=8)
         self.status_search = tk.StringVar(); self.status_filter = tk.StringVar(value="ALL"); self.status_model = tk.StringVar(value="ALL")
@@ -210,14 +225,17 @@ class FingerMonitoringPage(BasePage):
 
         ttk.Label(form, text="Pengecualian Arsip", style="FingerMonitoringBody.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 5), pady=3)
         ttk.Entry(form, textvariable=self.backup_exclusions_var, style="FingerMonitoring.TEntry").grid(row=1, column=1, sticky="ew", pady=3)
-        ttk.Label(form, text="Nama/pola dipisahkan titik koma, contoh: arsip;old_*", style="FingerMonitoringMuted.TLabel").grid(row=1, column=2, columnspan=3, sticky="w", padx=5, pady=3)
+        self.backup_save_button = self._button(
+            form,
+            "Simpan Pengaturan",
+            self.save_backup_settings,
+        )
+        self.backup_save_button.grid(row=1, column=4, sticky="w", pady=3)
         self.backup_settings_status_var = tk.StringVar(value="Pengaturan akan dimuat otomatis.")
         ttk.Label(form, textvariable=self.backup_settings_status_var, style="FingerMonitoringMuted.TLabel").grid(row=2, column=1, columnspan=4, sticky="w", pady=(2, 0))
 
         actions = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame")
         actions.grid(row=1, column=0, sticky="ew", pady=7)
-        self.backup_save_button = self._button(actions, "Simpan Pengaturan", self.save_backup_settings)
-        self.backup_save_button.pack(side="left", padx=(0, 5))
         self.backup_check_button = self._button(actions, "Cek Backup", self.check_backup)
         self.backup_check_button.pack(side="left")
         self.backup_export_button = self._button(actions, "Export Excel", self.export_backup)
@@ -230,7 +248,6 @@ class FingerMonitoringPage(BasePage):
         self.backup_progress.pack(side="left", padx=(14, 5))
         self.backup_progress_var = tk.StringVar(value="Belum diperiksa")
         ttk.Label(actions, textvariable=self.backup_progress_var, style="FingerMonitoringMuted.TLabel").pack(side="left")
-        ttk.Label(actions, text="Email memakai Recipient Email di Settings", style="FingerMonitoringMuted.TLabel").pack(side="right")
         self.backup_summary_var = tk.StringVar(value="Hasil pemeriksaan akan tampil setelah Cek Backup.")
         ttk.Label(tab, textvariable=self.backup_summary_var, style="FingerMonitoringBody.TLabel").grid(row=2, column=0, sticky="w", pady=(0, 7))
         columns = ("unit", "branch", "file", "modified", "size", "status", "detail")

@@ -1,0 +1,37 @@
+OAS-K 1.0.18
+16 October 2026
+
+Release production untuk OAS-K core database schema 4, database analytics
+Attendance & OT schema 9, dan database Finger Monitoring schema 6.
+
+Unified UI dan eksekusi modul:
+- Maksimal dua job modul yang kompatibel dapat berjalan bersamaan.
+- Job dari modul yang sama, resource yang sama, atau source/output yang
+  bertabrakan ditolak dengan pesan yang jelas.
+- Footer menampilkan jumlah dan nama job aktif.
+- Penutupan aplikasi, operasi Settings yang destruktif, dan pembaruan ATT&OT
+  diblokir secara aman selama job modul masih berjalan.
+
+Attendance & OT dan konfigurasi:
+- Request tampilan ATT&OT yang identik tidak lagi dikirim berulang saat tab
+  dipilih atau halaman pertama kali dibuka.
+- Ringkasan konfigurasi modul yang sudah berhasil dimuat tidak dibaca ulang
+  setiap kali tab Settings dipilih.
+
+Fingerprint Monitoring:
+- Tombol Simpan Pengaturan Backup MDB dipindahkan ke bawah Tanggal Acuan.
+- Teks bantuan yang mengganggu pada form dan baris aksi dihilangkan.
+- Kartu Total, Online, Offline, dan Alert memakai warna semantik berkontras
+  tinggi agar status lebih cepat dikenali.
+
+Kompatibilitas database:
+- Update package ditujukan untuk production OAS-K 1.0.17.
+- Core OAS-K production schema 4 tetap schema 4; tidak ada migrasi core.
+- Database Attendance & OT schema 9 tetap schema 9; tidak ada migrasi.
+- Database Finger Monitoring schema 6 tetap schema 6; tidak ada migrasi.
+- Data production existing diverifikasi tetap utuh melalui backup pre-update,
+  update preparation, dan post-update health check terisolasi.
+
+Paket update hanya berisi aplikasi dan metadata update. Data Root, database,
+MDB, konfigurasi aktif, log, output, backup, dan recorder profiles tidak
+disertakan.
