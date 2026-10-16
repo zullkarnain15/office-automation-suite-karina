@@ -53,6 +53,7 @@ class HRISRunRequest:
     manual_login: bool = True
     login_id: str | None = None
     login_secret: str | None = None
+    run_control_cooldown_minutes: int = 15
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +72,8 @@ class HRISResolvedRequest:
     manual_login: bool = True
     login_id: str | None = None
     login_secret: str | None = None
+    selected_run_control_ids: tuple[str, ...] = ()
+    run_control_cooldown_minutes: int = 15
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +100,13 @@ class HRISRecorderProfile:
 
 
 @dataclass(frozen=True, slots=True)
+class HRISRunControlCooldown:
+    workflow: str
+    run_control_id: str
+    available_at: str
+
+
+@dataclass(frozen=True, slots=True)
 class HRISDefaults:
     database_available: bool
     database_path: Path | None
@@ -115,6 +125,7 @@ class HRISDefaults:
     warning: str | None = None
     ho_txt_source_folder: Path | None = None
     branch_txt_source_folder: Path | None = None
+    run_control_cooldowns: tuple[HRISRunControlCooldown, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

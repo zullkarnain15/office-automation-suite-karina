@@ -23,6 +23,7 @@ class DailyEmailSnapshot:
     offline: int
     unverifiable: int
     alert: int
+    alert_threshold: int
     offline_devices: tuple[dict, ...]
 
 
@@ -115,7 +116,8 @@ class DailyEmailReportService:
         return DailyEmailSnapshot(
             int(cycle_id), report_date, str(cycle["completed_at"] or cycle["started_at"]),
             len(rows), sum(row["status"] == "ONLINE" for row in rows), len(offline),
-            unverifiable, sum(int(row["offline_observed_days"]) >= threshold for row in offline), offline,
+            unverifiable, sum(int(row["offline_observed_days"]) >= threshold for row in offline), threshold,
+            tuple(row for row in offline if int(row["offline_observed_days"]) >= threshold),
         )
 
     def _submit(self, delivery_id: int, recipient: str, snapshot: DailyEmailSnapshot) -> bool:
@@ -138,7 +140,8 @@ class DailyEmailReportService:
             with context, _com_initialized():
                 self.sender.send_html(
                     recipient,
-                    f"[OAS-K] Finger Monitoring - {snapshot.offline} Devices Offline",
+                    f"[OAS-K] Finger Monitoring - {snapshot.alert} Devices Offline >="
+                    f"{snapshot.alert_threshold} Days",
                     self.build_html(snapshot),
                 )
             self.repository.update_email_delivery(delivery_id, "SENT")
@@ -150,7 +153,7 @@ class DailyEmailReportService:
         summary = (
             f"<p>Check time: {html.escape(snapshot.checked_at)}</p>"
             f"<p>Total: {snapshot.total} | Online: {snapshot.online} | Offline: {snapshot.offline} | "
-            f"Unknown/Error: {snapshot.unverifiable} | Alert &ge;3 days: {snapshot.alert}</p>"
+            f"Unknown/Error: {snapshot.unverifiable} | Alert &ge;{snapshot.alert_threshold} days: {snapshot.alert}</p>"
         )
         if snapshot.offline_devices:
             rows = "".join(
@@ -158,8 +161,13 @@ class DailyEmailReportService:
                 for row in snapshot.offline_devices
             )
             detail = "<table border='1' cellpadding='4'><tr><th>Branch</th><th>IP</th><th>Observed Offline Days</th></tr>" + rows + "</table>"
+        elif not snapshot.offline:
+            detail = "<p><b>All Devices Online</b></p>"
         else:
-            detail = "<p><b>All Devices Online</b></p>" if not snapshot.unverifiable else ""
+            detail = (
+                "<p><b>No devices offline for "
+                f"{snapshot.alert_threshold} or more observed days.</b></p>"
+            )
         warning = "<p><b>Some devices could not be verified. Review UNKNOWN/ERROR/NETWORK_UNREACHABLE results.</b></p>" if snapshot.unverifiable else ""
         return "<html><body><h3>OAS-K Finger Monitoring</h3>" + summary + detail + warning + "</body></html>"
 

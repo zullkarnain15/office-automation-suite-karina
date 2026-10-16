@@ -672,8 +672,9 @@ def test_branch_run_creates_only_branch_job_folder(tmp_path: Path) -> None:
     assert not (output_root / "HO").exists()
 
 
+@pytest.mark.parametrize("subject_word", ["Attendance", "Attendace"])
 def test_same_sender_can_process_two_different_branch_configurations(
-    tmp_path: Path,
+    tmp_path: Path, subject_word: str,
 ) -> None:
     config_path = tmp_path / "config.xlsx"
     output_root = tmp_path / "output" / "Outlook-Revisi"
@@ -693,9 +694,9 @@ def test_same_sender_can_process_two_different_branch_configurations(
     workbook.close()
 
     messages: list[OutlookMessage] = []
-    for entry_id, branch_code, required_cc in (
-        ("branch-amu", "AMU", "branchcc@example.com"),
-        ("branch-bks", "BKS", "bkscc@example.com"),
+    for entry_id, branch_code in (
+        ("branch-amu", "AMU"),
+        ("branch-bks", "BKS"),
     ):
         attachment = tmp_path / f"{branch_code}.txt"
         attachment.write_text(
@@ -707,10 +708,10 @@ def test_same_sender_can_process_two_different_branch_configurations(
             OutlookMessage(
                 entry_id=entry_id,
                 store_id="store",
-                subject=f"[OTO-{branch_code}] Attendance 06-2026",
+                subject=f"[OTO-{branch_code}] {subject_word} 06-2026",
                 sender_name="Branch User",
                 sender_email="branch@example.com",
-                cc=required_cc,
+                cc="branchcc@example.com; bkscc@example.com",
                 received_time=None,
                 attachments=[OutlookAttachment(attachment.name, attachment)],
             )
@@ -723,9 +724,11 @@ def test_same_sender_can_process_two_different_branch_configurations(
         client=FakeClient(messages),
     ).run()
 
-    assert result.success_email == 2
-    assert result.failed_email == 0
-    assert result.valid_row_count == 2
+    valid_subject = subject_word == "Attendance"
+    assert result.success_email == (2 if valid_subject else 0)
+    assert result.failed_email == (0 if valid_subject else 2)
+    if valid_subject:
+        assert result.valid_row_count == 2
     assert [item.required_cc for item in result.message_results] == [
         "branchcc@example.com",
         "bkscc@example.com",
@@ -735,10 +738,113 @@ def test_same_sender_can_process_two_different_branch_configurations(
         "[OTO-BKS] Attendance 06-2026",
     ]
     assert all(
-        item.validation_subject == "PASS"
+        item.validation_subject == ("PASS" if valid_subject else "FAIL")
         and item.validation_cc == "PASS"
         for item in result.message_results
     )
+
+
+@pytest.mark.parametrize("registered_in_ho", [True, False])
+@pytest.mark.parametrize("workflow", ["HO", "Branch"])
+@pytest.mark.parametrize(
+    "subject,valid_subject",
+    [
+        ("[OTO-AMU] Attendance 10-2026", True),
+        ("[OTO-AMU] Attendance 09-2026", False),
+        ("[OTO-AMU] Attendace 10-2026", False),
+    ],
+)
+def test_branch_pic_in_both_masters_is_validated_in_branch_workflow(
+    tmp_path: Path, registered_in_ho: bool, workflow: str,
+    subject: str, valid_subject: bool,
+) -> None:
+    config_path = tmp_path / "config.xlsx"
+    _configuration(config_path, tmp_path / "output")
+    workbook = load_workbook(config_path)
+    for row in workbook["General"].iter_rows():
+        if row[0].value == "Payroll_Period":
+            row[1].value = "10-2026"
+    for row in workbook["Reply_Templates"].iter_rows():
+        if len(row) > 1 and row[1].value == "FAILED_GENERAL":
+            row[5].value = "Subject yang benar: {EXPECTED_SUBJECT}"
+    if registered_in_ho:
+        workbook["HO_Sender_Master"].append(
+            ["Y", "Branch User", "branch@example.com", "hocc@example.com"]
+        )
+    workbook.save(config_path)
+    workbook.close()
+
+    attachment = tmp_path / "branch.txt"
+    attachment.write_text(
+        "10/01/2026,123456789,10/01/2026,08:00,10/01/2026,17:00\n",
+        encoding="utf-8",
+    )
+    message = OutlookMessage(
+        entry_id="dual-role-pic", store_id="store",
+        subject=subject,
+        sender_name="Branch User", sender_email="branch@example.com",
+        cc="branchcc@example.com", received_time=None,
+        attachments=[OutlookAttachment(attachment.name, attachment)],
+    )
+    client = FakeClient([message])
+    result = OutlookRevisiEngine(
+        config_path, workflow, dry_run=False, client=client,
+    ).run()
+
+    if workflow == "HO":
+        assert result.skipped_other_workflow == 1
+        assert result.target_email == 0
+        assert result.message_results[0].detected_workflow == "Branch"
+        assert client.replies == []
+        return
+
+    assert result.skipped_other_workflow == 0
+    assert result.target_email == 1
+    item = result.message_results[0]
+    assert item.workflow == "Branch"
+    assert item.expected_subject == "[OTO-AMU] Attendance 10-2026"
+    assert item.required_cc == "branchcc@example.com"
+    assert item.validation_cc == "PASS"
+    if valid_subject:
+        assert result.success_email == 1
+        assert item.validation_subject == "PASS"
+    else:
+        assert result.failed_email == 1
+        assert item.failure_code == "SUBJECT_INVALID"
+        assert item.output_files == []
+        assert client.replies[0]["body"] == (
+            "Subject yang benar: [OTO-AMU] Attendance 10-2026"
+        )
+
+
+@pytest.mark.parametrize(
+    "subject,expected_workflow",
+    [
+        ("ATT_REV 06-2026", "HO"),
+        ("ATT_REV 05-2026", "HO"),
+        ("Re: [OTO-AMU] Attendace 06-2026", "HO"),
+        ("[OTO-AMU]suffix Attendace 06-2026", "HO"),
+        ("[OTO-AMU2] Attendace 06-2026", "HO"),
+        ("[OTHER-AMU] Attendace 06-2026", "HO"),
+        ("  [oto-amu] Attendace 06-2026", "Branch"),
+    ],
+)
+def test_dual_role_sender_branch_detection_requires_exact_configured_prefix(
+    tmp_path: Path, subject: str, expected_workflow: str,
+) -> None:
+    config_path = tmp_path / "config.xlsx"
+    _configuration(config_path, tmp_path / "output")
+    configuration = OutlookRevisiConfigurationReader(config_path).read()
+    configuration.branch_senders[0].sender_email = "ho@example.com"
+    message = OutlookMessage(
+        entry_id="dual-role", store_id="store", subject=subject,
+        sender_name="HO User", sender_email="ho@example.com",
+        cc="", received_time=None, attachments=[],
+    )
+
+    for workflow in ("HO", "Branch"):
+        engine = OutlookRevisiEngine(config_path, workflow, dry_run=True)
+        assert engine._detect_message_workflow(configuration, message) == expected_workflow
 
 
 def test_other_workflow_is_skipped_without_saving_attachment(

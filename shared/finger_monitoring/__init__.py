@@ -13,6 +13,12 @@ from shared.finger_monitoring.device_master_service import (
 )
 from shared.finger_monitoring.email_service import DailyEmailReportService
 from shared.finger_monitoring.maintenance_service import FingerMonitoringMaintenanceService
+from shared.finger_monitoring.mdb_backup_service import (
+    MDBBackupMonitoringService,
+    MDBBackupScanner,
+    MDBBackupSnapshot,
+    MDBRequirement,
+)
 from shared.finger_monitoring.schema import FINGER_MONITORING_SCHEMA_VERSION
 from shared.finger_monitoring.storage import (
     FingerMonitoringStorageService,
@@ -32,4 +38,8 @@ __all__ = [
     "DeviceMasterService",
     "DailyEmailReportService",
     "FingerMonitoringMaintenanceService",
+    "MDBBackupMonitoringService",
+    "MDBBackupScanner",
+    "MDBBackupSnapshot",
+    "MDBRequirement",
 ]

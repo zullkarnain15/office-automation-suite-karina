@@ -9,7 +9,7 @@ from pathlib import Path
 from shared.database.connection_factory import SQLiteConnectionFactory
 from shared.database.time_utils import current_timestamp
 
-FINGER_MONITORING_SCHEMA_VERSION = 4
+FINGER_MONITORING_SCHEMA_VERSION = 6
 
 REQUIRED_TABLES = frozenset(
     {
@@ -33,7 +33,7 @@ SCHEMA_STATEMENTS = (
         branch_name TEXT NOT NULL COLLATE NOCASE CHECK (trim(branch_name) <> ''),
         ip_address TEXT NOT NULL COLLATE NOCASE CHECK (trim(ip_address) <> ''),
         device_model TEXT NOT NULL DEFAULT 'X1500'
-            CHECK (device_model IN ('X1500', 'X1800')),
+            CHECK (trim(device_model) <> '' AND length(device_model) <= 100),
         is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
         note TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
@@ -49,6 +49,8 @@ SCHEMA_STATEMENTS = (
         ping_timeout_ms INTEGER NOT NULL DEFAULT 1500 CHECK (ping_timeout_ms BETWEEN 100 AND 60000),
         max_workers INTEGER NOT NULL DEFAULT 5 CHECK (max_workers BETWEEN 1 AND 5),
         offline_alert_observed_dates INTEGER NOT NULL DEFAULT 3 CHECK (offline_alert_observed_dates >= 1),
+        backup_mdb_root TEXT NOT NULL DEFAULT '',
+        backup_mdb_exclusions TEXT NOT NULL DEFAULT 'arsip*;archive*',
         updated_at TEXT NOT NULL
     )""",
     """CREATE TABLE check_cycle (
@@ -210,6 +212,86 @@ class FingerMonitoringSchemaManager:
                 connection.execute("PRAGMA user_version = 4")
                 connection.commit()
                 current = 4
+            if current == 4:
+                # SQLite cannot drop a CHECK constraint in place. Rebuild only
+                # device_master, preserving device IDs so monitoring history and
+                # active incidents retain their foreign-key links.
+                connection.execute("PRAGMA foreign_keys = OFF")
+                connection.execute("PRAGMA legacy_alter_table = ON")
+                try:
+                    connection.execute("BEGIN IMMEDIATE")
+                    connection.execute("ALTER TABLE device_master RENAME TO device_master_v4")
+                    connection.execute(
+                        """CREATE TABLE device_master (
+                            device_id INTEGER PRIMARY KEY,
+                            unit TEXT NOT NULL DEFAULT '',
+                            three_lc TEXT NOT NULL DEFAULT '',
+                            branch_name TEXT NOT NULL COLLATE NOCASE CHECK (trim(branch_name) <> ''),
+                            ip_address TEXT NOT NULL COLLATE NOCASE CHECK (trim(ip_address) <> ''),
+                            device_model TEXT NOT NULL DEFAULT 'X1500'
+                                CHECK (trim(device_model) <> '' AND length(device_model) <= 100),
+                            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+                            note TEXT NOT NULL DEFAULT '',
+                            created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
+                        )"""
+                    )
+                    connection.execute(
+                        """INSERT INTO device_master(
+                            device_id,unit,three_lc,branch_name,ip_address,device_model,
+                            is_active,note,created_at,updated_at,deleted_at
+                        ) SELECT device_id,unit,three_lc,branch_name,ip_address,device_model,
+                            is_active,note,created_at,updated_at,deleted_at
+                        FROM device_master_v4"""
+                    )
+                    connection.execute("DROP TABLE device_master_v4")
+                    connection.execute(
+                        "CREATE UNIQUE INDEX uq_device_master_active_ip ON device_master(ip_address) WHERE is_active = 1"
+                    )
+                    connection.execute(
+                        "CREATE INDEX idx_device_master_active_branch ON device_master(is_active, branch_name)"
+                    )
+                    violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+                    if violations:
+                        raise sqlite3.DatabaseError(
+                            "Finger Monitoring migration would violate foreign keys."
+                        )
+                    timestamp = current_timestamp()
+                    connection.execute(
+                        "UPDATE monitoring_metadata SET schema_version=?,last_migrated_at=? WHERE metadata_id=1",
+                        (5, timestamp),
+                    )
+                    connection.execute("PRAGMA user_version = 5")
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+                finally:
+                    connection.execute("PRAGMA legacy_alter_table = OFF")
+                    connection.execute("PRAGMA foreign_keys = ON")
+                current = 5
+            if current == 5:
+                connection.execute("BEGIN IMMEDIATE")
+                columns = {
+                    str(row[1])
+                    for row in connection.execute("PRAGMA table_info(monitoring_settings)")
+                }
+                additions = {
+                    "backup_mdb_root": "TEXT NOT NULL DEFAULT ''",
+                    "backup_mdb_exclusions": "TEXT NOT NULL DEFAULT 'arsip*;archive*'",
+                }
+                for name, definition in additions.items():
+                    if name not in columns:
+                        connection.execute(
+                            f"ALTER TABLE monitoring_settings ADD COLUMN {name} {definition}"
+                        )
+                timestamp = current_timestamp()
+                connection.execute(
+                    "UPDATE monitoring_metadata SET schema_version=?,last_migrated_at=? WHERE metadata_id=1",
+                    (6, timestamp),
+                )
+                connection.execute("PRAGMA user_version = 6")
+                connection.commit()
+                current = 6
             if current != FINGER_MONITORING_SCHEMA_VERSION:
                 raise sqlite3.DatabaseError("No Finger Monitoring migration path is registered.")
         self.validate(path)

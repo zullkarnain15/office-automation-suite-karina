@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from shared.database import SQLiteConnectionFactory
@@ -24,6 +24,7 @@ from ui.hris_models import (
     HRISJobState,
     HRISProgressEvent,
     HRISResolvedRequest,
+    HRISRunControlCooldown,
     HRISRunRequest,
     HRISRunResult,
 )
@@ -33,15 +34,17 @@ from ui.services.module_configuration_service import ModuleConfigurationService
 _TERMINAL = {"COMPLETED", "COMPLETED_WITH_WARNING", "FAILED", "CANCELLED"}
 HRIS_TXT_SOURCE_HO_KEY = "hris_txt_source_ho"
 HRIS_TXT_SOURCE_BRANCH_KEY = "hris_txt_source_branch"
+HRIS_RUN_CONTROL_COOLDOWN_PREFIX = "hris_run_control_cooldown:"
 
 
 class HRISService:
-    def __init__(self, storage_service, adapter) -> None:
+    def __init__(self, storage_service, adapter, *, now=None) -> None:
         self.storage_service = storage_service
         self.adapter = adapter
         self.factory = SQLiteConnectionFactory()
         self.module_configurations = ModuleConfigurationService(self.factory)
         self._gates: dict[str, HRISInteractionGate] = {}
+        self._now = now or (lambda: datetime.now().replace(microsecond=0))
 
     def load_active_configuration(self):
         defaults = self.load_defaults()
@@ -76,6 +79,7 @@ class HRISService:
             sources = ApplicationPreferencesRepository(connection).get_text_values(
                 (HRIS_TXT_SOURCE_HO_KEY, HRIS_TXT_SOURCE_BRANCH_KEY)
             )
+            cooldowns = self._read_run_control_cooldowns(connection, controls)
         ho = tuple(str(row["run_control_id"]) for row in controls if row["workflow"] == "HO")
         branch = tuple(
             str(row["run_control_id"])
@@ -108,7 +112,20 @@ class HRISService:
             Path(sources[HRIS_TXT_SOURCE_BRANCH_KEY])
             if sources.get(HRIS_TXT_SOURCE_BRANCH_KEY)
             else None,
+            cooldowns,
         )
+
+    def load_run_control_cooldowns(self) -> tuple[HRISRunControlCooldown, ...]:
+        storage = self.storage_service.resolve_status()
+        database = storage.database_path
+        if not storage.database_valid or database is None:
+            return ()
+        with self.factory.connect(database, read_only=True) as connection:
+            controls = connection.execute(
+                "SELECT workflow, run_control_id FROM hris_run_controls "
+                "WHERE is_active=1 ORDER BY workflow, sequence"
+            ).fetchall()
+            return self._read_run_control_cooldowns(connection, controls)
 
     def discover_txt(self, folder: Path) -> tuple[Path, ...]:
         if not folder.is_dir():
@@ -135,6 +152,14 @@ class HRISService:
         files = self.discover_txt(source)
         if not files:
             raise ValueError("Folder tidak memiliki file TXT.")
+        cooldown_minutes = int(request.run_control_cooldown_minutes)
+        if cooldown_minutes not in {15, 20}:
+            raise ValueError("Jeda Run Control ID harus 15 atau 20 menit.")
+        selected_run_controls = self._select_available_run_controls(
+            defaults.database_path,
+            workflow,
+            len(files),
+        )
         if request.use_global_period:
             start, end = defaults.global_period_start, defaults.global_period_end
             if not start or not end:
@@ -172,6 +197,8 @@ class HRISService:
             request.manual_login,
             username if not request.manual_login else None,
             password if not request.manual_login else None,
+            selected_run_controls,
+            cooldown_minutes,
         )
 
     def preflight(self, request: HRISRunRequest):
@@ -240,6 +267,11 @@ class HRISService:
         log,
         intervention,
     ) -> HRISRunResult:
+        self._reserve_run_controls(resolved)
+        progress(HRISProgressEvent(
+            HRISJobState.READY,
+            "Run Control ID dipilih dan hitung mundur dimulai.",
+        ))
         started = current_timestamp()
         gate = HRISInteractionGate()
         self._gates[resolved.job_id] = gate
@@ -331,6 +363,138 @@ class HRISService:
             )
             self._record_result_files(repository, job_pk, result)
         return result
+
+    def _select_available_run_controls(
+        self,
+        database: Path,
+        workflow: str,
+        required_count: int,
+    ) -> tuple[str, ...]:
+        now = self._now()
+        available: list[str] = []
+        locked: list[tuple[str, int]] = []
+        with self.factory.connect(database, read_only=True) as connection:
+            rows = connection.execute(
+                "SELECT workflow, run_control_id FROM hris_run_controls "
+                "WHERE is_active=1 AND workflow=? ORDER BY sequence",
+                (workflow,),
+            ).fetchall()
+            keys = tuple(
+                self._cooldown_key(workflow, str(row["run_control_id"]))
+                for row in rows
+            )
+            stored = ApplicationPreferencesRepository(connection).get_text_values(keys)
+        for row, key in zip(rows, keys):
+            run_control_id = str(row["run_control_id"])
+            deadline = self._parse_cooldown(stored.get(key))
+            if deadline is None or deadline <= now:
+                available.append(run_control_id)
+            else:
+                locked.append(
+                    (run_control_id, max(1, int((deadline - now).total_seconds())))
+                )
+        if len(available) < required_count:
+            waiting = ", ".join(
+                f"{control} ({self._format_countdown(seconds)})"
+                for control, seconds in locked
+            ) or "tidak ada"
+            raise ValueError(
+                "Run Control ID siap tidak cukup. "
+                f"TXT: {required_count}, tersedia: {len(available)}. "
+                f"Masih menunggu: {waiting}."
+            )
+        return tuple(available[:required_count])
+
+    def _reserve_run_controls(self, resolved: HRISResolvedRequest) -> None:
+        controls = tuple(resolved.selected_run_control_ids)
+        if not controls:
+            return
+        now = self._now()
+        deadline = now + timedelta(minutes=resolved.run_control_cooldown_minutes)
+        timestamp = current_timestamp()
+        with self.factory.connect(resolved.database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for run_control_id in controls:
+                active = connection.execute(
+                    "SELECT 1 FROM hris_run_controls "
+                    "WHERE workflow=? AND run_control_id=? AND is_active=1",
+                    (resolved.workflow, run_control_id),
+                ).fetchone()
+                if active is None:
+                    raise ValueError(
+                        f"Run Control ID {run_control_id} sudah tidak aktif."
+                    )
+                key = self._cooldown_key(resolved.workflow, run_control_id)
+                current = connection.execute(
+                    "SELECT preference_value FROM application_preferences "
+                    "WHERE preference_key=?",
+                    (key,),
+                ).fetchone()
+                current_deadline = self._parse_cooldown(
+                    str(current[0]) if current is not None else None
+                )
+                if current_deadline is not None and current_deadline > now:
+                    seconds = max(1, int((current_deadline - now).total_seconds()))
+                    raise ValueError(
+                        f"Run Control ID {run_control_id} masih terkunci "
+                        f"{self._format_countdown(seconds)}. Jalankan Periksa Data ulang."
+                    )
+            for run_control_id in controls:
+                connection.execute(
+                    """INSERT INTO application_preferences (
+                           preference_key, preference_value, value_type, updated_at
+                       ) VALUES (?, ?, 'TEXT', ?)
+                       ON CONFLICT(preference_key) DO UPDATE SET
+                           preference_value=excluded.preference_value,
+                           value_type='TEXT', updated_at=excluded.updated_at""",
+                    (
+                        self._cooldown_key(resolved.workflow, run_control_id),
+                        deadline.isoformat(),
+                        timestamp,
+                    ),
+                )
+
+    def _read_run_control_cooldowns(
+        self,
+        connection,
+        controls,
+    ) -> tuple[HRISRunControlCooldown, ...]:
+        now = self._now()
+        keys = tuple(
+            self._cooldown_key(str(row["workflow"]), str(row["run_control_id"]))
+            for row in controls
+        )
+        stored = ApplicationPreferencesRepository(connection).get_text_values(keys)
+        result = []
+        for row, key in zip(controls, keys):
+            deadline = self._parse_cooldown(stored.get(key))
+            if deadline is None or deadline <= now:
+                continue
+            result.append(HRISRunControlCooldown(
+                str(row["workflow"]),
+                str(row["run_control_id"]),
+                deadline.isoformat(),
+            ))
+        return tuple(result)
+
+    @staticmethod
+    def _cooldown_key(workflow: str, run_control_id: str) -> str:
+        return f"{HRIS_RUN_CONTROL_COOLDOWN_PREFIX}{workflow}:{run_control_id}"
+
+    @staticmethod
+    def _parse_cooldown(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=None)
+
+    @staticmethod
+    def _format_countdown(seconds: int) -> str:
+        minutes, remaining = divmod(max(0, seconds), 60)
+        return f"{minutes:02d}:{remaining:02d}"
 
     def confirm_login_complete(self, job_id: str) -> None:
         self._gate(job_id).confirm_login()

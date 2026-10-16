@@ -78,11 +78,35 @@ def test_daily_email_once_snapshot_html_and_no_selected(tmp_path):
     assert len(sender.messages) == 1
     recipient, subject, body = sender.messages[0]
     assert recipient == "ops@example.test"
-    assert subject == "[OAS-K] Finger Monitoring - 1 Devices Offline"
+    assert subject == "[OAS-K] Finger Monitoring - 1 Devices Offline >=3 Days"
     assert "<td>Alert</td>" in body and "<td>Unknown</td>" not in body and "could not be verified" in body
     assert "<th>Observed Offline Days</th>" in body
     selected = _cycle(repo, devices[:1], ("ONLINE",), source="CHECK_SELECTED")
     assert not service.consider_cycle(selected, "CHECK_SELECTED", "COMPLETED")
+    service.shutdown()
+
+
+def test_daily_email_lists_only_devices_offline_for_alert_threshold(tmp_path):
+    _status, repo = _environment(tmp_path)
+    devices = (
+        repo.create_device("Alert", "10.80.1.1"),
+        repo.create_device("Recent", "10.80.1.2"),
+    )
+    for day in ("2026-10-01", "2026-10-03"):
+        _cycle(repo, devices[:1], ("OFFLINE",), checked_at=f"{day}T08:00:00")
+    report_cycle = _cycle(repo, devices, ("OFFLINE", "OFFLINE"))
+    sender = _Sender()
+    service = DailyEmailReportService(
+        repo, sender=sender,
+        now=lambda: datetime(2026, 10, 12, 8, tzinfo=JAKARTA),
+    )
+
+    assert service.consider_cycle(report_cycle, "CHECK_ALL", "COMPLETED")
+    _wait_delivery(repo, "2026-10-12", "SENT")
+    _recipient, subject, body = sender.messages[0]
+    assert subject == "[OAS-K] Finger Monitoring - 1 Devices Offline >=3 Days"
+    assert "<td>Alert</td>" in body
+    assert "<td>Recent</td>" not in body
     service.shutdown()
 
 

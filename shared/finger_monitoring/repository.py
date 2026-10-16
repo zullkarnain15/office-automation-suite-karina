@@ -187,6 +187,7 @@ class FingerMonitoringRepository:
         allowed = {
             "recipient_email", "daily_report_start", "auto_check_interval_hours",
             "ping_timeout_ms", "max_workers", "offline_alert_observed_dates",
+            "backup_mdb_root", "backup_mdb_exclusions",
         }
         unknown = set(values) - allowed
         if unknown:
@@ -196,6 +197,9 @@ class FingerMonitoringRepository:
         values = dict(values)
         if "recipient_email" in values:
             values["recipient_email"] = str(values["recipient_email"]).strip()
+        for name in ("backup_mdb_root", "backup_mdb_exclusions"):
+            if name in values:
+                values[name] = str(values[name] or "").strip()
         if "daily_report_start" in values:
             value = str(values["daily_report_start"])
             if len(value) != 5 or value[2] != ":" or not value.replace(":", "").isdigit() or not (0 <= int(value[:2]) <= 23 and 0 <= int(value[3:]) <= 59):
@@ -402,7 +406,9 @@ class FingerMonitoringRepository:
 
     @staticmethod
     def _device_values(branch_name: str, ip_address: str, device_model: str) -> tuple[str, str, str]:
-        branch, address, model = branch_name.strip(), ip_address.strip(), device_model.strip().upper()
+        branch = branch_name.strip()
+        address = ip_address.strip()
+        model = (device_model or "X1500").strip().upper()
         if not branch:
             raise ValueError("Branch_Name wajib diisi.")
         try:
@@ -411,8 +417,8 @@ class FingerMonitoringRepository:
             raise ValueError("IP_Address tidak valid.") from exc
         if parsed.version != 4:
             raise ValueError("IP_Address saat ini harus IPv4.")
-        if model not in {"X1500", "X1800"}:
-            raise ValueError("Model perangkat harus X1500 atau X1800.")
+        if not model or len(model) > 100:
+            raise ValueError("Model perangkat wajib diisi dan maksimal 100 karakter.")
         return branch, str(parsed), model
 
     @staticmethod

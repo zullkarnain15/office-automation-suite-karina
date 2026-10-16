@@ -16,6 +16,7 @@ from shared.finger_monitoring import (
 from shared.finger_monitoring.activity import FingerMonitoringActivityGate
 from shared.finger_monitoring.email_service import DailyEmailReportService
 from shared.finger_monitoring.maintenance_service import FingerMonitoringMaintenanceService
+from shared.finger_monitoring.mdb_backup_service import MDBBackupMonitoringService
 
 
 class FingerMonitoringService:
@@ -29,6 +30,7 @@ class FingerMonitoringService:
         self._email_service = None
         self._activity_gate = FingerMonitoringActivityGate()
         self._initialization_lock = RLock()
+        self.backup_monitoring = MDBBackupMonitoringService(core_storage_service)
 
     def initialize(self):
         with self._initialization_lock:
@@ -104,6 +106,23 @@ class FingerMonitoringService:
 
     def save_settings(self, **values):
         return self.repository.update_settings(**values)
+
+    def backup_monitoring_settings(self):
+        settings = self.settings()
+        return {
+            "root": str(settings["backup_mdb_root"]),
+            "exclusions": str(settings["backup_mdb_exclusions"]),
+        }
+
+    def save_backup_monitoring_settings(self, root, exclusions):
+        settings = self.save_settings(
+            backup_mdb_root=str(root).strip(),
+            backup_mdb_exclusions=str(exclusions).strip(),
+        )
+        return {
+            "root": str(settings["backup_mdb_root"]),
+            "exclusions": str(settings["backup_mdb_exclusions"]),
+        }
 
     def latest_email_delivery(self):
         return self.repository.latest_email_delivery()

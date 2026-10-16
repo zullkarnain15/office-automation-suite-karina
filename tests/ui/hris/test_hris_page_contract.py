@@ -49,6 +49,9 @@ def test_page_uses_compact_layout_and_assisted_recovery_controls() -> None:
     assert "DateEntry(" in source
     assert "start_entry.get_iso()" in source
     assert "end_entry.get_iso()" in source
+    assert "Jeda Run Control" in source
+    assert 'values=("15", "20")' in source
+    assert "run_control_countdown_var" in source
 
 
 def test_opening_hris_page_has_zero_side_effects(tk_root, tmp_path) -> None:

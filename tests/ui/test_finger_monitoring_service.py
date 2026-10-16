@@ -70,6 +70,24 @@ def test_service_follows_changed_data_root_and_registry_has_page(tmp_path):
     assert "finger_monitoring" in build_default_page_registry().page_ids
 
 
+def test_backup_monitoring_settings_are_loaded_by_a_new_service_instance(tmp_path):
+    storage = _Storage(tmp_path)
+    service = FingerMonitoringService(storage)
+    service.initialize()
+    service.save_backup_monitoring_settings(
+        r"\\server\backup\MDB",
+        "arsip*;old_*",
+    )
+
+    reopened = FingerMonitoringService(_Storage(tmp_path))
+    reopened.initialize()
+
+    assert reopened.backup_monitoring_settings() == {
+        "root": r"\\server\backup\MDB",
+        "exclusions": "arsip*;old_*",
+    }
+
+
 def test_refresh_reuses_initialized_database_without_revalidating_it(tmp_path, monkeypatch):
     storage = _Storage(tmp_path)
     service = FingerMonitoringService(storage)

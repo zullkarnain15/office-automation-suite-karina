@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
+from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -50,6 +51,8 @@ class HRISPage(BasePage):
         self._run_icon = None
         self._open_folder_icon = None
         self._intervention_state = None
+        self._run_control_cooldowns = ()
+        self._run_control_countdown_job = None
         super().__init__(parent, context)
         self.configure(padding=(16, 10))
 
@@ -77,6 +80,10 @@ class HRISPage(BasePage):
         self.fallback_var = tk.BooleanVar(value=False)
         self.fallback_path_var = tk.StringVar()
         self.manual_ack_var = tk.BooleanVar(value=False)
+        self.run_control_cooldown_var = tk.StringVar(value="15")
+        self.run_control_countdown_var = tk.StringVar(
+            value="Run Control: belum diperiksa"
+        )
         self.username_var = tk.StringVar()
         self.password_var = tk.StringVar()
         self.intervention_file_var = tk.StringVar(value="-")
@@ -333,9 +340,31 @@ class HRISPage(BasePage):
             status,
             text="Upload, Run, dan OK dijalankan dari recorder profile",
             style="CompactStatus.TLabel",
-        ).pack(side="left")
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            status,
+            textvariable=self.run_control_countdown_var,
+            style="CompactText.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(3, 0))
         actions = ttk.Frame(row, style="CompactBody.TFrame")
         actions.grid(row=0, column=1, sticky="e")
+        ttk.Label(
+            actions,
+            text="Jeda Run Control",
+            style="CompactText.TLabel",
+        ).pack(side="left")
+        self.run_control_cooldown_combo = ttk.Combobox(
+            actions,
+            textvariable=self.run_control_cooldown_var,
+            values=("15", "20"),
+            state="readonly",
+            width=3,
+            style="Modern.TCombobox",
+        )
+        self.run_control_cooldown_combo.pack(side="left", padx=(5, 2))
+        ttk.Label(actions, text="menit", style="CompactText.TLabel").pack(
+            side="left", padx=(0, 8)
+        )
         self.manual_ack_check = OptionChip(
             actions, text="Automation klik dipahami", variable=self.manual_ack_var
         )
@@ -599,6 +628,8 @@ class HRISPage(BasePage):
                 "HO": value.ho_txt_source_folder,
                 "BRANCH": value.branch_txt_source_folder,
             }
+            self._run_control_cooldowns = value.run_control_cooldowns
+            self._render_run_control_countdown()
             self._apply_source_mode()
             self._apply_global_period_state()
             if value.warning:
@@ -665,6 +696,7 @@ class HRISPage(BasePage):
             False,
             self.username_var.get().strip() or None,
             self.password_var.get() or None,
+            run_control_cooldown_minutes=int(self.run_control_cooldown_var.get()),
         )
 
     def validate_only(self) -> None:
@@ -753,6 +785,8 @@ class HRISPage(BasePage):
                 f"Source: {resolved.source_folder}\n"
                 f"TXT: {validation.txt_count}\n"
                 f"Run Controls: {len(validation.mappings)}\n"
+                f"ID Terpilih: {', '.join(resolved.selected_run_control_ids)}\n"
+                f"Jeda Run Control: {resolved.run_control_cooldown_minutes} menit\n"
                 f"Profile: {resolved.recorder_profile}\n"
                 f"Output: {resolved.output_root}\n\n"
                 "Recorder profile akan menjalankan Upload, OK, Run, dan OK "
@@ -797,6 +831,7 @@ class HRISPage(BasePage):
             if result.success:
                 self._last_result = result.value
                 self._show_result(result.value)
+                self._refresh_run_control_cooldowns()
             else:
                 self.result_panel.grid()
                 self.result_summary.show_lines(
@@ -818,6 +853,8 @@ class HRISPage(BasePage):
             if event.total_files:
                 message += f" | File {event.completed_files} dari {event.total_files}"
             self.progress.start(message)
+            if event.state == HRISJobState.READY:
+                self._refresh_run_control_cooldowns()
         elif isinstance(event, HRISLogEvent):
             self._append_log(event)
         elif isinstance(event, HRISInterventionRequest):
@@ -1112,6 +1149,59 @@ class HRISPage(BasePage):
     def _source_type_changed(self, *_args) -> None:
         if self.use_configured_source_var.get():
             self.use_configured_source()
+        self._render_run_control_countdown()
+
+    def _refresh_run_control_cooldowns(self) -> None:
+        def done(result) -> None:
+            if self._disposed or not result.success:
+                return
+            self._run_control_cooldowns = result.value
+            self._render_run_control_countdown()
+
+        self.services.task_runner.submit(
+            self.services.hris_service.load_run_control_cooldowns,
+            on_done=done,
+        )
+
+    def _render_run_control_countdown(self) -> None:
+        if self._run_control_countdown_job is not None:
+            self.after_cancel(self._run_control_countdown_job)
+            self._run_control_countdown_job = None
+        workflow = self.workflow_var.get().upper()
+        now = datetime.now().replace(microsecond=0)
+        waiting = []
+        active = []
+        for item in self._run_control_cooldowns:
+            if item.workflow != workflow:
+                continue
+            try:
+                deadline = datetime.fromisoformat(item.available_at).replace(tzinfo=None)
+            except ValueError:
+                continue
+            seconds = max(0, int((deadline - now).total_seconds()))
+            if seconds <= 0:
+                continue
+            minutes, remaining = divmod(seconds, 60)
+            waiting.append(f"{item.run_control_id} {minutes:02d}:{remaining:02d}")
+            active.append(item)
+        self._run_control_cooldowns = tuple(
+            item
+            for item in self._run_control_cooldowns
+            if item.workflow != workflow or item in active
+        )
+        self.run_control_countdown_var.set(
+            f"Run Control {workflow} menunggu: {', '.join(waiting)}"
+            if waiting
+            else f"Run Control {workflow}: semua siap digunakan"
+        )
+        if waiting and not self._disposed:
+            self._run_control_countdown_job = self.after(
+                1000, self._run_control_countdown_tick
+            )
+
+    def _run_control_countdown_tick(self) -> None:
+        self._run_control_countdown_job = None
+        self._render_run_control_countdown()
 
     def _apply_source_mode(self) -> None:
         self._update_source_controls()
@@ -1184,6 +1274,9 @@ class HRISPage(BasePage):
         self.validate_button.configure(state="disabled" if busy else "normal")
         self.run_button.configure(state="disabled" if busy else "normal")
         self.calibrate_button.configure(state="disabled" if busy else "normal")
+        self.run_control_cooldown_combo.configure(
+            state="disabled" if busy else "readonly"
+        )
         if busy:
             self.progress.start(message)
         elif not self._running:
@@ -1251,6 +1344,9 @@ class HRISPage(BasePage):
 
     def dispose(self) -> None:
         self._disposed = True
+        if self._run_control_countdown_job is not None:
+            self.after_cancel(self._run_control_countdown_job)
+            self._run_control_countdown_job = None
         self.progress.stop()
         if self._cancellation:
             self._cancellation.request()

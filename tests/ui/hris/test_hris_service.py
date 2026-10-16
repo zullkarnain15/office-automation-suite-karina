@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -173,6 +174,60 @@ def test_defaults_preserve_leading_zero_and_sqlite_source(tmp_path: Path):
     assert defaults.ho_run_controls == ("001", "02")
     assert defaults.branch_run_controls == ("0007",)
     assert defaults.hris_url == "https://hris.test"
+
+
+def test_run_control_cooldown_selects_next_id_and_expires(tmp_path: Path):
+    database = make_database(tmp_path)
+    clock = [datetime(2026, 10, 16, 9, 0, 0)]
+    service = HRISService(
+        Storage(tmp_path, database),
+        Adapter(),
+        now=lambda: clock[0],
+    )
+    first = service.resolve_request(
+        make_request(tmp_path, run_control_cooldown_minutes=20)
+    )
+    assert first.selected_run_control_ids == ("001",)
+
+    service._reserve_run_controls(first)
+
+    reopened = HRISService(
+        Storage(tmp_path, database),
+        Adapter(),
+        now=lambda: clock[0],
+    )
+    assert [item.run_control_id for item in reopened.load_run_control_cooldowns()] == [
+        "001"
+    ]
+    second = service.resolve_request(make_request(tmp_path))
+    assert second.selected_run_control_ids == ("02",)
+    cooldowns = service.load_run_control_cooldowns()
+    assert [(item.workflow, item.run_control_id) for item in cooldowns] == [
+        ("HO", "001")
+    ]
+    with pytest.raises(ValueError, match="masih terkunci"):
+        service._reserve_run_controls(first)
+
+    clock[0] += timedelta(minutes=20, seconds=1)
+    available_again = service.resolve_request(make_request(tmp_path))
+    assert available_again.selected_run_control_ids == ("001",)
+
+
+def test_run_control_cooldown_blocks_when_available_ids_are_not_enough(tmp_path: Path):
+    database = make_database(tmp_path)
+    clock = [datetime(2026, 10, 16, 9, 0, 0)]
+    service = HRISService(
+        Storage(tmp_path, database),
+        Adapter(),
+        now=lambda: clock[0],
+    )
+    first = service.resolve_request(make_request(tmp_path))
+    service._reserve_run_controls(first)
+    second = service.resolve_request(make_request(tmp_path))
+    service._reserve_run_controls(second)
+
+    with pytest.raises(ValueError, match="Run Control ID siap tidak cukup"):
+        service.resolve_request(make_request(tmp_path))
 
 
 def test_defaults_load_distinct_local_ho_and_branch_txt_sources(tmp_path: Path):

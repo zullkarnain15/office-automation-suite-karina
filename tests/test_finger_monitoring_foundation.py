@@ -44,6 +44,8 @@ def test_initialize_creates_isolated_database_and_defaults(tmp_path):
     assert repository.status()["schema_version"] == FINGER_MONITORING_SCHEMA_VERSION
     assert repository.get_settings()["ping_timeout_ms"] == 1500
     assert repository.get_settings()["max_workers"] == 5
+    assert repository.get_settings()["backup_mdb_root"] == ""
+    assert repository.get_settings()["backup_mdb_exclusions"] == "arsip*;archive*"
     assert storage.resolve_status().database_valid
 
 
@@ -53,6 +55,55 @@ def test_initialize_is_idempotent_and_preserves_data(tmp_path):
     again = storage.initialize()
     assert again.database_valid
     assert [row["device_id"] for row in repository.list_devices()] == [device_id]
+
+
+def test_backup_mdb_settings_persist_when_repository_is_reopened(tmp_path):
+    _storage, status, repository = _initialized(tmp_path)
+    repository.update_settings(
+        backup_mdb_root=r"\\server\backup\MDB",
+        backup_mdb_exclusions="arsip*;archive*;old_*",
+    )
+
+    settings = FingerMonitoringRepository(status.database_path).get_settings()
+
+    assert settings["backup_mdb_root"] == r"\\server\backup\MDB"
+    assert settings["backup_mdb_exclusions"] == "arsip*;archive*;old_*"
+
+
+def test_v5_migration_adds_backup_mdb_settings_without_losing_existing_settings(tmp_path):
+    _storage, status, repository = _initialized(tmp_path)
+    repository.update_settings(recipient_email="ops@example.test")
+    with repository.factory.connect(status.database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("ALTER TABLE monitoring_settings RENAME TO monitoring_settings_v6")
+        connection.execute(
+            """CREATE TABLE monitoring_settings (
+                settings_id INTEGER PRIMARY KEY CHECK (settings_id = 1),
+                recipient_email TEXT NOT NULL DEFAULT '',
+                daily_report_start TEXT NOT NULL DEFAULT '07:00',
+                auto_check_interval_hours INTEGER NOT NULL DEFAULT 2,
+                ping_timeout_ms INTEGER NOT NULL DEFAULT 1500,
+                max_workers INTEGER NOT NULL DEFAULT 5,
+                offline_alert_observed_dates INTEGER NOT NULL DEFAULT 3,
+                updated_at TEXT NOT NULL
+            )"""
+        )
+        connection.execute(
+            """INSERT INTO monitoring_settings
+                SELECT settings_id,recipient_email,daily_report_start,
+                       auto_check_interval_hours,ping_timeout_ms,max_workers,
+                       offline_alert_observed_dates,updated_at
+                FROM monitoring_settings_v6"""
+        )
+        connection.execute("DROP TABLE monitoring_settings_v6")
+        connection.execute("UPDATE monitoring_metadata SET schema_version=5")
+        connection.execute("PRAGMA user_version=5")
+
+    assert repository.initialize() == FINGER_MONITORING_SCHEMA_VERSION
+    settings = repository.get_settings()
+    assert settings["recipient_email"] == "ops@example.test"
+    assert settings["backup_mdb_root"] == ""
+    assert settings["backup_mdb_exclusions"] == "arsip*;archive*"
 
 
 def test_schema_constraints_and_rollback(tmp_path):

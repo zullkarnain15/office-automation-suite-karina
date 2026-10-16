@@ -303,9 +303,9 @@ class DeviceMasterService:
                 raise ValueError
         except ValueError:
             return DeviceImportItem(row_number, "REJECTED", branch, address, model, True, unit, three_lc, note, reason="IP_Address harus IPv4 valid.")
-        model = (model or "X1500").upper()
-        if model not in {"X1500", "X1800"}:
-            return DeviceImportItem(row_number, "REJECTED", branch, str(parsed), model, True, unit, three_lc, note, reason="Device_Model harus X1500 atau X1800.")
+        model = (model or "X1500").strip().upper()
+        if not model or len(model) > 100:
+            return DeviceImportItem(row_number, "REJECTED", branch, str(parsed), model, True, unit, three_lc, note, reason="Device_Model wajib diisi dan maksimal 100 karakter.")
         active_value = ACTIVE_VALUES.get((active or "YES").upper())
         if active_value is None:
             return DeviceImportItem(row_number, "REJECTED", branch, str(parsed), model, True, unit, three_lc, note, reason="Active harus YES atau NO.")

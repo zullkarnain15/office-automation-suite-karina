@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -254,18 +255,47 @@ class HRISAdapter:
 
     @contextmanager
     def configuration_path(self, request: HRISResolvedRequest) -> Iterator[Path]:
-        if request.configuration_path is not None:
-            yield request.configuration_path
-            return
         with tempfile.TemporaryDirectory(prefix="oask-hris-config-") as temp:
             path = Path(temp) / "HRIS_Configuration.xlsx"
-            export_hris_legacy(
-                request.database_path,
+            if request.configuration_path is not None:
+                shutil.copy2(request.configuration_path, path)
+            else:
+                export_hris_legacy(
+                    request.database_path,
+                    path,
+                    overwrite=False,
+                    create_parent=False,
+                )
+            self._limit_run_controls(
                 path,
-                overwrite=False,
-                create_parent=False,
+                request.workflow,
+                request.selected_run_control_ids,
             )
             yield path
+
+    @staticmethod
+    def _limit_run_controls(
+        configuration_path: Path,
+        workflow: str,
+        selected_run_control_ids: tuple[str, ...],
+    ) -> None:
+        if not selected_run_control_ids:
+            return
+        from openpyxl import load_workbook
+
+        selected = {str(value) for value in selected_run_control_ids}
+        expected_workflow = "branch" if workflow.upper() == "BRANCH" else "ho"
+        workbook = load_workbook(configuration_path)
+        try:
+            sheet = workbook["Run_Control"]
+            for row in sheet.iter_rows(min_row=2):
+                row_workflow = str(row[2].value or "").strip().casefold()
+                run_control_id = str(row[3].value or "").strip()
+                if row_workflow == expected_workflow and run_control_id not in selected:
+                    row[0].value = "NO"
+            workbook.save(configuration_path)
+        finally:
+            workbook.close()
 
     @staticmethod
     def _set_legacy_click_profile_path(

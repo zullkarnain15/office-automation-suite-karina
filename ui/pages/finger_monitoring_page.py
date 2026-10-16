@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import ipaddress
+import queue
 import tkinter as tk
+from datetime import date
 from pathlib import Path
 from tkinter import ttk
 
@@ -16,7 +18,7 @@ from ui.widgets import DateEntry, PaginationBar, TreeviewCopyHelper
 class FingerMonitoringPage(BasePage):
     page_id = "finger_monitoring"
     title = "Finger Monitoring"
-    subtitle = "Monitoring perangkat Solution X1500/X1800."
+    subtitle = "Monitoring perangkat fingerprint berbasis IP."
     icon_name = "fp_monitoring.ico"
     show_page_heading = False
     history_page_size = 100
@@ -32,6 +34,10 @@ class FingerMonitoringPage(BasePage):
         self._tree_heading_labels = {}
         self._status_rows = ()
         self._master_rows = ()
+        self._backup_rows = ()
+        self._backup_snapshot = None
+        self._backup_progress_queue = queue.SimpleQueue()
+        self._backup_settings_requested = False
         self._history_sort_by = "checked_at"
         self._history_sort_descending = True
         self._cycle_total = 0
@@ -60,7 +66,8 @@ class FingerMonitoringPage(BasePage):
         self.status_tab = self._tab("DEVICE STATUS")
         self.master_tab = self._tab("DEVICE MASTER")
         self.history_tab = self._tab("HISTORY")
-        self._build_status(); self._build_master(); self._build_history()
+        self.backup_tab = self._tab("MONITORING BACKUP MDB")
+        self._build_status(); self._build_master(); self._build_history(); self._build_backup()
 
     def _tab(self, name):
         frame = ttk.Frame(self.notebook, style="FingerMonitoringSurface.TFrame", padding=10)
@@ -115,6 +122,9 @@ class FingerMonitoringPage(BasePage):
             "Template": "FingerMonitoringYellow.TButton",
             "Export": "FingerMonitoringMint.TButton",
             "Export Excel": "FingerMonitoringMint.TButton",
+            "Cek Backup": "FingerMonitoringPurple.TButton",
+            "Simpan Pengaturan": "FingerMonitoringMint.TButton",
+            "Kirim Email": "FingerMonitoringOrange.TButton",
             "Save": "FingerMonitoringMint.TButton",
         }
         style = "FingerMonitoringDanger.TButton" if danger else accents.get(text, "FingerMonitoring.TButton")
@@ -131,7 +141,7 @@ class FingerMonitoringPage(BasePage):
             kpis.columnconfigure(index, weight=1)
         filters = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); filters.grid(row=1, column=0, sticky="ew", pady=8)
         self.status_search = tk.StringVar(); self.status_filter = tk.StringVar(value="ALL"); self.status_model = tk.StringVar(value="ALL")
-        for label, widget in (("Search", ttk.Entry(filters, textvariable=self.status_search, width=23, style="FingerMonitoring.TEntry")), ("Status", ttk.Combobox(filters, textvariable=self.status_filter, values=("ALL", "ONLINE", "OFFLINE", "NETWORK_UNREACHABLE", "UNKNOWN", "ERROR"), state="readonly", width=21, style="FingerMonitoring.TCombobox")), ("Model", ttk.Combobox(filters, textvariable=self.status_model, values=("ALL", "X1500", "X1800"), state="readonly", width=10, style="FingerMonitoring.TCombobox"))):
+        for label, widget in (("Search", ttk.Entry(filters, textvariable=self.status_search, width=23, style="FingerMonitoring.TEntry")), ("Status", ttk.Combobox(filters, textvariable=self.status_filter, values=("ALL", "ONLINE", "OFFLINE", "NETWORK_UNREACHABLE", "UNKNOWN", "ERROR"), state="readonly", width=21, style="FingerMonitoring.TCombobox")), ("Model", ttk.Entry(filters, textvariable=self.status_model, width=16, style="FingerMonitoring.TEntry"))):
             ttk.Label(filters, text=label, style="FingerMonitoringBody.TLabel").pack(side="left", padx=(0, 4)); widget.pack(side="left", padx=(0, 10))
         self._button(filters, "Refresh", self.refresh_status).pack(side="left")
         actions = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); actions.grid(row=2, column=0, sticky="ew")
@@ -154,7 +164,7 @@ class FingerMonitoringPage(BasePage):
         tab = self.master_tab; tab.columnconfigure(0, weight=1); tab.rowconfigure(2, weight=1)
         filters = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); filters.grid(row=0, column=0, sticky="ew")
         self.master_search = tk.StringVar(); self.master_model = tk.StringVar(value="ALL"); self.master_active = tk.StringVar(value="Active")
-        for label, widget in (("Search", ttk.Entry(filters, textvariable=self.master_search, width=23, style="FingerMonitoring.TEntry")), ("Model", ttk.Combobox(filters, textvariable=self.master_model, values=("ALL", "X1500", "X1800"), state="readonly", width=10, style="FingerMonitoring.TCombobox")), ("Status", ttk.Combobox(filters, textvariable=self.master_active, values=("Active", "Inactive", "All"), state="readonly", width=10, style="FingerMonitoring.TCombobox"))):
+        for label, widget in (("Search", ttk.Entry(filters, textvariable=self.master_search, width=23, style="FingerMonitoring.TEntry")), ("Model", ttk.Entry(filters, textvariable=self.master_model, width=16, style="FingerMonitoring.TEntry")), ("Status", ttk.Combobox(filters, textvariable=self.master_active, values=("Active", "Inactive", "All"), state="readonly", width=10, style="FingerMonitoring.TCombobox"))):
             ttk.Label(filters, text=label, style="FingerMonitoringBody.TLabel").pack(side="left", padx=(0, 4)); widget.pack(side="left", padx=(0, 10))
         self._button(filters, "Refresh", self.refresh_master).pack(side="left")
         actions = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame"); actions.grid(row=1, column=0, sticky="ew", pady=7)
@@ -179,6 +189,56 @@ class FingerMonitoringPage(BasePage):
         self._configure_status_tags(self.history_tree)
         TreeviewCopyHelper(self.history_tree)
         self.pagination = PaginationBar(tab, self.history_previous, self.history_next); self.pagination.grid(row=2, column=0, sticky="e", pady=(7, 0))
+
+    def _build_backup(self):
+        tab = self.backup_tab
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(3, weight=1)
+        form = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame")
+        form.grid(row=0, column=0, sticky="ew")
+        form.columnconfigure(1, weight=1)
+        self.backup_root_var = tk.StringVar()
+        self.backup_reference_var = tk.StringVar()
+        self.backup_exclusions_var = tk.StringVar(value="arsip*;archive*")
+        ttk.Label(form, text="Folder Sharing", style="FingerMonitoringBody.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 5), pady=3)
+        ttk.Entry(form, textvariable=self.backup_root_var, style="FingerMonitoring.TEntry").grid(row=0, column=1, sticky="ew", pady=3)
+        self._button(form, "Pilih Folder", self.choose_backup_root).grid(row=0, column=2, padx=5, pady=3)
+        ttk.Label(form, text="Tanggal Acuan", style="FingerMonitoringBody.TLabel").grid(row=0, column=3, sticky="w", padx=(12, 5), pady=3)
+        self.backup_reference_entry = DateEntry(form, textvariable=self.backup_reference_var, width=11)
+        self.backup_reference_entry.grid(row=0, column=4, sticky="w", pady=3)
+        self.backup_reference_entry.set_iso(date.today().isoformat())
+
+        ttk.Label(form, text="Pengecualian Arsip", style="FingerMonitoringBody.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 5), pady=3)
+        ttk.Entry(form, textvariable=self.backup_exclusions_var, style="FingerMonitoring.TEntry").grid(row=1, column=1, sticky="ew", pady=3)
+        ttk.Label(form, text="Nama/pola dipisahkan titik koma, contoh: arsip;old_*", style="FingerMonitoringMuted.TLabel").grid(row=1, column=2, columnspan=3, sticky="w", padx=5, pady=3)
+        self.backup_settings_status_var = tk.StringVar(value="Pengaturan akan dimuat otomatis.")
+        ttk.Label(form, textvariable=self.backup_settings_status_var, style="FingerMonitoringMuted.TLabel").grid(row=2, column=1, columnspan=4, sticky="w", pady=(2, 0))
+
+        actions = ttk.Frame(tab, style="FingerMonitoringSurface.TFrame")
+        actions.grid(row=1, column=0, sticky="ew", pady=7)
+        self.backup_save_button = self._button(actions, "Simpan Pengaturan", self.save_backup_settings)
+        self.backup_save_button.pack(side="left", padx=(0, 5))
+        self.backup_check_button = self._button(actions, "Cek Backup", self.check_backup)
+        self.backup_check_button.pack(side="left")
+        self.backup_export_button = self._button(actions, "Export Excel", self.export_backup)
+        self.backup_export_button.pack(side="left", padx=5)
+        self.backup_export_button.configure(state="disabled")
+        self.backup_email_button = self._button(actions, "Kirim Email", self.send_backup_email)
+        self.backup_email_button.pack(side="left")
+        self.backup_email_button.configure(state="disabled")
+        self.backup_progress = ttk.Progressbar(actions, mode="determinate", maximum=100, length=180, style="FingerMonitoring.Horizontal.TProgressbar")
+        self.backup_progress.pack(side="left", padx=(14, 5))
+        self.backup_progress_var = tk.StringVar(value="Belum diperiksa")
+        ttk.Label(actions, textvariable=self.backup_progress_var, style="FingerMonitoringMuted.TLabel").pack(side="left")
+        ttk.Label(actions, text="Email memakai Recipient Email di Settings", style="FingerMonitoringMuted.TLabel").pack(side="right")
+        self.backup_summary_var = tk.StringVar(value="Hasil pemeriksaan akan tampil setelah Cek Backup.")
+        ttk.Label(tab, textvariable=self.backup_summary_var, style="FingerMonitoringBody.TLabel").grid(row=2, column=0, sticky="w", pady=(0, 7))
+        columns = ("unit", "branch", "file", "modified", "size", "status", "detail")
+        specs = (("unit", "Unit", 90), ("branch", "Cabang", 105), ("file", "File", 220), ("modified", "Modified", 155), ("size", "Ukuran", 100), ("status", "Status", 160), ("detail", "Keterangan", 360))
+        self.backup_tree = self._tree(tab, columns, specs, row=3)
+        for status, color in (("Memenuhi", palette.teal_pressed), ("Kedaluwarsa", "#9A6700"), ("File wajib hilang", "#B3261E"), ("Gagal diakses", "#B3261E")):
+            self.backup_tree.tag_configure(status, foreground=color)
+        TreeviewCopyHelper(self.backup_tree)
 
     def _tree(self, parent, columns, specs, *, row):
         body = ttk.Frame(parent, style="FingerMonitoringCard.TFrame", padding=5); body.grid(row=row, column=0, sticky="nsew"); parent.rowconfigure(row, weight=1); body.columnconfigure(0, weight=1); body.rowconfigure(0, weight=1)
@@ -208,7 +268,7 @@ class FingerMonitoringPage(BasePage):
         return tree
 
     def on_show(self):
-        self.refresh_all(); self._poll_events(); self._start_online_blink()
+        self._load_backup_settings(); self.refresh_all(); self._poll_events(); self._start_online_blink()
 
     def on_hide(self):
         if self._event_job: self.after_cancel(self._event_job); self._event_job = None
@@ -220,6 +280,49 @@ class FingerMonitoringPage(BasePage):
 
     def refresh_all(self):
         self.refresh_status(); self.refresh_master(); self.refresh_history()
+
+    def _load_backup_settings(self):
+        if self._backup_settings_requested:
+            return
+        self._backup_settings_requested = True
+        self.backup_settings_status_var.set("Memuat pengaturan Backup MDB...")
+
+        def done(settings):
+            self.backup_root_var.set(settings["root"])
+            self.backup_exclusions_var.set(settings["exclusions"])
+            self.backup_settings_status_var.set("Pengaturan Backup MDB sudah dimuat.")
+
+        self._background(
+            self.service.backup_monitoring_settings,
+            done,
+            refresh_key="backup_settings",
+        )
+
+    def save_backup_settings(self):
+        root = self.backup_root_var.get().strip()
+        exclusions_text = self.backup_exclusions_var.get().strip()
+        self.service.backup_monitoring.parse_archive_exclusions(exclusions_text)
+
+        self.backup_save_button.configure(state="disabled")
+        self.backup_settings_status_var.set("Menyimpan pengaturan Backup MDB...")
+
+        def complete(result):
+            self.backup_save_button.configure(state="normal")
+            if result.success:
+                self.backup_settings_status_var.set("Pengaturan Backup MDB tersimpan.")
+                return
+            self.backup_settings_status_var.set("Pengaturan Backup MDB gagal disimpan.")
+            self.services.dialog_service.error(
+                "Monitoring Backup MDB",
+                result.error or "Pengaturan gagal disimpan.",
+            )
+
+        self.services.task_runner.submit(
+            lambda: self.service.save_backup_monitoring_settings(
+                root, exclusions_text
+            ),
+            on_done=complete,
+        )
 
     def _background(self, work, done, *, refresh_key=None):
         if refresh_key is not None:
@@ -326,6 +429,170 @@ class FingerMonitoringPage(BasePage):
             refresh_key="history",
         )
 
+    def choose_backup_root(self):
+        path = self.services.dialog_service.select_folder(
+            title="Pilih Folder Sharing Utama Backup MDB"
+        )
+        if path:
+            self.backup_root_var.set(str(path))
+
+    def check_backup(self):
+        try:
+            root_text = self.backup_root_var.get().strip()
+            if not root_text:
+                raise ValueError("Pilih folder sharing utama terlebih dahulu.")
+            root = Path(root_text)
+            reference_text = self.backup_reference_entry.get_iso()
+            if reference_text is None:
+                raise ValueError("Tanggal acuan wajib diisi.")
+            reference_date = date.fromisoformat(reference_text)
+            exclusions_text = self.backup_exclusions_var.get().strip()
+            exclusions = self.service.backup_monitoring.parse_archive_exclusions(
+                exclusions_text
+            )
+        except (TypeError, ValueError) as exc:
+            self.services.dialog_service.warning("Monitoring Backup MDB", str(exc))
+            return
+
+        self._backup_snapshot = None
+        self._backup_rows = ()
+        self._render_backup_rows()
+        self.backup_check_button.configure(state="disabled")
+        self.backup_export_button.configure(state="disabled")
+        self.backup_email_button.configure(state="disabled")
+        self.backup_progress["value"] = 0
+        self.backup_progress_var.set("Memulai pemeriksaan...")
+        self.backup_summary_var.set("Memindai file MDB dari folder sharing...")
+        self._backup_progress_queue = queue.SimpleQueue()
+
+        def progress(current, total, message):
+            self._backup_progress_queue.put((current, total, message))
+
+        def work():
+            self.service.save_backup_monitoring_settings(
+                root_text,
+                exclusions_text,
+            )
+            return self.service.backup_monitoring.scan(
+                root,
+                reference_date,
+                archive_exclusions=exclusions,
+                progress_callback=progress,
+            )
+
+        def complete(result):
+            self.backup_check_button.configure(state="normal")
+            if not result.success:
+                self.backup_progress_var.set("Pemeriksaan gagal")
+                self.backup_summary_var.set(result.error or "Pemeriksaan gagal.")
+                self.services.dialog_service.error(
+                    "Monitoring Backup MDB", result.error or "Pemeriksaan gagal."
+                )
+                return
+            self.backup_settings_status_var.set("Pengaturan Backup MDB tersimpan.")
+            snapshot = result.value
+            self._backup_snapshot = snapshot
+            self._backup_rows = tuple({
+                "unit": row.unit,
+                "branch": row.branch,
+                "file_name": row.file_name,
+                "modified_at": row.modified_at.isoformat(sep=" ") if row.modified_at else "",
+                "size_bytes": row.size_bytes,
+                "status": row.status,
+                "detail": row.detail,
+            } for row in snapshot.files)
+            self._render_backup_rows()
+            problems = len(snapshot.problem_files)
+            self.backup_progress["value"] = 100
+            self.backup_progress_var.set("100% - selesai")
+            self.backup_summary_var.set(
+                f"{len(snapshot.files)} hasil | {len(snapshot.branches)} cabang | "
+                f"{problems} bermasalah | Batas H-3: {snapshot.cutoff_date.isoformat()}"
+            )
+            self.backup_export_button.configure(state="normal")
+            self.backup_email_button.configure(
+                state="normal" if problems else "disabled"
+            )
+
+        self.services.task_runner.submit(work, on_done=complete)
+
+    def _drain_backup_progress(self):
+        latest = None
+        while True:
+            try:
+                latest = self._backup_progress_queue.get_nowait()
+            except queue.Empty:
+                break
+        if latest is None:
+            return
+        current, total, message = latest
+        percent = min(100, round(current * 100 / total)) if total else 0
+        self.backup_progress["value"] = percent
+        self.backup_progress_var.set(
+            f"{percent}% ({current}/{total}) - {message}" if total else message
+        )
+
+    def _render_backup_rows(self):
+        rows = self._sorted_rows(
+            self.backup_tree,
+            self._backup_rows,
+            {
+                "unit": "unit", "branch": "branch", "file": "file_name",
+                "modified": "modified_at", "size": "size_bytes",
+                "status": "status", "detail": "detail",
+            },
+        )
+        self._fill(
+            self.backup_tree,
+            rows,
+            lambda row: (
+                row["unit"], row["branch"], row["file_name"],
+                row["modified_at"] or "—",
+                f"{row['size_bytes']:,}" if row["size_bytes"] is not None else "—",
+                row["status"], row["detail"],
+            ),
+        )
+
+    def export_backup(self):
+        if self._backup_snapshot is None:
+            return
+        path = self.services.dialog_service.save_file(
+            title="Export Monitoring Backup MDB",
+            default_name=(
+                f"Monitoring_Backup_MDB_{self._backup_snapshot.reference_date.isoformat()}.xlsx"
+            ),
+            filetypes=(("Excel", "*.xlsx"),),
+        )
+        if path:
+            snapshot = self._backup_snapshot
+            self._background(
+                lambda: self.service.backup_monitoring.export(snapshot, path),
+                lambda value: self.services.dialog_service.info(
+                    "Monitoring Backup MDB", f"Export selesai:\n{value}"
+                ),
+            )
+
+    def send_backup_email(self):
+        snapshot = self._backup_snapshot
+        if snapshot is None or not snapshot.problem_files:
+            self.services.dialog_service.info(
+                "Monitoring Backup MDB", "Tidak ada file bermasalah untuk dikirim."
+            )
+            return
+        if not self.services.dialog_service.confirm(
+            "Kirim Email Monitoring Backup MDB",
+            f"Kirim {len(snapshot.problem_files)} file bermasalah melalui Outlook Classic?",
+        ):
+            return
+        recipient = str(self.service.settings()["recipient_email"])
+        self._background(
+            lambda: self.service.backup_monitoring.send_email(snapshot, recipient),
+            lambda sent: self.services.dialog_service.info(
+                "Monitoring Backup MDB",
+                "Email berhasil dikirim." if sent else "Tidak ada masalah untuk dikirim.",
+            ),
+        )
+
     def _render_history(self, value):
         self._fill(self.history_tree, value["items"], lambda r: (r["checked_at"], r["unit"], r["three_lc"], r["branch_name"], r["ip_address"], r["device_model"], self._status_display(r["status"]), r["latency_ms"] if r["latency_ms"] is not None else "—", r["diagnostic"] or ""), ids=True)
         self.pagination.update_state(offset=self.history_offset, limit=self.history_page_size, total=value["total"])
@@ -393,6 +660,8 @@ class FingerMonitoringPage(BasePage):
         self._set_sort_heading(tree, column, descending)
         if tree is self.status_tree:
             self._render_status_rows()
+        elif tree is self.backup_tree:
+            self._render_backup_rows()
         else:
             self._render_master_rows()
 
@@ -413,7 +682,7 @@ class FingerMonitoringPage(BasePage):
             value = row[key]
             if key == "ip_address":
                 return ipaddress.ip_address(value)
-            if key in {"offline_days", "latency_ms", "is_active"}:
+            if key in {"offline_days", "latency_ms", "is_active", "size_bytes"}:
                 return int(value)
             return str(value).casefold()
 
@@ -506,6 +775,7 @@ class FingerMonitoringPage(BasePage):
     def history_previous(self): self.history_offset=max(0,self.history_offset-self.history_page_size); self.refresh_history()
     def history_next(self): self.history_offset+=self.history_page_size; self.refresh_history()
     def _poll_events(self):
+        self._drain_backup_progress()
         events = self.service.drain_events()
         if events:
             latest = events[-1]; self.progress_var.set(latest.name.replace("_", " "))

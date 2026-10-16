@@ -32,6 +32,20 @@ UI5 exposes only real runtime controls: safe preview/dry-run and an optional mes
 
 The engine constructor gained optional `progress_callback` and `cancellation_requested` hooks. Existing callers remain valid. `OutlookProcessResult` gained a backward-compatible `cancelled=False` field.
 
+### Senders registered in both workflows
+
+Exact configured subject matches determine the workflow first. If the subject
+is invalid, a configured leading branch identifier such as `[OTO-AMU]` still
+routes the email to Branch before falling back to sender registration. This
+prevents a PIC listed in both masters from being skipped as HO solely because
+the branch subject has a typo or the wrong period. The same identifier selects
+the branch row when a PIC handles multiple branches, keeping required CC and
+the suggested subject consistent. The identifier is derived from the leading
+token of a Branch subject rule containing `{BRANCH_CODE}`; it is not hardcoded.
+Full subject validation remains mandatory: `[OTO-AMU] Attendace 10-2026`
+receives a subject validation failure and the configured Branch suggestion,
+while `[OTO-AMU] Attendance 10-2026` passes when the payroll period is `10-2026`.
+
 ## Configuration and per-run overrides
 
 The legacy `OutlookRevisiConfigurationReader` remains authoritative. Validation requires an `.xlsx` workbook and the reader's General, sender master, subject rule, attachment rule, validation rule, and reply-template inputs. Template newlines are preserved and unknown placeholders become warnings.

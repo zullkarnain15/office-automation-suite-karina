@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from openpyxl import Workbook
+
 from hris.uploader import HRISUploadPageHandler
 from ui.adapters.hris_adapter import HRISAdapter
 from ui.hris_models import (
@@ -74,6 +76,30 @@ def test_validation_path_does_not_construct_engine() -> None:
 
     HRISAdapter(engine_class=Engine)
     assert constructed == []
+
+
+def test_configuration_limits_hris_run_controls_to_selected_ids(tmp_path: Path) -> None:
+    configuration = tmp_path / "hris.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Run_Control"
+    sheet.append(("Active", "Sequence", "Workflow", "Run_Control_ID", "Description"))
+    sheet.append(("YES", 1, "HO", "001", "first"))
+    sheet.append(("YES", 2, "HO", "02", "second"))
+    sheet.append(("YES", 1, "Branch", "0007", "branch"))
+    workbook.save(configuration)
+    workbook.close()
+
+    HRISAdapter._limit_run_controls(configuration, "HO", ("02",))
+
+    from openpyxl import load_workbook
+
+    filtered = load_workbook(configuration, data_only=True)
+    try:
+        rows = list(filtered["Run_Control"].iter_rows(min_row=2, values_only=True))
+    finally:
+        filtered.close()
+    assert [row[0] for row in rows] == ["NO", "YES", "YES"]
 
 
 def test_invalid_profile_json_and_workflow_mismatch_are_read_only(tmp_path: Path) -> None:

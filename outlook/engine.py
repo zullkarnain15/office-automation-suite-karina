@@ -818,6 +818,15 @@ class OutlookRevisiEngine:
             ]
             if subject_matches:
                 candidates = subject_matches
+            elif workflow == "Branch":
+                branch_matches = [
+                    sender for sender in candidates
+                    if self._branch_subject_prefix_matches(
+                        configuration, subject, sender,
+                    )
+                ]
+                if branch_matches:
+                    candidates = branch_matches
 
         if len(candidates) > 1 and actual_cc:
             cc_matches = [
@@ -850,6 +859,17 @@ class OutlookRevisiEngine:
             ):
                 return workflow
 
+        # A malformed branch subject still identifies its branch. Do this
+        # before the sender-only fallback, which otherwise chooses HO first
+        # for a PIC registered in both masters. Full validation remains strict.
+        if any(
+            self._branch_subject_prefix_matches(
+                configuration, message.subject, sender,
+            )
+            for sender in configuration.branch_senders
+        ):
+            return "Branch"
+
         for workflow in ("HO", "Branch"):
             if self._match_sender(
                 configuration,
@@ -861,6 +881,31 @@ class OutlookRevisiEngine:
                 return workflow
 
         return ""
+
+    def _branch_subject_prefix_matches(
+        self,
+        configuration: OutlookRevisiConfiguration,
+        subject: str,
+        sender: OutlookSenderConfig,
+    ) -> bool:
+        """Recognize a configured branch identifier without accepting the subject."""
+        if not sender.branch_code:
+            return False
+        for rule in configuration.subject_rules:
+            if rule.workflow != "Branch" or not rule.subject_pattern.strip():
+                continue
+            prefix = rule.subject_pattern.strip().split(maxsplit=1)[0]
+            if "{BRANCH_CODE}" not in prefix or "{PERIOD}" in prefix:
+                continue
+            prefix = self._render_template(prefix, {
+                "COMPANY": sender.company,
+                "BRANCH_CODE": sender.branch_code,
+            })
+            if "{" in prefix or "}" in prefix:
+                continue
+            if re.search(rf"^\s*{re.escape(prefix)}(?=\s|$)", subject, re.IGNORECASE):
+                return True
+        return False
 
     def _missing_required_cc(
         self,

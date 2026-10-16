@@ -61,6 +61,55 @@ def test_crud_soft_delete_reactivate_search_and_global_ip(tmp_path):
     assert repository.list_devices()[0]["device_id"] == first
 
 
+def test_device_master_accepts_other_device_models(tmp_path):
+    _repository, service = _service(tmp_path)
+
+    device_id = service.add_device(
+        "Jakarta", "10.10.0.3", device_model="SOLUTION UTIME 5000",
+    )
+
+    assert service.search()[0]["device_id"] == device_id
+    assert service.search()[0]["device_model"] == "SOLUTION UTIME 5000"
+
+
+def test_import_accepts_other_device_models(tmp_path):
+    _repository, service = _service(tmp_path)
+    source = tmp_path / "other-model.xlsx"
+    _workbook(source, [("Other", "10.10.0.6", "Solution UTime 5000", "YES")])
+
+    preview = service.preview_import(source)
+
+    assert preview.can_commit
+    assert preview.items[0].device_model == "SOLUTION UTIME 5000"
+    service.commit_import(preview)
+    assert service.search()[0]["device_model"] == "SOLUTION UTIME 5000"
+
+
+def test_v4_to_v5_migration_preserves_monitoring_history_and_allows_new_model(tmp_path):
+    repository, service = _service(tmp_path)
+    device = service.add_device("History", "10.10.0.4", device_model="X1500")
+    cycle = repository.create_cycle("CHECK_ALL", 1)
+    repository.persist_check_outcome(cycle, device, "OFFLINE", observed_date="2026-10-12")
+    with repository.factory.connect(repository.database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("UPDATE monitoring_metadata SET schema_version=4")
+        connection.execute("PRAGMA user_version=4")
+
+    assert repository.initialize() == 6
+    assert repository.list_devices()[0]["device_id"] == device
+    with repository.factory.connect(repository.database_path, read_only=True) as connection:
+        assert connection.execute(
+            "SELECT device_id FROM check_result WHERE cycle_id=?", (cycle,)
+        ).fetchone()[0] == device
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        table_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='device_master'"
+        ).fetchone()[0]
+        assert "IN ('X1500', 'X1800')" not in table_sql
+    new_device = service.add_device("Other", "10.10.0.5", device_model="X9900")
+    assert new_device > device
+
+
 @pytest.mark.parametrize("count", (10, 200, 1000))
 def test_preview_and_commit_large_imports(tmp_path, count):
     repository, service = _service(tmp_path)
@@ -178,7 +227,7 @@ def test_v1_to_v2_migration_enforces_global_active_ip(tmp_path):
         connection.execute("CREATE UNIQUE INDEX uq_device_master_active_branch_ip ON device_master(branch_name, ip_address) WHERE is_active=1")
         connection.execute("UPDATE monitoring_metadata SET schema_version=1")
         connection.execute("PRAGMA user_version=1")
-    assert repository.initialize() == 4
+    assert repository.initialize() == 6
     first = repository.create_device("A", "10.60.0.1")
     assert first > 0
     with pytest.raises(Exception):
