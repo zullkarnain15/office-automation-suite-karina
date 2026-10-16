@@ -654,6 +654,13 @@ class OutlookRevisiPage(BasePage):
         self.services.task_runner.submit(work, on_done=done)
 
     def _start_run(self, resolved) -> None:
+        if not self._begin_module_job(
+            "OUTLOOK_REVISI",
+            "Outlook Revisi",
+            resources=("OUTLOOK_CLASSIC",),
+            write_paths=(resolved.output_root,),
+        ):
+            return
         self._resolved = resolved
         self._cancellation = OutlookRevisiCancellationToken()
         self._running = True
@@ -675,6 +682,7 @@ class OutlookRevisiPage(BasePage):
             )
 
         def done(task_result) -> None:
+            self._finish_module_job()
             if self.context.mascot_work_finished:
                 self.context.mascot_work_finished(
                     classify_mascot_outcome(task_result)
@@ -699,12 +707,17 @@ class OutlookRevisiPage(BasePage):
                 )
                 self._set_validation_status("Gagal", "StatusError.TLabel")
 
-        self.services.task_runner.submit_reporting(
-            work,
-            on_done=done,
-            on_progress=self._stream_event,
-            cancellable=False,
-        )
+        try:
+            self.services.task_runner.submit_reporting(
+                work,
+                on_done=done,
+                on_progress=self._stream_event,
+                cancellable=False,
+            )
+        except Exception:
+            self._running = False
+            self._finish_module_job()
+            raise
 
     def _stream_event(self, event) -> None:
         if self._disposed:
@@ -910,6 +923,9 @@ class OutlookRevisiPage(BasePage):
             self.context.navigate("settings")
 
     def can_navigate_away(self) -> bool:
+        return True
+
+    def can_close(self) -> bool:
         return not self._running
 
     def dispose(self) -> None:

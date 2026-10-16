@@ -57,6 +57,14 @@ def test_workspace_contract_includes_validation_cancel_recovery_and_advanced() -
     assert "CompactPanel.TFrame" in source
 
 
+def test_navigation_stays_available_but_close_is_blocked_while_running() -> None:
+    page = object.__new__(UtilitiesPage)
+    page._running = False
+    assert page.can_navigate_away() and page.can_close()
+    page._running = True
+    assert page.can_navigate_away() and not page.can_close()
+
+
 def test_utilities_validation_status_uses_visual_state_styles(
     tk_root, tmp_path
 ) -> None:

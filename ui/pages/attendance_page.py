@@ -682,6 +682,18 @@ class AttendancePage(BasePage):
         self.services.task_runner.submit(work, on_done=done)
 
     def _start_run(self, resolved) -> None:
+        source_paths = tuple(
+            source.mdb_path
+            for source in getattr(self._validation_result, "sources", ())
+            if source.active
+        )
+        if not self._begin_module_job(
+            "ATTENDANCE",
+            "Attendance",
+            read_paths=source_paths,
+            write_paths=(resolved.output_root / "Attendance",),
+        ):
+            return
         self._resolved = resolved
         self._cancellation = AttendanceCancellationToken()
         self._running = True
@@ -704,6 +716,7 @@ class AttendancePage(BasePage):
             )
 
         def done(task_result) -> None:
+            self._finish_module_job()
             if self.context.mascot_work_finished:
                 self.context.mascot_work_finished(
                     classify_mascot_outcome(task_result)
@@ -728,9 +741,14 @@ class AttendancePage(BasePage):
                     )
                 )
 
-        self.services.task_runner.submit_reporting(
-            work, on_done=done, on_progress=self._stream_event, cancellable=False
-        )
+        try:
+            self.services.task_runner.submit_reporting(
+                work, on_done=done, on_progress=self._stream_event, cancellable=False
+            )
+        except Exception:
+            self._running = False
+            self._finish_module_job()
+            raise
 
     def _stream_event(self, event) -> None:
         if self._disposed:
@@ -974,6 +992,9 @@ class AttendancePage(BasePage):
             self.context.navigate("settings")
 
     def can_navigate_away(self) -> bool:
+        return True
+
+    def can_close(self) -> bool:
         return not self._running
 
     def dispose(self) -> None:

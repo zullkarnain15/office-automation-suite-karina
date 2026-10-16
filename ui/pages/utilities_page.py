@@ -679,6 +679,28 @@ class UtilitiesPage(BasePage):
             self._start_run()
 
     def _start_run(self) -> None:
+        read_paths = tuple(
+            value
+            for name in (
+                "attendance_source",
+                "outlook_source",
+                "source_folder",
+                "source_report",
+                "source_report_folder",
+            )
+            if (value := getattr(self._resolved, name, None)) is not None
+        )
+        if not self._begin_module_job(
+            "UTILITIES",
+            f"Utilities: {FEATURE_TITLES[self._feature]}",
+            read_paths=read_paths,
+            write_paths=(
+                self._resolved.output_root
+                / "Utilities"
+                / FEATURE_TITLES[self._feature].replace(" ", "_"),
+            ),
+        ):
+            return
         self._cancellation = (
             ComparisonCancellationToken()
             if self._feature == UtilitiesFeature.COMPARISON_RESULT
@@ -703,14 +725,20 @@ class UtilitiesPage(BasePage):
                 log=report,
             )
 
-        self.services.task_runner.submit_reporting(
-            work,
-            on_done=self._run_done,
-            on_progress=self._stream_event,
-            cancellable=False,
-        )
+        try:
+            self.services.task_runner.submit_reporting(
+                work,
+                on_done=self._run_done,
+                on_progress=self._stream_event,
+                cancellable=False,
+            )
+        except Exception:
+            self._running = False
+            self._finish_module_job()
+            raise
 
     def _run_done(self, task) -> None:
+        self._finish_module_job()
         if self.context.mascot_work_finished:
             self.context.mascot_work_finished(
                 classify_mascot_outcome(
@@ -1032,6 +1060,9 @@ class UtilitiesPage(BasePage):
             self.context.navigate("settings")
 
     def can_navigate_away(self) -> bool:
+        return True
+
+    def can_close(self) -> bool:
         return not self._running
 
     def dispose(self) -> None:

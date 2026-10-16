@@ -10,6 +10,7 @@ from ui.dialogs.typed_confirmation_dialog import typed_value_matches
 from ui.pages.settings_page import SettingsPage
 from ui.pages.settings.general_section import GeneralSection
 from ui.pages.settings.storage_section import StorageSection
+from ui.services.module_job_coordinator import ModuleJobCoordinator
 
 
 class _Widget:
@@ -165,6 +166,30 @@ def test_busy_state_recovers_after_failure() -> None:
     assert not page.is_busy and page.can_navigate_away()
     assert page._action_widgets[0].states == ["disabled", "normal"]
     assert errors and errors[0][1] == "boom"
+
+
+def test_destructive_settings_task_is_rejected_while_module_job_runs(
+    tmp_path,
+) -> None:
+    page, runner, _ = _task_page()
+    warnings = []
+    coordinator = ModuleJobCoordinator()
+    coordinator.try_start(
+        "ATTENDANCE", "Attendance", write_paths=(tmp_path / "Attendance",)
+    )
+    page.services.module_job_coordinator = coordinator
+    page.services.dialog_service.warning = lambda *args: warnings.append(args)
+
+    handle = page.run_task(
+        lambda: None,
+        on_success=lambda value: None,
+        message="Dangerous",
+        destructive=True,
+    )
+
+    assert handle is None
+    assert not page.is_busy and runner.on_done is None
+    assert warnings and "Attendance" in warnings[0][1]
 
 
 def test_busy_state_ignores_destroyed_registered_widgets() -> None:

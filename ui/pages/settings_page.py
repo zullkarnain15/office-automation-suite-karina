@@ -167,6 +167,14 @@ class SettingsPage(BasePage):
                 "Tunggu operasi Settings saat ini selesai.",
             )
             return None
+        coordinator = getattr(self.services, "module_job_coordinator", None)
+        if destructive and coordinator is not None and coordinator.has_active_jobs:
+            names = " + ".join(job.title for job in coordinator.snapshot())
+            self.services.dialog_service.warning(
+                "Job modul masih berjalan",
+                f"Tunggu {names} selesai sebelum menjalankan operasi Settings ini.",
+            )
+            return None
         self._set_busy(True, destructive=destructive, message=message)
 
         def finished(result) -> None:

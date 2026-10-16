@@ -77,6 +77,8 @@ class AttendanceOTPage(BasePage):
         self._navigation_locked = False
         self._disposed = False
         self._pending_reload = False
+        self._active_view_request = None
+        self._last_view_request = None
         self._filter_options_cache = None
         self.filters = AnalyticsFilters()
         self.matrix_year = date.today().year
@@ -178,7 +180,7 @@ class AttendanceOTPage(BasePage):
         self._build_dashboard()
         self._build_data_update()
         self._build_tables()
-        self.notebook.bind("<<NotebookTabChanged>>", lambda e: self.load_view())
+        self.notebook.bind("<<NotebookTabChanged>>", self._tab_selected)
         ttk.Label(
             self,
             textvariable=self.progress_var,
@@ -678,6 +680,9 @@ class AttendanceOTPage(BasePage):
             self.refresh_storage_prompt()
         self.load_view(options=True)
 
+    def _tab_selected(self, _event=None):
+        self.load_view(skip_if_current=True)
+
     def refresh_storage_prompt(self):
         status = self.storage_service.resolve_status()
         if status.database_exists and status.database_valid:
@@ -765,13 +770,14 @@ class AttendanceOTPage(BasePage):
     def _invalidate_filter_options(self):
         self._filter_options_cache = None
 
-    def load_view(self, *, options=False, on_success=None):
+    def load_view(
+        self,
+        *,
+        options=False,
+        on_success=None,
+        skip_if_current=False,
+    ):
         if not self.queries or self._disposed:
-            return
-        if self._busy:
-            self._pending_reload = True
-            return
-        if not self.storage_service.resolve_status().database_valid:
             return
         tab = self._tab()
         filters = self.filters
@@ -779,6 +785,18 @@ class AttendanceOTPage(BasePage):
         year = self.matrix_year
         kind = self.master_notebook.tab(self.master_notebook.select(), "text")
         search = self.master_search.get().strip()
+        request = (tab, filters, offset, year, kind, search)
+        if skip_if_current and request in (
+            self._active_view_request,
+            self._last_view_request,
+        ):
+            return
+        if self._busy:
+            self._pending_reload = True
+            return
+        if not self.storage_service.resolve_status().database_valid:
+            return
+        self._active_view_request = request
 
         def work():
             if tab == "Dashboard":
@@ -806,6 +824,7 @@ class AttendanceOTPage(BasePage):
                 for key, multi in self.multis.items():
                     multi.set_values(choices[key])
             self._render(tab, value, kind)
+            self._last_view_request = request
             if on_success is not None:
                 on_success()
 
@@ -1272,6 +1291,14 @@ class AttendanceOTPage(BasePage):
     ):
         if self._busy or self._disposed:
             return
+        coordinator = getattr(self.services, "module_job_coordinator", None)
+        if lock_navigation and coordinator is not None and coordinator.has_active_jobs:
+            names = " + ".join(job.title for job in coordinator.snapshot())
+            self.services.dialog_service.warning(
+                "Job modul masih berjalan",
+                f"Tunggu {names} selesai sebelum memperbarui data ATT&OT.",
+            )
+            return
         self._busy = True
         self._navigation_locked = lock_navigation
         self.progress_var.set(message)
@@ -1298,6 +1325,7 @@ class AttendanceOTPage(BasePage):
                 return
             self._busy = False
             self._navigation_locked = False
+            self._active_view_request = None
             self._actions = [
                 button for button in self._actions if button.winfo_exists()
             ]

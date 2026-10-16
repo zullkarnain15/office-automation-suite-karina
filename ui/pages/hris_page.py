@@ -800,6 +800,18 @@ class HRISPage(BasePage):
         )
 
     def _start_run(self, resolved) -> None:
+        if not self._begin_module_job(
+            "HRIS",
+            "HRIS",
+            resources=("HRIS_BROWSER", "DESKTOP_INPUT"),
+            read_paths=(resolved.source_folder,),
+            write_paths=(
+                resolved.output_root
+                if resolved.output_root.name.casefold() == "hris"
+                else resolved.output_root / "HRIS",
+            ),
+        ):
+            return
         self._resolved = resolved
         self._cancellation = HRISCancellationToken()
         self._running = True
@@ -819,6 +831,7 @@ class HRISPage(BasePage):
             )
 
         def done(result) -> None:
+            self._finish_module_job()
             if self.context.mascot_work_finished:
                 self.context.mascot_work_finished(classify_mascot_outcome(result))
             if self._disposed:
@@ -838,12 +851,17 @@ class HRISPage(BasePage):
                     ["FAILED", result.error or "Unexpected error"]
                 )
 
-        self.services.task_runner.submit_reporting(
-            work,
-            on_done=done,
-            on_progress=self._stream_event,
-            cancellable=False,
-        )
+        try:
+            self.services.task_runner.submit_reporting(
+                work,
+                on_done=done,
+                on_progress=self._stream_event,
+                cancellable=False,
+            )
+        except Exception:
+            self._running = False
+            self._finish_module_job()
+            raise
 
     def _stream_event(self, event) -> None:
         if self._disposed:
@@ -1340,6 +1358,9 @@ class HRISPage(BasePage):
             self.context.navigate("settings")
 
     def can_navigate_away(self) -> bool:
+        return True
+
+    def can_close(self) -> bool:
         return not self._running
 
     def dispose(self) -> None:

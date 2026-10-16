@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 from pathlib import Path
 from tkinter import ttk
 from types import SimpleNamespace
@@ -26,6 +27,104 @@ from ui.pages.attendance_ot_widgets import LATE_CELL_HIGH, LATE_CELL_STANDARD
 class _Analytics:
     def resolve_status(self):
         return SimpleNamespace(database_exists=False, database_valid=False)
+
+
+class _ReadyAnalytics:
+    def resolve_status(self):
+        return SimpleNamespace(database_exists=True, database_valid=True)
+
+
+class _DashboardSession:
+    def dashboard(self, _filters, *, ranking_keys=()):
+        return {
+            "kpi": {
+                "records": 1,
+                "employees": 1,
+                "late_records": 0,
+                "ot_hours": 0,
+                "ot_amount": 0,
+                "meal_amount": 0,
+            },
+            "rankings": {key: () for key in ranking_keys},
+        }
+
+    def monthly_trends(self, _filters, _year):
+        return {"attendance": (0,) * 12, "late": (0,) * 12}
+
+
+class _DashboardQueries:
+    @contextmanager
+    def snapshot(self):
+        yield _DashboardSession()
+
+    def filter_options(self):
+        return {
+            "periods": (),
+            "branches": (),
+            "pay_groups": (),
+            "departments": (),
+            "divisions": (),
+        }
+
+    def view(self, _filters, **_kwargs):
+        return SimpleNamespace(items=(), total=0, offset=0, limit=200)
+
+
+class _ImmediateTaskRunner:
+    def __init__(self):
+        self.submissions = 0
+
+    def submit(self, function, *, on_done, **_kwargs):
+        self.submissions += 1
+        try:
+            result = SimpleNamespace(
+                success=True,
+                value=function(),
+                error=None,
+            )
+        except Exception as exc:
+            result = SimpleNamespace(success=False, value=None, error=str(exc))
+        on_done(result)
+
+
+class _SilentDialog:
+    def error(self, *_args):
+        pass
+
+
+def test_attendance_ot_first_show_submits_only_one_search(tk_root, tmp_path) -> None:
+    runner = _ImmediateTaskRunner()
+    services = SimpleNamespace(
+        attendance_ot_service=_ReadyAnalytics(),
+        attendance_ot_analytics_service=_DashboardQueries(),
+        task_runner=runner,
+        dialog_service=_SilentDialog(),
+    )
+    context = AppContext(
+        project_root=tmp_path,
+        assets_path=tmp_path,
+        application_version="test",
+        logger=logging.getLogger("attendance-ot-single-load-test"),
+        app_services=services,
+    )
+    page = AttendanceOTPage(tk_root, context)
+    page.pack(fill="both", expand=True)
+
+    page.on_show()
+    for _ in range(3):
+        tk_root.update()
+
+    assert runner.submissions == 1
+    assert page.kpi_vars["records"].get() == "1"
+
+    page.notebook.select(page.tabs["Detail Data"])
+    tk_root.update()
+
+    assert runner.submissions == 2
+
+    page.refresh_data()
+
+    assert runner.submissions == 3
 
 
 def test_attendance_ot_page_has_six_tabs_and_data_update_actions(

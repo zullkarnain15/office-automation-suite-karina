@@ -14,6 +14,7 @@ from ui.widgets import ModernCard
 class ModuleConfigurationSection(SettingsSection):
     def __init__(self, parent, page) -> None:
         super().__init__(parent, page)
+        self._loaded = False
         self.cards = {}
         ttk.Label(
             self,
@@ -59,7 +60,8 @@ class ModuleConfigurationSection(SettingsSection):
         self._show_placeholders()
 
     def on_selected(self) -> None:
-        self.refresh()
+        if not self._loaded:
+            self.refresh()
 
     def refresh(self) -> None:
         status = self.active_status()
@@ -74,6 +76,9 @@ class ModuleConfigurationSection(SettingsSection):
         self._render(())
 
     def _render(self, summaries) -> None:
+        summaries = tuple(summaries)
+        if summaries:
+            self._loaded = True
         for child in self.card_frame.winfo_children():
             child.destroy()
         self.cards.clear()

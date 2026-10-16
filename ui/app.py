@@ -489,6 +489,17 @@ class OASKUnifiedApp:
             self.context.application_version,
         )
         self.status_bar.grid(row=2, column=1, sticky="ew")
+        coordinator = getattr(
+            self.context.app_services, "module_job_coordinator", None
+        )
+        if coordinator is not None:
+            self._unsubscribe_module_jobs = coordinator.subscribe(
+                lambda jobs: self.status_bar.set_active_jobs(
+                    jobs, coordinator.max_active
+                )
+            )
+        else:
+            self._unsubscribe_module_jobs = None
 
         sidebar_container = ttk.Frame(
             self.root,
@@ -608,6 +619,20 @@ class OASKUnifiedApp:
     def close(self) -> bool:
         if self._closing:
             return False
+        coordinator = getattr(
+            getattr(self.context, "app_services", None),
+            "module_job_coordinator",
+            None,
+        )
+        active_jobs = coordinator.snapshot() if coordinator is not None else ()
+        if active_jobs:
+            names = " + ".join(job.title for job in active_jobs)
+            self.context.app_services.dialog_service.warning(
+                "Job masih berjalan",
+                f"Tunggu job berikut selesai sebelum menutup aplikasi: {names}.",
+            )
+            self.status_bar.set_message("Penutupan dibatalkan: job masih berjalan")
+            return False
         if not self.navigation.close():
             self.status_bar.update_metadata(
                 StatusMetadata(
@@ -622,6 +647,9 @@ class OASKUnifiedApp:
         self._stop_welcome_shimmer()
         self._stop_welcome_mascot_bounce()
         self.karina_mascot_controller.stop()
+        if self._unsubscribe_module_jobs is not None:
+            self._unsubscribe_module_jobs()
+            self._unsubscribe_module_jobs = None
         if self.context.app_services is not None:
             self.context.app_services.finger_monitoring_service.stop()
             self.context.app_services.task_runner.shutdown()

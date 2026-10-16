@@ -27,12 +27,18 @@ class StatusBar(ttk.Frame):
             style="StatusBar.TLabel",
         )
         self.storage_label.grid(row=0, column=1, padx=(16, 0))
+        self.jobs_label = ttk.Label(
+            self,
+            text="Jobs: 0/2",
+            style="StatusBar.TLabel",
+        )
+        self.jobs_label.grid(row=0, column=2, padx=(16, 0))
         self.version_label = ttk.Label(
             self,
             text=f"Versi {application_version}",
             style="StatusBar.TLabel",
         )
-        self.version_label.grid(row=0, column=2, padx=(16, 0))
+        self.version_label.grid(row=0, column=3, padx=(16, 0))
 
     def update_metadata(self, metadata: StatusMetadata) -> None:
         self.message_label.configure(
@@ -46,3 +52,8 @@ class StatusBar(ttk.Frame):
 
     def set_storage_status(self, status: str) -> None:
         self.storage_label.configure(text=status)
+
+    def set_active_jobs(self, jobs, capacity: int = 2) -> None:
+        titles = [job.title for job in jobs]
+        suffix = f" · {' + '.join(titles)}" if titles else ""
+        self.jobs_label.configure(text=f"Jobs: {len(titles)}/{capacity}{suffix}")

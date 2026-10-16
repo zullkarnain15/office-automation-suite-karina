@@ -16,6 +16,7 @@ class BasePage(ttk.Frame):
     show_page_heading = True
 
     def __init__(self, parent, context: AppContext) -> None:
+        self._module_job_id: str | None = None
         super().__init__(
             parent,
             style="OASK.TFrame",
@@ -57,6 +58,50 @@ class BasePage(ttk.Frame):
 
     def can_close(self) -> bool:
         return self.can_navigate_away()
+
+    def _begin_module_job(
+        self,
+        module: str,
+        title: str,
+        *,
+        resources=(),
+        read_paths=(),
+        write_paths=(),
+        exclusive: bool = False,
+    ) -> bool:
+        coordinator = getattr(
+            getattr(self.context, "app_services", None),
+            "module_job_coordinator",
+            None,
+        )
+        if coordinator is None:
+            return True
+        result = coordinator.try_start(
+            module,
+            title,
+            resources=resources,
+            read_paths=read_paths,
+            write_paths=write_paths,
+            exclusive=exclusive,
+        )
+        if not result.accepted:
+            self.context.app_services.dialog_service.warning(
+                "Job tidak dapat dimulai", result.message
+            )
+            return False
+        self._module_job_id = result.job.job_id
+        return True
+
+    def _finish_module_job(self) -> None:
+        job_id = getattr(self, "_module_job_id", None)
+        coordinator = getattr(
+            getattr(self.context, "app_services", None),
+            "module_job_coordinator",
+            None,
+        )
+        if coordinator is not None:
+            coordinator.finish(job_id)
+        self._module_job_id = None
 
     def dispose(self) -> None:
         """Release page-owned resources; pages own none during UI1."""

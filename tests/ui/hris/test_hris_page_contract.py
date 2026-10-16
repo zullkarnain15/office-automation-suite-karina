@@ -54,6 +54,14 @@ def test_page_uses_compact_layout_and_assisted_recovery_controls() -> None:
     assert "run_control_countdown_var" in source
 
 
+def test_navigation_stays_available_but_close_is_blocked_while_running() -> None:
+    page = object.__new__(HRISPage)
+    page._running = False
+    assert page.can_navigate_away() and page.can_close()
+    page._running = True
+    assert page.can_navigate_away() and not page.can_close()
+
+
 def test_opening_hris_page_has_zero_side_effects(tk_root, tmp_path) -> None:
     data_root = tmp_path / "never-create" / "Data"
     backend = FakeRegistryBackend()

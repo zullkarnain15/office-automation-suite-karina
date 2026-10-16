@@ -101,12 +101,12 @@ def test_manual_fallback_is_session_only_and_clears_when_disabled(tk_root) -> No
     assert page.config_var.get() == ""
 
 
-def test_navigation_is_blocked_only_while_running() -> None:
+def test_navigation_stays_available_but_close_is_blocked_while_running() -> None:
     page = object.__new__(OutlookRevisiPage)
     page._running = False
     assert page.can_navigate_away() and page.can_close()
     page._running = True
-    assert not page.can_navigate_away() and not page.can_close()
+    assert page.can_navigate_away() and not page.can_close()
 
 
 class _ImmediateRunner:

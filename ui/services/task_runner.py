@@ -44,7 +44,9 @@ class TaskRunner:
     def __init__(self, after: Callable[[int, Callable[[], None]], Any]) -> None:
         self.after = after
         self.executor = ThreadPoolExecutor(
-            max_workers=2,
+            # Two long module jobs may run concurrently. The third worker keeps
+            # lightweight UI reads and cooperative cancellation responsive.
+            max_workers=3,
             thread_name_prefix="oas-k-ui",
         )
         self._accepting = True
